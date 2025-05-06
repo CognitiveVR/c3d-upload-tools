@@ -40,6 +40,38 @@ get_api_base_url() {
 
 # Main function
 main() {
+  # Handle --help flag
+  if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "Usage: $SCRIPT_NAME <scene_directory> [environment] [scene_id]"
+    echo "  <scene_directory>  Path to folder containing 4 files: scene.bin, scene.gltf, screenshot.png, settings.json"
+    echo "  [environment]      Optional. Either 'prod' (default) or 'dev'"
+    echo "  [scene_id]         Optional. Appended to API URL if present"
+    echo
+    echo "Environment Variables:"
+    echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
+    exit 0
+  fi
+
+
+  # Check for curl dependency
+  if ! command -v curl >/dev/null 2>&1; then
+    echo_error "Missing dependency: curl"
+    echo "Please install curl with one of the following commands:"
+    echo "  brew install curl     # macOS"
+    echo "  sudo apt install curl # Ubuntu/Debian"
+    echo "  dnf install curl      # Fedora/RHEL"
+    exit 1
+  fi
+
+  # Check for jq dependency
+  if ! command -v jq >/dev/null 2>&1; then
+    echo_error "Missing dependency: jq"
+    echo "Please install jq with one of the following commands:"
+    echo "  brew install jq     # macOS"
+    echo "  sudo apt install jq # Ubuntu/Debian"
+    echo "  dnf install jq      # Fedora/RHEL"
+    exit 1
+  fi
   echo_info "Running $SCRIPT_NAME from $SCRIPT_DIR"
 
   # Validate required CLI parameter
@@ -109,17 +141,17 @@ main() {
 
   # Read sdk-version.txt
   local SDK_VERSION_FILE="$SCRIPT_DIR/sdk-version.txt"
-  if [[ ! -f "$SDK_VERSION_FILE" ]]; then
-    echo_error "sdk-version.txt not found in script directory."
+  if [[ ! -s "$SDK_VERSION_FILE" ]]; then
+    echo_error "sdk-version.txt is missing or empty at: $SDK_VERSION_FILE"
     exit 1
   fi
   local SDK_VERSION
-  SDK_VERSION=$(<"$SDK_VERSION_FILE")
+  SDK_VERSION=$(cat "$SDK_VERSION_FILE")
   echo_info "Read SDK version: $SDK_VERSION"
 
-  # Update settings.json with new sdkVersion
+  # Update settings.json with new sdkVersion using jq
   local TMP_JSON_FILE="$SCENE_DIRECTORY/settings-updated.json"
-  sed -E "s/(\"sdkVersion\"\s*:\s*\")([^"]+)(\")/\1$SDK_VERSION\3/" "$JSON_FILE" > "$TMP_JSON_FILE"
+  jq --arg sdk "$SDK_VERSION" '.sdkVersion = $sdk' "$JSON_FILE" > "$TMP_JSON_FILE"
   rm "$JSON_FILE"
   mv "$TMP_JSON_FILE" "$JSON_FILE"
 
