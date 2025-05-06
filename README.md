@@ -64,7 +64,7 @@ export C3D_DEVELOPER_API_KEY="abc123xyz"
 
 For subsequent (new) versions of the same scene, pass in your scene ID as the third parameter to the script. This will upload the scene assets again and the platform will auto-increment the scene version.
 
-You can find the scene ID on the Cognitive3D dashboard on the Scenes page. Look for "information" (letter 'i' in a circle) icon and hover over it.
+You can find the scene ID on the Cognitive3D dashboard on the Scenes page. Look for the "information" icon (letter 'i' in a circle) and hover over it.
 
 ```bash
 export C3D_DEVELOPER_API_KEY="abc123xyz"
