@@ -13,6 +13,17 @@ COLOR_WARN="\033[1;33m"
 COLOR_ERROR="\033[1;31m"
 COLOR_DEBUG="\033[0;36m"
 
+# --- Check Dependencies ---
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: 'jq' is not installed. Please install it before running this script."
+  exit 1
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo "Error: 'curl' is not installed. Please install it before running this script."
+  exit 1
+fi
+
 # Parse named arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,6 +94,12 @@ if [[ -z "$C3D_DEVELOPER_API_KEY" ]]; then
   exit 1
 fi
 
+# if object_id is not provided, it will be created from the object_filename
+if [[ -z "$object_id" ]]; then
+  object_id=$(basename "$object_filename")
+  log_debug "Object ID not provided, using derived ID: $object_id"
+fi
+# Log the parameters
 log_debug "Scene ID: $scene_id"
 log_debug "Object Filename: $object_filename"
 log_debug "Object Directory: $OBJECT_DIRECTORY"
