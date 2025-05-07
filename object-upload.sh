@@ -97,7 +97,7 @@ fi
 # Upload using curl in Postman-style format
 echo "Uploading to $upload_url..."
 curl --location --globoff "$upload_url" \
-  --header "Authorization: APIKEY:$C3D_DEVELOPER_API_KEY" \
+  --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
   --form "cvr_object_thumbnail.png=@$thumbnail_file" \
   --form "${object_filename}.bin=@$bin_file" \
   --form "${object_filename}.gltf=@$gltf_file"
