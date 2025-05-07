@@ -89,3 +89,14 @@ To see usage information:
 ## Dynamic object uploader script
 
 Coming soon.
+
+### Examples
+
+```bash
+./object-upload.sh \
+  --scene_id fea64809-2a44-4b0c-acc1-a66f371521a8 \
+  --env dev \
+  --object_dir lantern-test \
+  --object_filename Lantern \
+--object_id Lantern
+```
