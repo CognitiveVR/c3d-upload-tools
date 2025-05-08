@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# list_scene_objects.sh - List objects for a given scene version from the Cognitive3D API
+# list_scene_objects.sh - List objects for a given scene from the Cognitive3D API
 
 set -e
 
@@ -87,13 +87,35 @@ if [ -z "$C3D_DEVELOPER_API_KEY" ]; then
   exit 1
 fi
 
-# --- Full URL ---
-URL="$BASE_URL/v0/versions/$SCENE_ID/objects"
+# --- Get Scene Details ---
+SCENE_URL="$BASE_URL/v0/scenes/$SCENE_ID"
+log "Requesting scene details from $SCENE_URL"
+SCENE_RESPONSE=$(curl --silent --show-error --location \
+  --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
+  "$SCENE_URL" -w "\nHTTP_STATUS:%{http_code}")
 
-log "Environment: $ENV"
-log "Scene ID: $SCENE_ID"
-log "Request URL: $URL"
-debug "Developer API Key: $C3D_DEVELOPER_API_KEY"
+SCENE_BODY=$(echo "$SCENE_RESPONSE" | sed -e 's/HTTP_STATUS\:.*//g')
+SCENE_STATUS=$(echo "$SCENE_RESPONSE" | tr -d '\n' | sed -e 's/.*HTTP_STATUS://')
+
+if [ "$SCENE_STATUS" -ne 200 ]; then
+  echo "Error: Failed to get scene info. HTTP $SCENE_STATUS"
+  echo "$SCENE_BODY"
+  exit 1
+fi
+
+# --- Extract latest version id ---
+VERSION_ID=$(echo "$SCENE_BODY" | jq '.versions | max_by(.versionNumber) | .id')
+
+if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" == "null" ]; then
+  echo "Error: Could not extract version ID from scene response."
+  exit 1
+fi
+
+log "Resolved latest sceneVersionId = $VERSION_ID"
+
+# --- Full URL for objects ---
+URL="$BASE_URL/v0/versions/$VERSION_ID/objects"
+log "Requesting objects from $URL"
 
 # --- CURL Request ---
 RESPONSE=$(curl --silent --show-error --location \
