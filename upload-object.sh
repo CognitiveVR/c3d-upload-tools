@@ -184,3 +184,37 @@ fi
 
 log_info "Upload complete."
 echo "$response"
+
+# -------------------------------
+# Create or Overwrite Manifest File
+# -------------------------------
+cat > "${scene_id}_object_manifest.json" <<EOF
+{
+  "objects": [
+    {
+      "id": "$object_id",
+      "mesh": "$object_filename",
+      "name": "$object_filename",
+      "scaleCustom": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "initialPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "initialRotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    }
+  ]
+}
+EOF
+
+log_info "Manifest file created: ${scene_id}_object_manifest.json"
+log_info "Upload complete. Object ID: $object_id"

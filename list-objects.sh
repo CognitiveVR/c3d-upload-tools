@@ -24,7 +24,7 @@ debug() {
 }
 
 usage() {
-  echo "Usage: $0 --sceneId <scene_id> --env <prod|dev> [--verbose] [--debug]"
+  echo "Usage: $0 --scene_id <scene_id> --env <prod|dev> [--verbose] [--debug]"
   exit 1
 }
 
@@ -43,7 +43,7 @@ fi
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
-    --sceneId)
+    --scene_id)
       SCENE_ID="$2"
       shift; shift
       ;;

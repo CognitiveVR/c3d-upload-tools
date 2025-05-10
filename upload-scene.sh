@@ -13,14 +13,29 @@ set -u
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Example function
-echo_info() {
-  echo "[INFO] $1"
-}
+# ANSI color codes
+COLOR_RESET="\033[0m"
+COLOR_INFO="\033[1;34m"
+COLOR_WARN="\033[1;33m"
+COLOR_ERROR="\033[1;31m"
+COLOR_DEBUG="\033[0;36m"
 
-echo_error() {
-  echo "[ERROR] $1" >&2
-}
+# Logging helpers
+log_info()  { echo -e "${COLOR_INFO}[INFO] $1${COLOR_RESET}"; }
+log_warn()  { echo -e "${COLOR_WARN}[WARN] $1${COLOR_RESET}"; }
+log_error() { echo -e "${COLOR_ERROR}[ERROR] $1${COLOR_RESET}"; }
+log_debug() { [ "$verbose" = true ] && echo -e "${COLOR_DEBUG}[DEBUG] $1${COLOR_RESET}"; }
+
+# --- Check Dependencies ---
+if ! command -v jq >/dev/null 2>&1; then
+  log_error "'jq' is not installed. Please install it before running this script."
+  exit 1
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+  log_error "'curl' is not installed. Please install it before running this script."
+  exit 1
+fi
 
 get_api_base_url() {
   local env="$1"
@@ -32,7 +47,7 @@ get_api_base_url() {
       echo "https://data.c3ddev.com/v0/scenes"
       ;;
     *)
-      echo_error "Unknown environment: $env"
+      log_error "Unknown environment: $env"
       exit 1
       ;;
   esac
@@ -40,82 +55,86 @@ get_api_base_url() {
 
 # Main function
 main() {
-  # Handle --help flag
-  if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Usage: $SCRIPT_NAME <scene_directory> [environment] [scene_id]"
-    echo "  <scene_directory>  Path to folder containing 4 files: scene.bin, scene.gltf, screenshot.png, settings.json"
-    echo "  [environment]      Optional. Either 'prod' (default) or 'dev'"
-    echo "  [scene_id]         Optional. Appended to API URL if present"
-    echo
-    echo "Environment Variables:"
-    echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
-    exit 0
-  fi
+  # Default values
+  SCENE_DIRECTORY=""
+  ENVIRONMENT="prod"
+  SCENE_ID=""
+  VERBOSE=false
 
+  # Parse named arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --scene_dir)
+        SCENE_DIRECTORY="$2"
+        shift 2
+        ;;
+      --env)
+        ENVIRONMENT="$2"
+        shift 2
+        ;;
+      --scene_id)
+        SCENE_ID="$2"
+        shift 2
+        ;;
+      --verbose)
+        VERBOSE=true
+        shift
+        ;;
+      --help|-h)
+        echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose]"
+        echo "  --scene_dir   Path to folder containing 4 files: scene.bin, scene.gltf, screenshot.png, settings.json"
+        echo "  --env         Optional. Either 'prod' (default) or 'dev'"
+        echo "  --scene_id    Optional. Appended to API URL if present"
+        echo "  --verbose     Optional. Enables verbose output"
+        echo
+        echo "Environment Variables:"
+        echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
+        exit 0
+        ;;
+      *)
+        log_error "Unknown argument: $1"
+        exit 1
+        ;;
+    esac
+  done
 
-  # Check for curl dependency
-  if ! command -v curl >/dev/null 2>&1; then
-    echo_error "Missing dependency: curl"
-    echo "Please install curl with one of the following commands:"
-    echo "  brew install curl     # macOS"
-    echo "  sudo apt install curl # Ubuntu/Debian"
-    echo "  dnf install curl      # Fedora/RHEL"
-    exit 1
-  fi
-
-  # Check for jq dependency
-  if ! command -v jq >/dev/null 2>&1; then
-    echo_error "Missing dependency: jq"
-    echo "Please install jq with one of the following commands:"
-    echo "  brew install jq     # macOS"
-    echo "  sudo apt install jq # Ubuntu/Debian"
-    echo "  dnf install jq      # Fedora/RHEL"
-    exit 1
-  fi
-  echo_info "Running $SCRIPT_NAME from $SCRIPT_DIR"
+  # Logging helper for verbose mode
+  log_verbose() {
+    if [ "$VERBOSE" = true ]; then
+      echo "[VERBOSE] $1"
+    fi
+  }
 
   # Validate required CLI parameter
-  if [[ $# -lt 1 ]]; then
-    echo_error "Missing required argument: SCENE_DIRECTORY"
-    echo "Usage: $SCRIPT_NAME <path_to_scene_directory> [dev|prod] [scene_id]"
+  if [[ -z "$SCENE_DIRECTORY" ]]; then
+    log_error "Missing required argument: --scene_dir"
+    echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose]"
     exit 1
   fi
-
-  local SCENE_DIRECTORY="$1"
 
   if [[ ! -d "$SCENE_DIRECTORY" ]]; then
-    echo_error "The specified scene directory does not exist: $SCENE_DIRECTORY"
+    log_error "The specified scene directory does not exist: $SCENE_DIRECTORY"
     exit 1
   fi
 
-  # Optional second argument: ENVIRONMENT (defaults to "prod")
-  local ENVIRONMENT="prod"
-  if [[ $# -ge 2 ]]; then
-    if [[ "$2" != "prod" && "$2" != "dev" ]]; then
-      echo_error "Invalid environment: $2. Must be 'prod' or 'dev'."
-      exit 1
-    fi
-    ENVIRONMENT="$2"
+  if [[ "$ENVIRONMENT" != "prod" && "$ENVIRONMENT" != "dev" ]]; then
+    log_error "Invalid environment: $ENVIRONMENT. Must be 'prod' or 'dev'."
+    exit 1
   fi
 
-  # Optional third argument: SCENE_ID
-  local SCENE_ID=""
-  if [[ $# -ge 3 ]]; then
-    SCENE_ID="$3"
-  fi
-
-  echo_info "Using environment: $ENVIRONMENT"
-  [[ -n "$SCENE_ID" ]] && echo_info "Using scene ID: $SCENE_ID"
+  log_info "Using environment: $ENVIRONMENT"
+  [[ -n "$SCENE_ID" ]] && log_info "Using scene ID: $SCENE_ID"
+  log_verbose "SCENE_DIRECTORY: $SCENE_DIRECTORY"
 
   # Import environment variable
   if [[ -z "${C3D_DEVELOPER_API_KEY:-}" ]]; then
-    echo_error "C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key"
+    log_error "C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key"
     exit 1
   fi
 
   local C3D_DEVELOPER_API_KEY="$C3D_DEVELOPER_API_KEY"
-  echo_info "C3D_DEVELOPER_API_KEY has been set."
-  echo_info "SCENE_DIRECTORY is: $SCENE_DIRECTORY"
+  log_info "C3D_DEVELOPER_API_KEY has been set."
+  log_info "SCENE_DIRECTORY is: $SCENE_DIRECTORY"
 
   # Determine API base URL
   local BASE_URL
@@ -123,7 +142,7 @@ main() {
   if [[ -n "$SCENE_ID" ]]; then
     BASE_URL+="/$SCENE_ID"
   fi
-  echo_info "Using API base URL: $BASE_URL"
+  log_info "Using API base URL: $BASE_URL"
 
   # Prepare file paths
   local BIN_FILE="$SCENE_DIRECTORY/scene.bin"
@@ -134,7 +153,7 @@ main() {
   # Validate file existence
   for file in "$BIN_FILE" "$GLTF_FILE" "$PNG_FILE" "$JSON_FILE"; do
     if [[ ! -f "$file" ]]; then
-      echo_error "Required file missing: $file"
+      log_error "Required file missing: $file"
       exit 1
     fi
   done
@@ -142,12 +161,12 @@ main() {
   # Read sdk-version.txt
   local SDK_VERSION_FILE="$SCRIPT_DIR/sdk-version.txt"
   if [[ ! -s "$SDK_VERSION_FILE" ]]; then
-    echo_error "sdk-version.txt is missing or empty at: $SDK_VERSION_FILE"
+    log_error "sdk-version.txt is missing or empty at: $SDK_VERSION_FILE"
     exit 1
   fi
   local SDK_VERSION
   SDK_VERSION=$(cat "$SDK_VERSION_FILE")
-  echo_info "Read SDK version: $SDK_VERSION"
+  log_info "Read SDK version: $SDK_VERSION"
 
   # Update settings.json with new sdkVersion using jq
   local TMP_JSON_FILE="$SCENE_DIRECTORY/settings-updated.json"
@@ -156,7 +175,7 @@ main() {
   mv "$TMP_JSON_FILE" "$JSON_FILE"
 
   # Perform API call
-  echo_info "Uploading scene files to API..."
+  log_info "Uploading scene files to API..."
   local RESPONSE
   RESPONSE=$(curl --silent --write-out "\n%{http_code}" --location "$BASE_URL" \
     --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
@@ -170,15 +189,15 @@ main() {
   local HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
 
   if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
-    echo_info "Upload successful. Server response:"
+    log_info "Upload successful. Server response:"
     echo "$HTTP_BODY"
   else
-    echo_error "Upload failed with status $HTTP_STATUS"
+    log_error "Upload failed with status $HTTP_STATUS"
     echo "$HTTP_BODY"
     exit 1
   fi
 
-  echo_info "Script complete."
+  log_info "Script complete."
 }
 
 # Run main
