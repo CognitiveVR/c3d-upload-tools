@@ -167,7 +167,7 @@ The dynamic object manifest for your scene and object is created automatically a
   --scene_id <scene-uuid> \
   [--env dev|prod] \
   [--verbose] \
-  [--dry_run]
+  [--dry_run]  # Use this to preview the `curl` command without executing it
 ```
 
 #### Dynamic object manifest uploader required parameters
