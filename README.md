@@ -156,7 +156,7 @@ export C3D_DEVELOPER_API_KEY=<your-api-key>
 
 ### Uploading the object manifest
 
-After uploading the dynamic object asset files (mesh, textures) you must upload the dynamic object manifest file to display the objects on the Cognitive3D dashboard for your project and scene.
+After uploading the dynamic object asset files (mesh, textures) the `upload-object` script automatically uploads the dynamic object manifest file to display the objects on the Cognitive3D dashboard for your project and scene. You may want to modify the manifest and re-upload it with new values, such as starting position.
 
 ### Dynamic object manifest uploader usage
 
@@ -167,6 +167,7 @@ The dynamic object manifest for your scene and object is created automatically a
   --scene_id <scene-uuid> \
   [--env dev|prod] \
   [--verbose] \
+  [--dry_run]
 ```
 
 #### Dynamic object manifest uploader required parameters
