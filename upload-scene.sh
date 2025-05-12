@@ -24,7 +24,7 @@ COLOR_DEBUG="\033[0;36m"
 log_info()  { echo -e "${COLOR_INFO}[INFO] $1${COLOR_RESET}"; }
 log_warn()  { echo -e "${COLOR_WARN}[WARN] $1${COLOR_RESET}"; }
 log_error() { echo -e "${COLOR_ERROR}[ERROR] $1${COLOR_RESET}"; }
-log_debug() { [ "$verbose" = true ] && echo -e "${COLOR_DEBUG}[DEBUG] $1${COLOR_RESET}"; }
+log_debug() { [ "$VERBOSE" = true ] && echo -e "${COLOR_DEBUG}[DEBUG] $1${COLOR_RESET}"; }
 
 # --- Check Dependencies ---
 if ! command -v jq >/dev/null 2>&1; then
@@ -198,6 +198,11 @@ main() {
   fi
 
   log_info "Script complete."
+
+  log_info "You can now upload your dynamic objects using the upload-object.sh script."
+  log_info "You'll need the scene ID from the upload response."
+  log_info "Example: ./upload-object.sh --scene_id <scene_id> --object_filename <object_filename> --object_dir <object_directory>"
+  log_info "For more details, refer to the README file."
 }
 
 # Run main

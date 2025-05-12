@@ -183,7 +183,7 @@ if [ $status -ne 0 ]; then
 fi
 
 log_info "Upload complete."
-echo "$response"
+log_info "$response"
 
 # -------------------------------
 # Create or Overwrite Manifest File
@@ -216,5 +216,9 @@ cat > "${scene_id}_object_manifest.json" <<EOF
 }
 EOF
 
-log_info "Manifest file created: ${scene_id}_object_manifest.json"
+log_debug "Manifest file created: ${scene_id}_object_manifest.json"
+
+log_info "Automatically uploading the manifest."
+./upload-object-manifest.sh --scene_id $scene_id --env $environment
+
 log_info "Upload complete. Object ID: $object_id"
