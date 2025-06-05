@@ -8,6 +8,8 @@ This repo contains a shell script (bash) for uploading scene files to the Cognit
 * `curl`
 * `jq`
 
+> Note: We have only tested these tools on MacOS. Feedback welcome on your experience using them in Linux or Windows Subsystem for Linux (WSL). Open an Issue here or find us on our [Discord](https://discord.gg/x38sNUdDRH).
+
 ### Installation of required dependencies
 
 Make sure the following tools are installed:
