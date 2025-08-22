@@ -1,18 +1,20 @@
 # Cognitive3D Upload Tools
 
-This repo contains a shell script (bash) for uploading scene files to the Cognitive3D platform.
+A collection of bash scripts for uploading 3D scenes and dynamic objects to the Cognitive3D platform. These tools provide a complete workflow for managing scenes, objects, and their associated metadata through the Cognitive3D API.
 
-## Requirements
+## Overview
 
-* Bash (macOS / Linux / Windows Subsystem for Linux (WSL))
-* `curl`
-* `jq`
+This repository contains the following scripts:
 
-> Note: We have only tested these tools on macOS. Feedback welcome on your experience using them in Linux or Windows Subsystem for Linux (WSL). Open an Issue here or find us on our [Discord](https://discord.gg/x38sNUdDRH).
+- **`upload-scene.sh`** - Upload scene files (GLTF, textures, settings)
+- **`upload-object.sh`** - Upload dynamic 3D object assets
+- **`upload-object-manifest.sh`** - Upload object manifest for dashboard display
+- **`list-objects.sh`** - List objects associated with a scene
+- **`test-all.sh`** - Run comprehensive tests for all upload functionality
 
-### Installation of required dependencies
+## Quick Start
 
-Make sure the following tools are installed:
+### 1. Install Dependencies
 
 ```bash
 brew install jq curl         # macOS
@@ -20,78 +22,128 @@ sudo apt install jq curl     # Ubuntu/Debian
 dnf install jq curl          # Fedora/RHEL
 ```
 
-### Environment Variables
-
-You must set your Cognitive3D Developer API key as an environment variable:
+### 2. Set API Key
 
 ```bash
 export C3D_DEVELOPER_API_KEY="your_api_key"
 ```
 
-You can get your developer API key from the Cognitive3D web dashboard. Look for the "Manage developer key" option in the settings (gear icon) menu.
+Get your API key from the Cognitive3D dashboard: Settings (gear icon) → "Manage developer key"
 
-> Note: We strongly recommend you _do not_ store your developer API key in version control.
+### 3. Upload Workflow
+
+```bash
+# Step 1: Upload scene (first time - creates new scene)
+./upload-scene.sh --scene_dir scene-test --env prod
+
+# Note the scene_id returned from the above command
+
+# Step 2: Upload objects
+./upload-object.sh --scene_id YOUR_SCENE_ID --object_filename cube --object_dir object-test --env prod
+
+# Step 3: Upload object manifest (displays objects in dashboard)
+./upload-object-manifest.sh --scene_id YOUR_SCENE_ID --env prod
+```
+
+## Requirements
+
+* Bash (macOS / Linux / Windows Subsystem for Linux (WSL))
+* `curl`
+* `jq`
+
+> **Note**: We have only tested these tools on macOS. Feedback welcome on your experience using them in Linux or Windows Subsystem for Linux (WSL). Open an Issue here or find us on our [Discord](https://discord.gg/x38sNUdDRH).
+
+## Environment Variables
+
+**Required**:
+* `C3D_DEVELOPER_API_KEY` - Your Cognitive3D Developer API key
+
+> **Security Note**: We strongly recommend you _do not_ store your developer API key in version control.
 
 ## Scene Upload Script
 
-This script uploads a set of 3D scene files to the Cognitive3D platform using our API.
+Uploads a set of 3D scene files to the Cognitive3D platform.
 
 ### Usage
 
 ```bash
-./upload-scene.sh --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id_from_dashboard>]
+./upload-scene.sh --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]
 ```
 
-#### Parameters
+### Parameters
 
-* `--scene_dir <scene_directory>` (required): Path to a folder containing:
+**Required:**
+* `--scene_dir <scene_directory>` - Path to folder containing:
   * `scene.bin`
   * `scene.gltf`
   * `screenshot.png`
   * `settings.json`
-* `[--env <prod/dev>]` (optional): Either `prod` (default) or `dev`
-* `[--scene_id <scene_id_from_dashboard>]` (optional): Scene ID to append to the API endpoint to upload a new version of an existing scene
 
-### Example
+**Optional:**
+* `--env <prod|dev>` - Target environment. Defaults to `prod`
+* `--scene_id <scene_id>` - Scene ID for uploading new version of existing scene (must be valid UUID format)
+* `--verbose` - Enable detailed logging with debug information and file sizes
+* `--dry_run` - Preview operations without executing them (safe testing mode)
 
-For the first time you upload your scene you won't have a scene ID, so we don't pass that parameter. The first time you run this script, without a scene ID, it creates the scene and returns the new scene ID (output to the console at the end of the script.)
+### Examples
 
+**First upload (creates new scene):**
 ```bash
-export C3D_DEVELOPER_API_KEY=<abc123xyz>
-./upload-scene.sh --scene_dir ./TestScene --env prod
+export C3D_DEVELOPER_API_KEY="abc123xyz"
+./upload-scene.sh --scene_dir ./scene-test --env prod
 ```
 
-For subsequent (new) versions of the same scene, pass in your scene ID as the third parameter to the script. This will upload the scene assets again and the platform will auto-increment the scene version.
-
-You can find the scene ID on the Cognitive3D dashboard on the Scenes page. Look for the "information" icon (letter 'i' in a circle) and hover over it.
-
+**Update existing scene:**
 ```bash
-export C3D_DEVELOPER_API_KEY=<abc123xyz>
-./upload-scene.sh --scene_dir ./TestScene --env prod --scene_id my_scene_id
+./upload-scene.sh --scene_dir ./scene-test --env prod --scene_id my_scene_id
 ```
+
+**Test with dry run (safe preview):**
+```bash
+./upload-scene.sh --scene_dir ./scene-test --env prod --dry_run --verbose
+```
+
+### Features
+
+**Enhanced Security & Reliability:**
+* Secure API key handling without local storage
+* Safe file operations with automatic backup and rollback
+* Comprehensive input validation (UUID format, file sizes, SDK version)
+
+**Advanced Logging & Monitoring:**
+* Timestamped, color-coded logging (INFO, WARN, ERROR, DEBUG)
+* Upload timing and performance metrics
+* File size validation and reporting (100MB limit per file)
+
+**Smart Error Handling:**
+* Specific guidance for common errors (401 key expired, 403 forbidden, 404 not found)
+* Step-by-step instructions for API key rotation
+* Clear troubleshooting steps for authentication issues
+
+**Safe Testing:**
+* `--dry_run` mode previews all operations without execution
+* Shows exact curl commands and file operations
+* Validates inputs before making any changes
 
 ### Behavior
 
-* Reads the SDK version from `sdk-version.txt` in the same directory as the script.
-* Replaces the `sdkVersion` field inside `settings.json` file in the scene directory using `jq`.
-* Uploads the four files to the correct API endpoint.
-* Verifies API response and prints success or error.
+* Validates all inputs (scene_id UUID format, SDK version, file sizes)
+* Creates backup of `settings.json` before modification
+* Reads SDK version from `sdk-version.txt` and updates `settings.json`
+* Uploads all four files to the API endpoint with timing metrics
+* Returns scene ID for new scenes with next-step guidance
 
 ### Help
-
-To see usage information:
 
 ```bash
 ./upload-scene.sh --help
 ```
 
-## Dynamic object uploader script
+## Dynamic Object Upload Script
 
-This Bash script uploads dynamic 3D object assets to the Cognitive3D platform, supporting GLTF + BIN files, optional textures, and thumbnail metadata. It supports both development and production environments.
+Uploads dynamic 3D object assets to the Cognitive3D platform. **Requires a scene to be uploaded first.**
 
-Uploading a scene to the platform is required before you can upload any dynamic object models. The scene_id is a required parameter.
-
-### Dynamic object uploader usage
+### Usage
 
 ```bash
 ./upload-object.sh \
@@ -99,111 +151,207 @@ Uploading a scene to the platform is required before you can upload any dynamic 
   --object_filename <object-name> \
   --object_dir <path-to-object-directory> \
   [--object_id <existing-object-id>] \
-  [--env dev|prod] \
+  [--env <prod|dev>] \
   [--verbose] \
   [--dry_run]
 ```
 
-#### Required Parameters
+### Parameters
 
-* `--scene_id`: The Scene ID UUID where the object will be uploaded.
-* `--object_filename`: The base filename (no extension) of the object, used to find `.gltf` and `.bin` files.
-* `--object_dir`: The directory containing the object files.
+**Required:**
+* `--scene_id` - Scene ID UUID where object will be uploaded
+* `--object_filename` - Base filename (no extension) for `.gltf` and `.bin` files
+* `--object_dir` - Directory containing object files
 
-#### Optional Parameters
-
-* `--object_id`: If specified, uploads as a new version of an existing object.
-* `--env`: Target environment (`prod` or `dev`). Defaults to `prod`.
-* `--verbose`: Enables detailed logging.
-* `--dry_run`: Prints the constructed `curl` command but skips execution.
-
-### Dynamic object uploader environment variables
-
-* `C3D_DEVELOPER_API_KEY`: Your Cognitive3D Developer API key (required).
+**Optional:**
+* `--object_id` - Upload as new version of existing object
+* `--env` - Target environment (`prod` or `dev`). Defaults to `prod`
+* `--verbose` - Enable detailed logging
+* `--dry_run` - Show `curl` command without executing
 
 ### File Requirements
 
-The following files must exist in the `--object_dir`:
-
+Must exist in `--object_dir`:
 * `<object_filename>.gltf`
 * `<object_filename>.bin`
-* (Optional, recommended) `cvr_object_thumbnail.png`, a representative screenshot of the object; used by the dashboard
-* (Optional) Any additional `.png` textures used by the model
+* `cvr_object_thumbnail.png` (optional, recommended) - Object thumbnail for dashboard
+* Additional `.png` textures (optional) - Any textures used by the model
 
-### Dynamic object uploader example
+### Example
 
 ```bash
-export C3D_DEVELOPER_API_KEY=<your-api-key>
+export C3D_DEVELOPER_API_KEY="your-api-key"
 
 ./upload-object.sh \
-  --scene_id <scene_id_goes_here> \
+  --scene_id "your-scene-id-here" \
   --object_filename cube \
   --object_dir object-test \
   --env prod \
-  --object_id cube
+  --object_id cube \
   --verbose
 ```
 
 ### Exit Codes
 
-* `0`: Success
-* `1`: Missing argument or setup error
-* Non-zero: Returned by `curl` if upload fails
+* `0` - Success
+* `1` - Missing argument or setup error
+* Non-zero - `curl` upload failure
 
-### Logging
+## Object Manifest Upload Script
 
-* `--verbose` prints detailed steps
-* `--dry_run` shows the `curl` command without executing it
-* Colored output highlights info, warnings, errors, and debug details
+Uploads object manifest to display objects in the Cognitive3D dashboard. Run after uploading object assets.
 
-### Uploading the object manifest
-
-After uploading the dynamic object asset files (mesh, textures) the `upload-object` script automatically uploads the dynamic object manifest file to display the objects on the Cognitive3D dashboard for your project and scene. You may want to modify the manifest and re-upload it with new values, such as starting position.
-
-### Dynamic object manifest uploader usage
-
-The dynamic object manifest for your scene and object is created automatically after successfully uploading the dynamic object assets. It will be in a file named `<scene_id>_object_manifest.json`.
+### Usage
 
 ```bash
 ./upload-object-manifest.sh \
   --scene_id <scene-uuid> \
-  [--env dev|prod] \
+  [--env <prod|dev>] \
   [--verbose] \
-  [--dry_run]  # Use this to preview the `curl` command without executing it
+  [--dry_run]
 ```
 
-#### Dynamic object manifest uploader required parameters
+### Parameters
 
-* `--scene_id`: The Scene ID UUID where the object will be uploaded.
+**Required:**
+* `--scene_id` - Scene ID UUID
 
-#### Object manifest uploader optional parameters
+**Optional:**
+* `--env` - Target environment (`prod` or `dev`). Defaults to `prod`
+* `--verbose` - Enable detailed logging
+* `--dry_run` - Show `curl` command without executing
 
-* `--object_id`: If specified, uploads as a new version of an existing object.
-* `--env`: Target environment (`prod` or `dev`). Defaults to `prod`.
-* `--verbose`: Enables detailed logging.
-* `--dry_run`: Prints the constructed `curl` command but skips execution.
+### File Requirements
 
-### Dynamic object manifest uploader environment variables
+Must exist in current directory:
+* `<scene_id>_object_manifest.json` - Auto-generated after object upload
 
-* `C3D_DEVELOPER_API_KEY`: Your Cognitive3D Developer API key (required).
-
-### Dynamic object manifest uploader file requirements
-
-The following files must exist in the same directory where you are calling the script from:
-
-* `<scene_id>_object_manifest.json`, which is automatically created after successfully uploading your dynamic object meshes
-
-### Dynamic object manifest uploader example
+### Example
 
 ```bash
-export C3D_DEVELOPER_API_KEY=<your-api-key>
-
 ./upload-object-manifest.sh \
-  --scene_id <scene_id_goes_here> \
+  --scene_id "your-scene-id-here" \
   --env prod \
   --verbose
 ```
 
-The reason we don't automatically upload the manifest after uploading the object assets is to allow you to modify the manifest JSON before uploading.
+> **Note**: The manifest is auto-generated but can be manually edited before upload to modify object properties like starting position.
 
-If you have any questions or problems using these scripts contact our customer support team using the Intercom button (public circle) on any Cognitive3D web page.
+## List Objects Script
+
+Lists all dynamic objects associated with a scene.
+
+### Usage
+
+```bash
+./list-objects.sh --scene_id <scene_id> --env <prod|dev> [--verbose] [--debug]
+```
+
+### Parameters
+
+**Required:**
+* `--scene_id` - Scene ID UUID
+* `--env` - Target environment (`prod` or `dev`)
+
+**Optional:**
+* `--verbose` - Enable detailed logging
+* `--debug` - Enable debug output
+
+### Example
+
+```bash
+./list-objects.sh --scene_id "your-scene-id-here" --env prod --verbose
+```
+
+## Test Script
+
+Comprehensive testing script that runs the complete upload workflow.
+
+### Usage
+
+```bash
+./test-all.sh <scene_id> <env>
+```
+
+### Parameters
+
+* `scene_id` - Existing scene ID (run scene upload first to get this)
+* `env` - Target environment (`prod` or `dev`)
+
+### Example
+
+```bash
+# First upload a scene to get scene_id
+./upload-scene.sh --scene_dir scene-test --env prod
+
+# Use returned scene_id for testing
+./test-all.sh "your-scene-id-here" prod
+```
+
+### Test Workflow
+
+1. Uploads scene (new version)
+2. Uploads cube object
+3. Uploads object manifest
+4. Uploads Lantern object
+5. Uploads updated object manifest
+6. Lists all objects
+
+## Logging and Output
+
+All scripts support:
+* **Colored output** - Info (blue), warnings (yellow), errors (red), debug (cyan)
+* **Verbose mode** - `--verbose` flag shows detailed steps
+* **Dry run mode** - `--dry_run` flag shows commands without executing
+* **Consistent exit codes** - `0` for success, `1` for setup errors, other codes for API failures
+
+## Troubleshooting
+
+### Common Issues
+
+**"jq: command not found"**
+```bash
+# Install jq using your package manager
+brew install jq              # macOS
+sudo apt install jq          # Ubuntu/Debian
+```
+
+**"API key not set"**
+```bash
+# Set the environment variable
+export C3D_DEVELOPER_API_KEY="your_api_key"
+```
+
+**"Scene not found" when uploading objects**
+- Objects require an existing scene. Upload a scene first and use the returned scene_id
+
+**Manifest file not found**
+- Object manifests are auto-generated after successful object upload
+- Check that object upload completed successfully before uploading manifest
+
+**"Your developer API key has expired" (HTTP 401)**
+- Follow the step-by-step instructions provided by the script
+- Generate a new key from Dashboard → Settings → 'Manage developer key'
+- Update environment variable: `export C3D_DEVELOPER_API_KEY="your_new_key"`
+
+**"Invalid scene_id format" error**
+- Scene IDs must be in UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+- Check the scene ID from your dashboard or previous upload response
+
+**File size errors**
+- Individual files cannot exceed 100MB
+- Use `--verbose` flag to see actual file sizes
+- Compress or optimize large assets before upload
+
+### Getting Help
+
+* Use `--help` flag on any script for usage information
+* Use `--verbose` flag to see detailed execution steps
+* Use `--dry_run` flag to preview API calls without executing
+
+### Support
+
+For questions or issues:
+* Open an issue in this repository
+* Join our [Discord](https://discord.gg/x38sNUdDRH)
+* Contact support via the Intercom button on any Cognitive3D web page
