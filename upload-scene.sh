@@ -1,57 +1,14 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
-
-# Treat unset variables as an error.
-set -u
+# Source shared utilities
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/upload-utils.sh"
 
 # Uncomment for debugging
 # set -x
 
 # Define script variables
 SCRIPT_NAME="$(basename "$0")"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# ANSI color codes
-COLOR_RESET="\033[0m"
-COLOR_INFO="\033[1;34m"
-COLOR_WARN="\033[1;33m"
-COLOR_ERROR="\033[1;31m"
-COLOR_DEBUG="\033[0;36m"
-
-# Logging helpers with timestamps
-log_info()  { echo -e "${COLOR_INFO}[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1${COLOR_RESET}"; }
-log_warn()  { echo -e "${COLOR_WARN}[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1${COLOR_RESET}"; }
-log_error() { echo -e "${COLOR_ERROR}[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1${COLOR_RESET}"; }
-log_debug() { if [ "${VERBOSE:-false}" = true ]; then echo -e "${COLOR_DEBUG}[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] $1${COLOR_RESET}"; fi; }
-
-# --- Check Dependencies ---
-if ! command -v jq >/dev/null 2>&1; then
-  log_error "'jq' is not installed. Please install it before running this script."
-  exit 1
-fi
-
-if ! command -v curl >/dev/null 2>&1; then
-  log_error "'curl' is not installed. Please install it before running this script."
-  exit 1
-fi
-
-get_api_base_url() {
-  local env="$1"
-  case "$env" in
-    prod)
-      echo "https://data.cognitive3d.com/v0/scenes"
-      ;;
-    dev)
-      echo "https://data.c3ddev.com/v0/scenes"
-      ;;
-    *)
-      log_error "Unknown environment: $env"
-      exit 1
-      ;;
-  esac
-}
 
 # Main function
 main() {
@@ -120,42 +77,26 @@ main() {
     exit 1
   fi
 
-  if [[ ! -d "$SCENE_DIRECTORY" ]]; then
-    log_error "The specified scene directory does not exist: $SCENE_DIRECTORY"
-    exit 1
-  fi
-
-  if [[ "$ENVIRONMENT" != "prod" && "$ENVIRONMENT" != "dev" ]]; then
-    log_error "Invalid environment: $ENVIRONMENT. Must be 'prod' or 'dev'."
-    exit 1
-  fi
-
+  validate_directory "$SCENE_DIRECTORY" "scene directory"
+  validate_environment "$ENVIRONMENT"
   log_info "Using environment: $ENVIRONMENT"
   
   # Validate scene_id format if provided (UUID format)
   if [[ -n "$SCENE_ID" ]]; then
-    if [[ ! "$SCENE_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
-      log_error "Invalid scene_id format: $SCENE_ID"
-      log_error "Expected UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-      exit 1
-    fi
+    validate_uuid_format "$SCENE_ID" "scene_id"
     log_info "Using scene ID: $SCENE_ID"
   fi
   
   log_debug "SCENE_DIRECTORY: $SCENE_DIRECTORY"
 
-  # Import environment variable
-  if [[ -z "${C3D_DEVELOPER_API_KEY:-}" ]]; then
-    log_error "C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key"
-    exit 1
-  fi
-
-  log_info "C3D_DEVELOPER_API_KEY has been set."
+  # Check dependencies and validate API key
+  check_dependencies
+  validate_api_key
   log_info "SCENE_DIRECTORY is: $SCENE_DIRECTORY"
 
   # Determine API base URL
   local BASE_URL
-  BASE_URL=$(get_api_base_url "$ENVIRONMENT")
+  BASE_URL=$(get_api_base_url "$ENVIRONMENT" "scenes")
   if [[ -n "$SCENE_ID" ]]; then
     BASE_URL+="/$SCENE_ID"
   fi
@@ -168,27 +109,8 @@ main() {
   local JSON_FILE="$SCENE_DIRECTORY/settings.json"
 
   # Validate file existence and sizes
-  local MAX_FILE_SIZE=$((100 * 1024 * 1024))  # 100MB limit
-  
   for file in "$BIN_FILE" "$GLTF_FILE" "$PNG_FILE" "$JSON_FILE"; do
-    if [[ ! -f "$file" ]]; then
-      log_error "Required file missing: $file"
-      exit 1
-    fi
-    
-    # Check file size
-    local file_size
-    if command -v stat >/dev/null 2>&1; then
-      # Try BSD stat first (macOS), then GNU stat (Linux)
-      file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
-      if [[ -n "$file_size" && $file_size -gt $MAX_FILE_SIZE ]]; then
-        log_error "File too large (>100MB): $file ($(($file_size / 1024 / 1024))MB)"
-        exit 1
-      fi
-      log_debug "File size OK: $(basename "$file") ($(($file_size / 1024))KB)"
-    else
-      log_warn "Cannot check file sizes - 'stat' command not available"
-    fi
+    validate_file "$file" 100  # 100MB limit
   done
 
   # Read sdk-version.txt
@@ -201,11 +123,7 @@ main() {
   SDK_VERSION=$(cat "$SDK_VERSION_FILE")
   
   # Validate SDK version format (semantic versioning: x.y.z)
-  if [[ ! "$SDK_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    log_error "Invalid SDK version format: $SDK_VERSION"
-    log_error "Expected semantic versioning format: x.y.z (e.g., 1.2.3)"
-    exit 1
-  fi
+  validate_semantic_version "$SDK_VERSION" "SDK version"
   
   log_info "Read SDK version: $SDK_VERSION"
 
@@ -303,62 +221,18 @@ main() {
     local upload_duration=$((upload_end_time - upload_start_time))
 
     # Separate body and status code
-    local HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
-    local HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+    parse_http_response "$RESPONSE"
 
     log_info "Upload completed in ${upload_duration} seconds (HTTP $HTTP_STATUS)"
 
     if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
-      log_info "Upload successful. Server response (sanitized):"
-      # Try to format JSON response, fall back to raw output
-      if echo "$HTTP_BODY" | jq '.' >/dev/null 2>&1; then
-        echo "$HTTP_BODY" | jq '.'
-      else
-        echo "$HTTP_BODY"
-      fi
+      process_json_response "$HTTP_BODY" "Upload"
     else
-      log_error "Upload failed with status $HTTP_STATUS"
-      
-      # Handle specific error cases with actionable guidance
-      if [[ "$HTTP_STATUS" = "401" ]]; then
-        if echo "$HTTP_BODY" | grep -i "key expired" >/dev/null 2>&1; then
-          log_error "Your developer API key has expired."
-          echo ""
-          log_warn "To fix this issue:"
-          echo "  1. Log into the Cognitive3D dashboard"
-          echo "  2. Go to Settings (gear icon) → 'Manage developer key'"
-          echo "  3. Generate a new developer API key"
-          echo "  4. Update your environment variable: export C3D_DEVELOPER_API_KEY=\"your_new_key\""
-          echo ""
-          log_info "Once you have a new key, re-run this command to upload your scene."
-        else
-          log_error "Authentication failed. Please check your developer API key."
-          echo ""
-          log_warn "Verify your API key is correct:"
-          echo "  1. Check the Cognitive3D dashboard: Settings → 'Manage developer key'"
-          echo "  2. Ensure you're using the correct environment (--env prod or --env dev)"
-          echo "  3. Update your key: export C3D_DEVELOPER_API_KEY=\"your_correct_key\""
-        fi
-      elif [[ "$HTTP_STATUS" = "403" ]]; then
-        log_error "Access forbidden. Your API key may not have permission for this operation."
-        echo ""
-        log_warn "Contact support if you believe this is an error."
-      elif [[ "$HTTP_STATUS" = "404" ]]; then
-        log_error "Scene not found. The scene_id may be incorrect or the scene may not exist."
-        echo ""
-        log_warn "Check your scene_id and ensure the scene exists in the dashboard."
-      else
-        log_error "Server response:"
-        echo "$HTTP_BODY"
-      fi
-      
-      exit 1
+      handle_http_error "$HTTP_STATUS" "$HTTP_BODY" "Upload"
     fi
 
     # Calculate and log total execution time
-    local end_time=$(date +%s)
-    local total_duration=$((end_time - start_time))
-    log_info "Script completed successfully in ${total_duration} seconds"
+    log_execution_time "$start_time" "Script"
   fi
 
   log_info "You can now upload your dynamic objects using the upload-object.sh script."
