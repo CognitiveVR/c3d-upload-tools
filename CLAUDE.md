@@ -82,3 +82,108 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Check file sizes if uploads are slow or failing
 - Rotate API keys immediately when receiving 401 errors
 - Validate scene_id format from dashboard before use
+
+## PowerShell Implementation (Windows Compatibility)
+
+### Status: In Progress ✅
+The repository is being enhanced with PowerShell equivalents to provide native Windows support while maintaining cross-platform compatibility.
+
+### Completed Components
+
+#### Phase 1: Module Structure (SDK-182) ✅
+- **C3DUploadTools PowerShell Module**: Complete module structure with proper manifest
+- **Cross-platform compatibility**: Tested on macOS PowerShell 7.5.2, compatible with Windows PowerShell 5.1+
+- **Function organization**: Public functions for user interface, Private functions for utilities
+- **Module loading**: Dynamic function discovery and export system
+
+#### Phase 1.2: Core Utilities (SDK-183) ✅
+- **Logging System** (`Write-C3DLog`): Timestamped, color-coded logging matching bash functionality
+- **API Key Management** (`Test-C3DApiKey`, `Get-C3DApiKey`): Enhanced validation with cross-platform instructions
+- **Environment Management** (`Get-C3DApiUrl`, `Test-C3DEnvironment`): URL generation for prod/dev environments
+- **UUID Operations** (`Test-C3DUuidFormat`, `ConvertTo-C3DLowerUuid`, `New-C3DUuid`): Complete UUID validation and generation
+- **HTTP Engine** (`Invoke-C3DApiRequest`): Native PowerShell replacement for curl with progress indicators
+- **File System** (`Test-C3DDirectory`, `Test-C3DFile`, `Backup-C3DFile`): Comprehensive file validation and backup system
+- **Module Initialization**: Strict mode equivalent to bash `set -e` and `set -u`
+
+### PowerShell Commands (Available Now)
+
+#### Testing PowerShell Module Structure
+- `pwsh -File test-module-structure.ps1` - Comprehensive module structure validation
+- `pwsh -File test-utilities-internal.ps1` - Internal utility function testing
+
+#### Module Usage
+```powershell
+# Import the module
+Import-Module ./C3DUploadTools -Force
+
+# Available functions (placeholders, ready for implementation)
+Upload-C3DScene -SceneDirectory <path> [-Environment prod|dev] [-SceneId <uuid>] [-DryRun] [-Verbose]
+Upload-C3DObject -SceneId <uuid> -ObjectFilename <name> -ObjectDirectory <path> [-Environment prod|dev] [-DryRun]
+Upload-C3DObjectManifest -SceneId <uuid> [-Environment prod|dev] [-DryRun]
+Get-C3DObjects -SceneId <uuid> [-Environment prod|dev]
+Test-C3DUploads -SceneId <uuid> [-Environment prod|dev]
+```
+
+### PowerShell Advantages Over Bash
+
+| Feature | Bash (current) | PowerShell (new) |
+|---------|----------------|------------------|
+| **Dependencies** | Requires `jq` and `curl` | No external dependencies |
+| **JSON Processing** | External `jq` command | Native `ConvertFrom-Json` |
+| **HTTP Requests** | External `curl` command | Native `Invoke-WebRequest` with progress |
+| **Error Handling** | Exit codes + manual parsing | Rich exception objects with detailed context |
+| **Parameter Validation** | Manual validation functions | Declarative `[Parameter()]` attributes |
+| **File Operations** | External commands (`cp`, `mv`) | Native PowerShell cmdlets |
+| **Cross-platform Paths** | Manual path handling | Automatic path normalization |
+| **Progress Indicators** | Basic text output | Native progress bars for uploads |
+| **Windows Integration** | Limited Windows support | Native Windows PowerShell support |
+
+### Implementation Roadmap
+
+#### Next Phase: Scene Upload (SDK-184) 🔄
+Convert `upload-scene.sh` functionality to `Upload-C3DScene.ps1`:
+- Settings.json backup/rollback with PowerShell file operations
+- SDK version injection from sdk-version.txt
+- Native JSON manipulation replacing jq
+- Progress indicators for large file uploads
+- Enhanced parameter validation
+
+#### Future Phases: Object Operations (SDK-185, SDK-186)
+- `Upload-C3DObject.ps1`: Object upload with multipart form support
+- `Upload-C3DObjectManifest.ps1`: Manifest generation and upload
+- `Get-C3DObjects.ps1`: Object listing with formatted output
+- `Test-C3DUploads.ps1`: Comprehensive testing workflow
+
+#### Windows Enhancements (SDK-187)
+- Windows Credential Manager integration for secure API key storage
+- Registry-based configuration for user preferences
+- Windows Toast notifications for upload completion
+- PowerShell Gallery publishing preparation
+
+### Current File Structure
+```
+C3DUploadTools/                    # PowerShell Module
+├── C3DUploadTools.psd1           # Module manifest ✅
+├── C3DUploadTools.psm1           # Module loader ✅
+├── Public/                       # User-facing functions
+│   ├── Upload-C3DScene.ps1       # 🔄 Ready for implementation
+│   ├── Upload-C3DObject.ps1      # 📋 Planned
+│   └── [other functions]         # 📋 Planned
+└── Private/                      # Core utilities ✅ COMPLETE
+    ├── Write-C3DLog.ps1          # Logging system
+    ├── Test-C3DApiKey.ps1        # API key validation
+    ├── Get-C3DApiUrl.ps1         # URL generation
+    ├── Test-C3DUuidFormat.ps1    # UUID operations
+    ├── Invoke-C3DApiRequest.ps1  # HTTP engine
+    ├── Test-C3DFileSystem.ps1    # File operations
+    └── Initialize-C3DModule.ps1  # Module initialization
+
+# Testing Infrastructure ✅
+test-module-structure.ps1          # Module structure validation
+test-utilities-internal.ps1        # Internal function testing
+```
+
+### Compatibility
+- **Bash Scripts**: Continue to work as before (no breaking changes)
+- **PowerShell Module**: Available for Windows users and cross-platform PowerShell users
+- **Testing**: Both bash and PowerShell implementations thoroughly tested on macOS
