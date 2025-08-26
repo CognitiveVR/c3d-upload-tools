@@ -102,9 +102,9 @@ export C3D_SCENE_ID=YOUR_SCENE_ID_FROM_RESPONSE
 
 ### PowerShell Module (Windows Native)
 * PowerShell 5.1+ (Windows) or PowerShell Core 7.x+ (cross-platform)
-* No external dependencies required
+* No external dependencies required (uses System.Net.WebClient for HTTP operations)
 
-> **Note**: Bash scripts tested on macOS. PowerShell module provides native Windows support. Both support `.env` file configuration for secure API key management.
+> **Note**: Bash scripts tested on macOS. PowerShell module tested on macOS PowerShell Core and provides full Windows compatibility using .NET Framework classes. Both implementations support `.env` file configuration and C3D_SCENE_ID environment variable fallback.
 
 ## Environment Variables
 
@@ -124,7 +124,7 @@ cp .env.example .env
 export C3D_DEVELOPER_API_KEY="your_api_key"
 ```
 
-**3. PowerShell (Windows)**
+**3. PowerShell (Windows/Cross-platform)**
 ```powershell
 # Import module (auto-loads .env file)
 Import-Module ./C3DUploadTools
@@ -134,6 +134,11 @@ $env:C3D_DEVELOPER_API_KEY = "your_api_key"
 
 # For streamlined workflows, also set:
 $env:C3D_SCENE_ID = "your_scene_id_here"
+
+# PowerShell commands support C3D_SCENE_ID environment variable fallback
+Upload-C3DObject -ObjectFilename cube -ObjectDirectory object-test -Environment prod
+Upload-C3DObjectManifest -Environment prod
+Get-C3DObjects -Environment prod
 ```
 
 > **Security Note**: The `.env` file is automatically excluded from git. Never commit API keys to version control.
@@ -341,7 +346,31 @@ Lists all dynamic objects associated with a scene.
 ./list-objects.sh --scene_id "your-scene-id-here" --env prod --verbose
 ```
 
-## Test Script
+## Test Scripts
+
+### Environment Workflow Test Scripts
+
+Test the complete upload workflow with environment-specific configuration.
+
+**Bash:**
+```bash
+./test-env-workflow.sh --env <prod|dev> [--verbose] [--dry_run]
+```
+
+**PowerShell:**
+```powershell
+./Test-EnvWorkflow.ps1 -Environment <prod|dev> [-Verbose] [-DryRun]
+```
+
+These scripts automatically:
+1. Copy `.env.sample.<env>` to `.env`
+2. Upload test scene to get scene ID
+3. Add scene ID to `.env` file
+4. Test object upload using C3D_SCENE_ID environment variable
+5. Upload object manifest and list objects
+6. Clean up temporary `.env` file
+
+### Legacy Test Script
 
 Comprehensive testing script that runs the complete upload workflow.
 

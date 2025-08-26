@@ -66,7 +66,7 @@ function Upload-C3DObjectManifest {
         
         # Look for manifest file
         $manifestFile = "${SceneId}_object_manifest.json"
-        if (-not (Test-C3DFile -FilePath $manifestFile -MaxSizeMB 10)) {
+        if (-not (Test-C3DFile -Path $manifestFile -MaxSizeBytes 10MB)) {
             throw "Manifest file not found: $manifestFile (run Upload-C3DObject first)"
         }
         

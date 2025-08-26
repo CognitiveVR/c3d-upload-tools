@@ -99,14 +99,14 @@ function Invoke-C3DApiRequest {
             $ApiKey = Get-C3DApiKey
         }
         
-        # Prepare headers
+        # Prepare headers - avoid PowerShell's Authorization header validation
         $requestHeaders = $Headers.Clone()
-        $requestHeaders['Authorization'] = "APIKEY:DEVELOPER $ApiKey"
         $requestHeaders['User-Agent'] = 'C3DUploadTools-PowerShell/1.0'
         
         Write-C3DLog -Message "Request headers prepared (Authorization: [REDACTED])" -Level Debug
         
-        # Prepare request parameters
+        # Prepare request parameters without Authorization in headers
+        # We'll add it directly to the WebRequest object to bypass validation
         $requestParams = @{
             Uri = $Uri
             Method = $Method
@@ -215,15 +215,169 @@ function Invoke-C3DApiRequest {
         
         Write-C3DLog -Message "Invoking web request..." -Level Debug
         
-        # Make the actual request
-        $response = Invoke-WebRequest @requestParams
+        # PowerShell Invoke-WebRequest validates Authorization headers strictly
+        # Use System.Net.WebClient for multipart uploads to bypass validation
+        if ($FormData -and $FormData.Count -gt 0) {
+            Write-C3DLog -Message "Using System.Net.WebClient for multipart upload (Windows compatible)" -Level Info
+            
+            try {
+                # Use WebClient which allows custom headers without validation
+                $webClient = New-Object System.Net.WebClient
+                $webClient.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
+                $webClient.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
+                
+                # Create boundary for multipart data
+                $boundary = "----C3DUploadBoundary$([System.Guid]::NewGuid().ToString('N'))"
+                $webClient.Headers.Add('Content-Type', "multipart/form-data; boundary=$boundary")
+                
+                # Build multipart form data manually
+                $encoding = [System.Text.Encoding]::UTF8
+                $newline = "`r`n"
+                
+                $formDataBytes = @()
+                
+                foreach ($fieldName in $FormData.Keys) {
+                    $filePath = $FormData[$fieldName]
+                    $fileName = [System.IO.Path]::GetFileName($filePath)
+                    $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
+                    
+                    # Add field header
+                    $fieldHeader = "--$boundary$newline"
+                    $fieldHeader += "Content-Disposition: form-data; name=`"$fieldName`"; filename=`"$fileName`"$newline"
+                    $fieldHeader += "Content-Type: application/octet-stream$newline$newline"
+                    
+                    $headerBytes = $encoding.GetBytes($fieldHeader)
+                    $endBytes = $encoding.GetBytes($newline)
+                    
+                    $formDataBytes += $headerBytes
+                    $formDataBytes += $fileBytes
+                    $formDataBytes += $endBytes
+                }
+                
+                # Add closing boundary
+                $closingBoundary = "--$boundary--$newline"
+                $formDataBytes += $encoding.GetBytes($closingBoundary)
+                
+                # Upload data
+                Write-C3DLog -Message "Uploading $($formDataBytes.Length) bytes via WebClient" -Level Debug
+                $responseBytes = $webClient.UploadData($Uri, 'POST', $formDataBytes)
+                $responseContent = $encoding.GetString($responseBytes)
+                
+                # WebClient doesn't provide status code directly for successful uploads
+                # If we get here without exception, assume success (200)
+                $webResponse = [PSCustomObject]@{
+                    StatusCode = 200
+                    Content = $responseContent
+                    Headers = @{}
+                    StatusDescription = 'OK'
+                }
+                
+                Write-C3DLog -Message "WebClient upload successful" -Level Debug
+                $webClient.Dispose()
+                
+            } catch [System.Net.WebException] {
+                # Handle HTTP errors from WebClient
+                $webException = $_.Exception
+                $response = $webException.Response
+                
+                if ($response) {
+                    $statusCode = [int]$response.StatusCode
+                    $responseStream = $response.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($responseStream)
+                    $responseContent = $reader.ReadToEnd()
+                    $reader.Close()
+                    $responseStream.Close()
+                    
+                    Write-C3DLog -Message "WebClient failed with HTTP $statusCode" -Level Error
+                    Write-C3DLog -Message "Response: $responseContent" -Level Debug
+                    
+                    $webResponse = [PSCustomObject]@{
+                        StatusCode = $statusCode
+                        Content = $responseContent
+                        Headers = @{}
+                        StatusDescription = $response.StatusDescription
+                    }
+                } else {
+                    throw $webException
+                }
+                
+                if ($webClient) { $webClient.Dispose() }
+            }
+            
+        } else {
+            # For non-multipart requests, use standard PowerShell with custom auth handling
+            # Create a custom WebRequest to bypass Authorization header validation
+            try {
+                $request = [System.Net.WebRequest]::Create($Uri)
+                $request.Method = $Method
+                $request.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
+                $request.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
+                $request.Timeout = $TimeoutSeconds * 1000
+                
+                # Add body for POST/PUT requests
+                if ($Body) {
+                    $bodyBytes = if ($Body -is [string]) { 
+                        [System.Text.Encoding]::UTF8.GetBytes($Body) 
+                    } else { 
+                        [System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 10))
+                    }
+                    
+                    $request.ContentLength = $bodyBytes.Length
+                    $request.ContentType = $ContentType
+                    
+                    $requestStream = $request.GetRequestStream()
+                    $requestStream.Write($bodyBytes, 0, $bodyBytes.Length)
+                    $requestStream.Close()
+                }
+                
+                # Get response
+                $httpResponse = $request.GetResponse()
+                $responseStream = $httpResponse.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($responseStream)
+                $responseContent = $reader.ReadToEnd()
+                $reader.Close()
+                $responseStream.Close()
+                
+                $webResponse = [PSCustomObject]@{
+                    StatusCode = [int]$httpResponse.StatusCode
+                    Content = $responseContent
+                    Headers = @{}
+                    StatusDescription = $httpResponse.StatusDescription
+                }
+                
+                $httpResponse.Close()
+                
+            } catch [System.Net.WebException] {
+                $webException = $_.Exception
+                $response = $webException.Response
+                
+                if ($response) {
+                    $statusCode = [int]$response.StatusCode
+                    $responseStream = $response.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($responseStream)
+                    $responseContent = $reader.ReadToEnd()
+                    $reader.Close()
+                    $responseStream.Close()
+                    $response.Close()
+                    
+                    $webResponse = [PSCustomObject]@{
+                        StatusCode = $statusCode
+                        Content = $responseContent
+                        Headers = @{}
+                        StatusDescription = $response.StatusDescription
+                    }
+                } else {
+                    throw $webException
+                }
+            }
+        }
         
         # Calculate timing
         $endTime = Get-Date
         $timingMs = [math]::Round(($endTime - $startTime).TotalMilliseconds, 0)
         
         Write-C3DLog -Message "Request completed in ${timingMs}ms" -Level Info
-        Write-C3DLog -Message "Response status: $($response.StatusCode) $($response.StatusDescription)" -Level Info
+        Write-C3DLog -Message "Response status: $($webResponse.StatusCode) $($webResponse.StatusDescription)" -Level Info
         
         # Clear progress
         if ($FormData -or $FilePath -or ($Body -and $Body.Length -gt 10000)) {
@@ -232,12 +386,36 @@ function Invoke-C3DApiRequest {
         
         # Return structured response
         return [PSCustomObject]@{
-            StatusCode = $response.StatusCode
-            Body = $response.Content
-            Headers = $response.Headers
+            StatusCode = $webResponse.StatusCode
+            Body = $webResponse.Content
+            Headers = $webResponse.Headers
             TimingMs = $timingMs
             Success = $true
-            RawResponse = $response
+            RawResponse = $webResponse
+        }
+        
+    } catch [Microsoft.PowerShell.Commands.HttpResponseException] {
+        $endTime = Get-Date
+        $timingMs = [math]::Round(($endTime - $startTime).TotalMilliseconds, 0)
+        
+        Write-Progress -Activity $ProgressTitle -Completed
+        
+        $statusCode = [int]$_.Exception.Response.StatusCode
+        $responseBody = $_.Exception.Response.Content.ReadAsStringAsync().Result
+        
+        Write-C3DLog -Message "HTTP request failed after ${timingMs}ms" -Level Error
+        Write-C3DLog -Message "Status Code: $statusCode" -Level Error
+        Write-C3DLog -Message "Response body: $($responseBody.Substring(0, [Math]::Min(1000, $responseBody.Length)))" -Level Error
+        
+        # Return error response object
+        return [PSCustomObject]@{
+            StatusCode = $statusCode
+            Body = $responseBody
+            Headers = $null
+            TimingMs = $timingMs
+            Success = $false
+            Error = $_.Exception.Message
+            RawResponse = $null
         }
         
     } catch [System.Net.WebException] {

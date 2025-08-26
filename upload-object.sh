@@ -165,7 +165,9 @@ main() {
     --form "${OBJECT_FILENAME}.gltf=@$GLTF_FILE")
 
   # Add texture .png files to curl command
-  CURL_CMD+=("${TEXTURE_FORMS[@]}")
+  if [[ ${#TEXTURE_FORMS[@]} -gt 0 ]]; then
+    CURL_CMD+=("${TEXTURE_FORMS[@]}")
+  fi
 
   # Show and optionally skip execution
   if [[ "$DRY_RUN" = true ]]; then

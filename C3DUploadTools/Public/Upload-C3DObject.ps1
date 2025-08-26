@@ -318,7 +318,6 @@ function Upload-C3DObject {
         if (-not $DryRun) {
             Write-C3DLog -Message "Object upload process completed in $([math]::Round($totalDuration, 2)) seconds" -Level Info
             Write-C3DLog -Message "Upload complete. Object ID: $ObjectId" -Level Info
-            Write-C3DLog -Message "" -Level Info
             Write-C3DLog -Message "Next Steps:" -Level Info
             if ($AutoUploadManifest) {
                 Write-C3DLog -Message "✅ Object manifest has been automatically uploaded" -Level Info
