@@ -67,14 +67,8 @@ function Upload-C3DObject {
     
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory, Position = 0, HelpMessage = "Scene ID (UUID format) where object will be uploaded")]
-        [ValidateScript({
-            if (-not (Test-C3DUuidFormat -Uuid $_ -FieldName 'SceneId')) {
-                throw "Invalid UUID format for SceneId: $_"
-            }
-            $true
-        })]
-        [string]$SceneId,
+        [Parameter(Position = 0, HelpMessage = "Scene ID (UUID format) where object will be uploaded, or set C3D_SCENE_ID environment variable")]
+        [string]$SceneId = $env:C3D_SCENE_ID,
         
         [Parameter(Mandatory, Position = 1, HelpMessage = "Object filename without extension (e.g., 'cube' for cube.gltf and cube.bin)")]
         [ValidateNotNullOrEmpty()]
@@ -106,6 +100,20 @@ function Upload-C3DObject {
     # Initialize timing
     $startTime = Get-Date
     Write-C3DLog -Message "Starting object upload process" -Level Info
+    
+    # Validate SceneId is provided and has correct format
+    if ([string]::IsNullOrWhiteSpace($SceneId)) {
+        Write-C3DLog -Message "SceneId is required. Provide via parameter or set C3D_SCENE_ID environment variable" -Level Error
+        throw "Missing required parameter: SceneId"
+    }
+    
+    if (-not (Test-C3DUuidFormat -Uuid $SceneId -FieldName 'SceneId')) {
+        throw "Invalid UUID format for SceneId: $SceneId"
+    }
+    
+    if ($SceneId -eq $env:C3D_SCENE_ID) {
+        Write-C3DLog -Message "Using C3D_SCENE_ID from environment: $SceneId" -Level Debug
+    }
     
     # Enable debug logging if -Verbose is specified
     if ($PSBoundParameters.ContainsKey('Verbose') -and $PSBoundParameters['Verbose']) {

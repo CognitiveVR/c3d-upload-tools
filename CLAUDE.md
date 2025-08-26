@@ -12,13 +12,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./upload-scene.sh --help` - Show usage information
 
 ### Object Operations  
-- `./upload-object.sh --scene_id <id> --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects
-- `./upload-object-manifest.sh --scene_id <id> [--env prod|dev] [--verbose] [--dry_run]` - Upload object manifest after object upload
-- `./list-objects.sh --scene_id <id> --env <env> --verbose` - List objects for a scene
+- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects
+- `./upload-object-manifest.sh [--scene_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload object manifest after object upload
+- `./list-objects.sh [--scene_id <id>] --env <env> --verbose` - List objects for a scene
 
 ### Dependencies
 - Requires `jq` and `curl` to be installed
-- Set `C3D_DEVELOPER_API_KEY` environment variable before running scripts
+- Set `C3D_DEVELOPER_API_KEY` environment variable or use `.env` file (recommended)
+- Optional: Set `C3D_SCENE_ID` environment variable to avoid --scene_id parameters
 
 ## Architecture
 
@@ -34,9 +35,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Upload Workflow
 1. Upload scene first to get scene_id
-2. Upload objects using scene_id 
+2. Upload objects using scene_id (can be set in .env file for convenience)
 3. Upload object manifest to display objects in dashboard
 4. Object manifests are automatically generated but can be manually edited before upload
+
+### Environment Variable Support (SDK-191) ✅
+**Streamlined Workflow with .env:**
+- Set `C3D_SCENE_ID` in `.env` file to avoid --scene_id parameters
+- All object operations (upload-object.sh, upload-object-manifest.sh, list-objects.sh) support environment variable fallback
+- PowerShell module automatically loads .env file during import
+- Tested with real API uploads in both dev and prod environments
 
 ### Common Patterns
 - All scripts use consistent argument parsing with `--parameter value` format

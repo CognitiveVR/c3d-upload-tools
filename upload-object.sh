@@ -50,8 +50,8 @@ main() {
         shift
         ;;
       --help|-h)
-        echo "Usage: $0 --scene_id <scene_id> --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
-        echo "  --scene_id        Scene ID to upload object to"
+        echo "Usage: $0 [--scene_id <scene_id>] --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
+        echo "  --scene_id        Scene ID to upload object to (or set C3D_SCENE_ID environment variable)"
         echo "  --object_filename Object filename (without extension)"
         echo "  --object_dir      Path to directory containing object files"
         echo "  --object_id       Optional. Object ID (defaults to object_filename)"
@@ -61,6 +61,7 @@ main() {
         echo
         echo "Environment Variables:"
         echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
+        echo "  C3D_SCENE_ID            Default scene ID (avoids --scene_id parameter)"
         exit 0
         ;;
       *)
@@ -74,10 +75,19 @@ main() {
   local start_time=$(date +%s)
   log_info "Starting object upload process"
 
+  # Use environment variable fallback for scene_id
+  if [[ -z "$SCENE_ID" ]]; then
+    SCENE_ID="${C3D_SCENE_ID:-}"
+    if [[ -n "$SCENE_ID" ]]; then
+      log_debug "Using C3D_SCENE_ID from environment: $SCENE_ID"
+    fi
+  fi
+  
   # Validate required arguments
   if [[ -z "$SCENE_ID" ]]; then
-    log_error "Missing required argument: --scene_id"
-    echo "Usage: $0 --scene_id <scene_id> --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
+    log_error "Missing required argument: --scene_id (not provided as parameter or C3D_SCENE_ID environment variable)"
+    echo "Usage: $0 [--scene_id <scene_id>] --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
+    echo "       Set C3D_SCENE_ID environment variable to avoid --scene_id parameter"
     exit 1
   fi
 

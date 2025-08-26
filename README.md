@@ -44,6 +44,7 @@ Get your API key from the Cognitive3D dashboard: Settings (gear icon) → "Manag
 
 ### 3. Upload Workflow
 
+**Traditional approach (with --scene_id parameters):**
 ```bash
 # Step 1: Upload scene (first time - creates new scene)
 ./upload-scene.sh --scene_dir scene-test --env prod
@@ -55,6 +56,41 @@ Get your API key from the Cognitive3D dashboard: Settings (gear icon) → "Manag
 
 # Step 3: Upload object manifest (displays objects in dashboard)
 ./upload-object-manifest.sh --scene_id YOUR_SCENE_ID --env prod
+```
+
+**Streamlined approach (with .env file):**
+```bash
+# Step 1: Set up .env file
+cp .env.example .env
+# Edit .env with your C3D_DEVELOPER_API_KEY
+
+# Step 2: Upload scene to get scene ID
+./upload-scene.sh --scene_dir scene-test --env prod
+# Note the scene ID from response: e.g., 511b6159-cf6b-4de8-8cc4-3fe68132cafa
+
+# Step 3: Add scene ID to .env file
+echo "C3D_SCENE_ID=511b6159-cf6b-4de8-8cc4-3fe68132cafa" >> .env
+
+# Step 4: Upload objects (no --scene_id needed)
+./upload-object.sh --object_filename cube --object_dir object-test --env prod
+
+# Step 5: Upload object manifest (no --scene_id needed)
+./upload-object-manifest.sh --env prod
+
+# Step 6: List objects to verify (no --scene_id needed)
+./list-objects.sh --env prod
+```
+
+**Alternative: Environment variable approach:**
+```bash
+# Upload scene and set scene ID manually
+./upload-scene.sh --scene_dir scene-test --env prod
+export C3D_SCENE_ID=YOUR_SCENE_ID_FROM_RESPONSE
+
+# Use environment variable for subsequent operations
+./upload-object.sh --object_filename cube --object_dir object-test --env prod
+./upload-object-manifest.sh --env prod
+./list-objects.sh --env prod
 ```
 
 ## Requirements
@@ -95,6 +131,9 @@ Import-Module ./C3DUploadTools
 
 # Or set manually
 $env:C3D_DEVELOPER_API_KEY = "your_api_key"
+
+# For streamlined workflows, also set:
+$env:C3D_SCENE_ID = "your_scene_id_here"
 ```
 
 > **Security Note**: The `.env` file is automatically excluded from git. Never commit API keys to version control.
@@ -186,7 +225,7 @@ Uploads dynamic 3D object assets to the Cognitive3D platform. **Requires a scene
 
 ```bash
 ./upload-object.sh \
-  --scene_id <scene-uuid> \
+  [--scene_id <scene-uuid>] \
   --object_filename <object-name> \
   --object_dir <path-to-object-directory> \
   [--object_id <existing-object-id>] \
@@ -198,7 +237,7 @@ Uploads dynamic 3D object assets to the Cognitive3D platform. **Requires a scene
 ### Parameters
 
 **Required:**
-* `--scene_id` - Scene ID UUID where object will be uploaded
+* `--scene_id` - Scene ID UUID where object will be uploaded (or set C3D_SCENE_ID environment variable)
 * `--object_filename` - Base filename (no extension) for `.gltf` and `.bin` files
 * `--object_dir` - Directory containing object files
 
@@ -244,7 +283,7 @@ Uploads object manifest to display objects in the Cognitive3D dashboard. Run aft
 
 ```bash
 ./upload-object-manifest.sh \
-  --scene_id <scene-uuid> \
+  [--scene_id <scene-uuid>] \
   [--env <prod|dev>] \
   [--verbose] \
   [--dry_run]
@@ -253,7 +292,7 @@ Uploads object manifest to display objects in the Cognitive3D dashboard. Run aft
 ### Parameters
 
 **Required:**
-* `--scene_id` - Scene ID UUID
+* `--scene_id` - Scene ID UUID (or set C3D_SCENE_ID environment variable)
 
 **Optional:**
 * `--env` - Target environment (`prod` or `dev`). Defaults to `prod`
@@ -283,13 +322,13 @@ Lists all dynamic objects associated with a scene.
 ### Usage
 
 ```bash
-./list-objects.sh --scene_id <scene_id> --env <prod|dev> [--verbose] [--debug]
+./list-objects.sh [--scene_id <scene_id>] --env <prod|dev> [--verbose] [--debug]
 ```
 
 ### Parameters
 
 **Required:**
-* `--scene_id` - Scene ID UUID
+* `--scene_id` - Scene ID UUID (or set C3D_SCENE_ID environment variable)
 * `--env` - Target environment (`prod` or `dev`)
 
 **Optional:**
@@ -309,16 +348,17 @@ Comprehensive testing script that runs the complete upload workflow.
 ### Usage
 
 ```bash
-./test-all.sh <scene_id> <env>
+./test-all.sh [scene_id] [env]
 ```
 
 ### Parameters
 
-* `scene_id` - Existing scene ID (run scene upload first to get this)
-* `env` - Target environment (`prod` or `dev`)
+* `scene_id` - Existing scene ID (run scene upload first to get this, or set C3D_SCENE_ID environment variable)
+* `env` - Target environment (`prod` or `dev`), defaults to `prod`
 
 ### Example
 
+**Traditional approach:**
 ```bash
 # First upload a scene to get scene_id
 ./upload-scene.sh --scene_dir scene-test --env prod
@@ -326,6 +366,19 @@ Comprehensive testing script that runs the complete upload workflow.
 # Use returned scene_id for testing
 ./test-all.sh "your-scene-id-here" prod
 ```
+
+**Environment variable approach:**
+```bash
+# Option 1: Set in .env file
+echo "C3D_SCENE_ID=your-scene-id-here" >> .env
+./test-all.sh
+
+# Option 2: Set manually in shell
+export C3D_SCENE_ID="your-scene-id-here"
+./test-all.sh
+```
+
+> **Tested**: This workflow has been verified with both dev and prod environments using real API uploads.
 
 ### Test Workflow
 
