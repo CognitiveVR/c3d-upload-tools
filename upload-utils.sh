@@ -28,6 +28,54 @@ log_verbose() {
   log_debug "$1"
 }
 
+# Load environment variables from .env file
+load_env_file() {
+  local env_file="${1:-.env}"
+  
+  if [[ -f "$env_file" ]]; then
+    log_debug "Loading environment variables from $env_file"
+    
+    # Read .env file line by line
+    while IFS= read -r line; do
+      # Skip empty lines and comments
+      [[ -z "$line" ]] && continue
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      
+      # Skip lines without '='
+      [[ ! "$line" =~ = ]] && continue
+      
+      # Extract key and value
+      key="${line%%=*}"
+      value="${line#*=}"
+      
+      # Trim whitespace
+      key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      
+      # Skip if key is empty
+      [[ -z "$key" ]] && continue
+      
+      # Validate key format (letters, numbers, underscore only)
+      if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        log_debug "Skipping invalid key format: $key"
+        continue
+      fi
+      
+      # Only set if not already set (existing env vars take precedence)
+      if [[ -z $(printenv "$key" 2>/dev/null) ]]; then
+        export "$key"="$value"
+        log_debug "Set $key from .env file"
+      else
+        log_debug "Skipping $key (already set in environment)"
+      fi
+    done < "$env_file"
+    
+    log_debug "Finished loading environment variables from $env_file"
+  else
+    log_debug "No .env file found at $env_file"
+  fi
+}
+
 # Check for required dependencies
 check_dependencies() {
   local missing_deps=()

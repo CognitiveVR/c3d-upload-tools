@@ -24,11 +24,23 @@ dnf install jq curl          # Fedora/RHEL
 
 ### 2. Set API Key
 
+**Option A: Environment Variable (Traditional)**
 ```bash
 export C3D_DEVELOPER_API_KEY="your_api_key"
 ```
 
+**Option B: .env File (Recommended)**
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit .env with your API key
+C3D_DEVELOPER_API_KEY=your_api_key_here
+```
+
 Get your API key from the Cognitive3D dashboard: Settings (gear icon) → "Manage developer key"
+
+> **Security**: The `.env` file is automatically ignored by git to keep your API key secure. Never commit API keys to version control.
 
 ### 3. Upload Workflow
 
@@ -47,18 +59,45 @@ Get your API key from the Cognitive3D dashboard: Settings (gear icon) → "Manag
 
 ## Requirements
 
+### Bash Scripts (Cross-platform)
 * Bash (macOS / Linux / Windows Subsystem for Linux (WSL))
 * `curl`
 * `jq`
 
-> **Note**: We have only tested these tools on macOS. Feedback welcome on your experience using them in Linux or Windows Subsystem for Linux (WSL). Open an Issue here or find us on our [Discord](https://discord.gg/x38sNUdDRH).
+### PowerShell Module (Windows Native)
+* PowerShell 5.1+ (Windows) or PowerShell Core 7.x+ (cross-platform)
+* No external dependencies required
+
+> **Note**: Bash scripts tested on macOS. PowerShell module provides native Windows support. Both support `.env` file configuration for secure API key management.
 
 ## Environment Variables
 
 **Required**:
 * `C3D_DEVELOPER_API_KEY` - Your Cognitive3D Developer API key
 
-> **Security Note**: We strongly recommend you _do not_ store your developer API key in version control.
+### Configuration Options
+
+**1. .env File (Recommended)**
+```bash
+# Copy example and edit with your values
+cp .env.example .env
+```
+
+**2. Environment Variables**
+```bash
+export C3D_DEVELOPER_API_KEY="your_api_key"
+```
+
+**3. PowerShell (Windows)**
+```powershell
+# Import module (auto-loads .env file)
+Import-Module ./C3DUploadTools
+
+# Or set manually
+$env:C3D_DEVELOPER_API_KEY = "your_api_key"
+```
+
+> **Security Note**: The `.env` file is automatically excluded from git. Never commit API keys to version control.
 
 ## Scene Upload Script
 

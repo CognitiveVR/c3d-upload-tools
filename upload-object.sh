@@ -4,6 +4,9 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/upload-utils.sh"
 
+# Load environment variables from .env file (if present)
+load_env_file
+
 # Main function
 main() {
   # Default values

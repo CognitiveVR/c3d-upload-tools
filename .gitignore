@@ -1,2 +1,5 @@
 .DS_Store
 *object*.json
+
+# Environment variables (contains secrets)
+.env

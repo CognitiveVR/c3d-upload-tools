@@ -48,6 +48,9 @@ if ($FunctionNames) {
     Write-Warning "No public functions found to export"
 }
 
+# Auto-load .env file if present
+Import-C3DEnvironment
+
 # Module initialization
 Write-Verbose "C3DUploadTools module loaded successfully"
 Write-Verbose "Available functions: $($FunctionNames -join ', ')"
