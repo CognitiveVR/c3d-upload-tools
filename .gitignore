@@ -5,3 +5,5 @@
 .env
 .env.sample.prod
 .env.sample.dev
+.env.webxr*
+.env.backup
