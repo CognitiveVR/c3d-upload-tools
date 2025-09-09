@@ -35,7 +35,7 @@ function Upload-C3DObjectManifest {
         
         [Parameter(HelpMessage = "Target environment: 'prod' or 'dev'")]
         [ValidateSet('prod', 'dev')]
-        [string]$Environment = 'prod',
+        [string]$Environment = $(if ($env:C3D_DEFAULT_ENVIRONMENT) { $env:C3D_DEFAULT_ENVIRONMENT } else { 'prod' }),
         
         [Parameter(HelpMessage = "Preview operations without executing them")]
         [switch]$DryRun

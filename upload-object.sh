@@ -10,11 +10,11 @@ load_env_file
 # Main function
 main() {
   # Default values
-  ENVIRONMENT="prod"
+  ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
   OBJECT_ID=""
   VERBOSE=false
   DRY_RUN=false
-  SCENE_ID=""
+  SCENE_ID="${C3D_SCENE_ID:-}"
   OBJECT_FILENAME=""
   OBJECT_DIRECTORY=""
 

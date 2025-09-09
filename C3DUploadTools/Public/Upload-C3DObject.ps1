@@ -88,7 +88,7 @@ function Upload-C3DObject {
         
         [Parameter(HelpMessage = "Target environment: 'prod' or 'dev'")]
         [ValidateSet('prod', 'dev')]
-        [string]$Environment = 'prod',
+        [string]$Environment = $(if ($env:C3D_DEFAULT_ENVIRONMENT) { $env:C3D_DEFAULT_ENVIRONMENT } else { 'prod' }),
         
         [Parameter(HelpMessage = "Automatically upload object manifest after successful upload")]
         [switch]$AutoUploadManifest = $true,

@@ -14,7 +14,7 @@ function Test-C3DUploads {
         [string]$SceneId,
         
         [ValidateSet('prod', 'dev')]
-        [string]$Environment = 'prod'
+        [string]$Environment = $(if ($env:C3D_DEFAULT_ENVIRONMENT) { $env:C3D_DEFAULT_ENVIRONMENT } else { 'prod' })
     )
     
     Write-Host "🧪 Test-C3DUploads placeholder - Module structure working!" -ForegroundColor Green

@@ -13,8 +13,8 @@ load_env_file
 # Main function
 main() {
   # Default values
-  SCENE_ID=""
-  ENVIRONMENT="prod"
+  SCENE_ID="${C3D_SCENE_ID:-}"
+  ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
   VERBOSE=false
   DRY_RUN=false
 

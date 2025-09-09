@@ -17,8 +17,8 @@ SCRIPT_NAME="$(basename "$0")"
 main() {
   # Default values
   SCENE_DIRECTORY=""
-  ENVIRONMENT="prod"
-  SCENE_ID=""
+  ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
+  SCENE_ID="${C3D_SCENE_ID:-}"
   VERBOSE=false
   DRY_RUN=false
 
