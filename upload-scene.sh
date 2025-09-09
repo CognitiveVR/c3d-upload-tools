@@ -185,7 +185,7 @@ main() {
     echo "  --header 'Authorization: APIKEY:DEVELOPER [REDACTED]' \\"
     echo "  --form 'scene.bin=@$BIN_FILE' \\"
     echo "  --form 'scene.gltf=@$GLTF_FILE' \\"
-    echo "  --form 'screenshot.png=@$PNG_FILE' \\"
+    echo "  --form 'screenshot=@$PNG_FILE' \\"
     echo "  --form 'settings.json=@$JSON_FILE'"
     echo ""
     echo "Files that would be uploaded:"
