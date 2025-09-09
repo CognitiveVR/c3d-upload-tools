@@ -218,7 +218,7 @@ main() {
       --header "Authorization: APIKEY:DEVELOPER ${C3D_DEVELOPER_API_KEY}" \
       --form "scene.bin=@$BIN_FILE" \
       --form "scene.gltf=@$GLTF_FILE" \
-      --form "screenshot.png=@$PNG_FILE" \
+      --form "screenshot=@$PNG_FILE" \
       --form "settings.json=@$JSON_FILE")
     local upload_end_time=$(date +%s)
     local upload_duration=$((upload_end_time - upload_start_time))
