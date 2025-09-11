@@ -36,30 +36,12 @@ VERBOSE=0
 SCENE_ID=""
 ENV=""
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --scene_id)
-      SCENE_ID="$2"
-      shift 2
-      ;;
-    --env)
-      ENV="$2"
-      shift 2
-      ;;
-    --verbose)
-      VERBOSE=1
-      shift
-      ;;
-    --help|-h)
-      echo "Usage: $0 --scene_id <scene_id> --env <prod|dev> [--verbose]"
-      echo "  --scene_id   (required)"
-      echo "  --env        'prod' or 'dev' (required)"
-      echo "  --verbose    verbose mode (optional)"
-      exit 0
-      ;;
-    *)
-      usage
-      ;;
+while getopts "s:e:v" opt; do
+  case $opt in
+    s) SCENE_ID="$OPTARG" ;;
+    e) ENV="$OPTARG" ;;
+    v) VERBOSE=1 ;;
+    \?) usage ;;
   esac
 done
 

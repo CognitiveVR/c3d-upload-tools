@@ -193,6 +193,7 @@ cat > "${scene_id}_object_manifest.json" <<EOF
   "objects": [
     {
       "id": "$object_id",
+      "isController": false,
       "mesh": "$object_filename",
       "name": "$object_filename",
       "scaleCustom": [
@@ -219,6 +220,5 @@ EOF
 log_debug "Manifest file created: ${scene_id}_object_manifest.json"
 
 log_info "Automatically uploading the manifest."
-./upload-object-manifest.sh --scene_id $scene_id --env $environment
-
+./upload-object-manifest.sh -s $scene_id -e $environment
 log_info "Upload complete. Object ID: $object_id"
