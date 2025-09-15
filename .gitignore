@@ -7,3 +7,4 @@
 .env.sample.dev
 .env.webxr*
 .env.backup
+.env.example

@@ -282,6 +282,7 @@ function Upload-C3DObject {
                             id = $ObjectId
                             mesh = $ObjectFilename
                             name = $ObjectFilename
+                            isController = $false
                             scaleCustom = @(1.0, 1.0, 1.0)
                             initialPosition = @(0.0, 0.0, 0.0)
                             initialRotation = @(0.0, 0.0, 0.0, 1.0)

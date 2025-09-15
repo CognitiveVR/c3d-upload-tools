@@ -96,14 +96,14 @@ function Upload-C3DObjectManifest {
         
         if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
             Write-C3DLog -Message "Object manifest uploaded successfully" -Level Info
-            if ($response.Content) {
-                $responseObj = $response.Content | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($response.Body) {
+                $responseObj = $response.Body | ConvertFrom-Json -ErrorAction SilentlyContinue
                 if ($responseObj) {
                     Write-C3DLog -Message "Response: $($responseObj | ConvertTo-Json -Compress)" -Level Debug
                 }
             }
         } else {
-            throw "Upload failed with HTTP $($response.StatusCode): $($response.Content)"
+            throw "Upload failed with HTTP $($response.StatusCode): $($response.Body)"
         }
         
         # Log execution time

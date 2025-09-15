@@ -268,7 +268,7 @@ function Upload-C3DScene {
         
         if (-not $DryRun) {
             Write-C3DLog -Message "Script completed in $([math]::Round($totalDuration, 2)) seconds" -Level Info
-            Write-C3DLog -Message "" -Level Info
+            Write-C3DLog -Message "Scene upload script completed." -Level Info
             Write-C3DLog -Message "Next Steps:" -Level Info
             Write-C3DLog -Message "1. You can now upload dynamic objects using Upload-C3DObject" -Level Info
             Write-C3DLog -Message "2. You'll need the scene ID from the upload response" -Level Info
