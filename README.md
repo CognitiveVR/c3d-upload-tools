@@ -1,520 +1,387 @@
 # Cognitive3D Upload Tools
 
-A collection of bash scripts for uploading 3D scenes and dynamic objects to the Cognitive3D platform. These tools provide a complete workflow for managing scenes, objects, and their associated metadata through the Cognitive3D API.
+Upload 3D scenes and dynamic objects to the Cognitive3D platform with ease. Cross-platform tools supporting both Bash (macOS/Linux) and PowerShell (Windows) with streamlined environment variable workflows.
 
-## Overview
+## Key Features
 
-This repository contains the following scripts:
-
-- **`upload-scene.sh`** - Upload scene files (GLTF, textures, settings)
-- **`upload-object.sh`** - Upload dynamic 3D object assets
-- **`upload-object-manifest.sh`** - Upload object manifest for dashboard display
-- **`list-objects.sh`** - List objects associated with a scene
-- **`test-all.sh`** - Run comprehensive tests for all upload functionality
+- **Complete Upload Workflow**: Scene files, dynamic objects, and manifests
+- **Cross-Platform**: Bash scripts for macOS/Linux, PowerShell module for Windows
+- **Environment Variables**: Streamlined workflows with `.env` file support
+- **Enhanced Security**: Safe API key handling and input validation
+- **Developer-Friendly**: Comprehensive logging, dry-run mode, and error guidance
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Get Your API Key
+
+1. Go to [Cognitive3D Dashboard](https://app.cognitive3d.com/)
+2. Settings (gear icon) → "Manage developer key"
+3. Copy your Developer API key
+
+### 2. Set Up Environment
 
 ```bash
-brew install jq curl         # macOS
-sudo apt install jq curl     # Ubuntu/Debian
-dnf install jq curl          # Fedora/RHEL
-```
-
-### 2. Set API Key
-
-**Option A: Environment Variable (Traditional)**
-
-```bash
-export C3D_DEVELOPER_API_KEY="your_api_key"
-```
-
-**Option B: .env File (Recommended)**
-
-```bash
-# Copy the example file
+# Copy and edit the configuration file
 cp .env.example .env
-
-# Edit .env with your Developer API key
-C3D_DEVELOPER_API_KEY=your_developer_api_key_here
+# Edit .env and add your API key: C3D_DEVELOPER_API_KEY=your_api_key_here
 ```
 
-Get your API key from the Cognitive3D dashboard: Settings (gear icon) → "Manage developer key"
+### 3. Install Dependencies (Bash Only)
 
-> **Security**: The `.env` file is automatically ignored by git to keep your API key secure. Never commit API keys to version control.
+**macOS:** `brew install jq curl`
+**Ubuntu/Debian:** `sudo apt install jq curl`
+**Fedora/RHEL:** `dnf install jq curl`
+**Windows:** Use PowerShell module (no dependencies required)
 
-### 3. Upload Workflow
-
-**Traditional approach (with --scene_id parameters):**
+### 4. Upload Your First Scene
 
 ```bash
-# Step 1: Upload scene (first time - creates new scene)
+# Bash (macOS/Linux)
 ./upload-scene.sh --scene_dir scene-test --env prod
 
-# Note the scene_id returned from the above command
-
-# Step 2: Upload objects
-./upload-object.sh --scene_id YOUR_SCENE_ID --object_filename cube --object_dir object-test --env prod
-
-# Step 3: Upload object manifest (displays objects in dashboard)
-./upload-object-manifest.sh --scene_id YOUR_SCENE_ID --env prod
-```
-
-**Streamlined approach (with .env file):**
-
-```bash
-# Step 1: Set up .env file
-cp .env.example .env
-# Edit .env with your C3D_DEVELOPER_API_KEY
-
-# Step 2: Upload scene to get scene ID
-./upload-scene.sh --scene_dir scene-test --env prod
-# Note the scene ID from response: e.g., 511b6159-cf6b-4de8-8cc4-3fe68132cafa
-
-# Step 3: Add scene ID to .env file
-echo "C3D_SCENE_ID=<your_scene_id_here>" >> .env
-
-# Step 4: Upload objects (no --scene_id needed)
-./upload-object.sh --object_filename cube --object_dir object-test --env prod
-
-# Step 5: Upload object manifest (no --scene_id needed)
-./upload-object-manifest.sh --env prod
-
-# Step 6: List objects to verify (no --scene_id needed)
-./list-objects.sh --env prod
-```
-
-**Alternative: Environment variable approach:**
-
-```bash
-# Upload scene and set scene ID manually
-./upload-scene.sh --scene_dir scene-test --env prod
-export C3D_SCENE_ID=YOUR_SCENE_ID_FROM_RESPONSE
-
-# Use environment variable for subsequent operations
-./upload-object.sh --object_filename cube --object_dir object-test --env prod
-./upload-object-manifest.sh --env prod
-./list-objects.sh --env prod
-```
-
-## Requirements
-
-### Bash Scripts (Cross-platform)
-
-- Bash (macOS / Linux / Windows Subsystem for Linux (WSL))
-- `curl`
-- `jq`
-
-### PowerShell Module (Windows Native)
-
-- PowerShell 5.1+ (Windows) or PowerShell Core 7.x+ (cross-platform)
-- No external dependencies required (uses System.Net.WebClient for HTTP operations)
-
-> **Note**: Bash scripts tested on macOS. PowerShell module tested on macOS PowerShell Core and provides full Windows compatibility using .NET Framework classes. Both implementations support `.env` file configuration and C3D_SCENE_ID environment variable fallback.
-
-## Environment Variables
-
-**Required**:
-
-- `C3D_DEVELOPER_API_KEY` - Your Cognitive3D Developer API key
-
-### Configuration Options
-
-**1. .env File (Recommended)**
-
-```bash
-# Copy example and edit with your values
-cp .env.example .env
-```
-
-**2. Environment Variables**
-
-```bash
-export C3D_DEVELOPER_API_KEY="your_api_key"
-```
-
-**3. PowerShell (Windows/Cross-platform)**
-
-```powershell
-# Import module (auto-loads .env file)
+# PowerShell (Windows)
 Import-Module ./C3DUploadTools
+Upload-C3DScene -SceneDirectory scene-test -Environment prod
+```
 
-# Or set manually
-$env:C3D_DEVELOPER_API_KEY = "your_api_key"
+Save the returned Scene ID for object uploads, or add it to your `.env` file:
+```bash
+echo "C3D_SCENE_ID=your-scene-id-here" >> .env
+```
 
-# For streamlined workflows, also set:
-$env:C3D_SCENE_ID = "your_scene_id_here"
+### 5. Upload Objects (Optional)
 
-# PowerShell commands support C3D_SCENE_ID environment variable fallback
+```bash
+# Bash - with scene ID in .env file
+./upload-object.sh --object_filename cube --object_dir object-test --env prod
+./upload-object-manifest.sh --env prod
+
+# PowerShell - with scene ID in environment
 Upload-C3DObject -ObjectFilename cube -ObjectDirectory object-test -Environment prod
 Upload-C3DObjectManifest -Environment prod
-Get-C3DObjects -Environment prod
 ```
 
-> **Security Note**: The `.env` file is automatically excluded from git. Never commit API keys to version control.
+## Platform Support
 
-## Scene Upload Script
+| Platform | Implementation | Dependencies | Status |
+|----------|---------------|--------------|---------|
+| **macOS/Linux** | Bash scripts | `jq`, `curl` | ✅ Fully tested |
+| **Windows** | PowerShell module | None (uses .NET) | ✅ Native support |
+| **WSL** | Bash scripts | `jq`, `curl` | ✅ Compatible |
 
-Uploads a set of 3D scene files to the Cognitive3D platform.
+## Configuration
 
-### Usage
+### Environment Variables
 
-```bash
-./upload-scene.sh --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]
-```
-
-### Parameters
+Set these in your `.env` file or shell environment:
 
 **Required:**
+- `C3D_DEVELOPER_API_KEY` - Your Cognitive3D Developer API key
 
-- `--scene_dir <scene_directory>` - Path to folder containing:
-  - `scene.bin`
-  - `scene.gltf`
-  - `screenshot.png`
-  - `settings.json`
+**Optional (for streamlined workflows):**
+- `C3D_SCENE_ID` - Default scene ID to avoid passing --scene_id to every command
+- `C3D_DEFAULT_ENVIRONMENT` - Default environment (`prod` or `dev`)
 
-**Optional:**
+### Setup Options
 
-- `--env <prod|dev>` - Target environment. Defaults to `prod`
-- `--scene_id <scene_id>` - Scene ID for uploading new version of existing scene (must be valid UUID format)
-- `--verbose` - Enable detailed logging with debug information and file sizes
-- `--dry_run` - Preview operations without executing them (safe testing mode)
-
-### Examples
-
-**First upload (creates new scene):**
-
+**Option 1: .env File (Recommended)**
 ```bash
-export C3D_DEVELOPER_API_KEY="abc123xyz"
-./upload-scene.sh --scene_dir ./scene-test --env prod
+cp .env.example .env
+# Edit .env with your values
 ```
 
-**Update existing scene:**
-
+**Option 2: Shell Environment**
 ```bash
-./upload-scene.sh --scene_dir ./scene-test --env prod --scene_id my_scene_id
+export C3D_DEVELOPER_API_KEY="your_api_key"
+export C3D_SCENE_ID="your_scene_id"  # optional
 ```
 
-**Test with dry run (safe preview):**
-
-```bash
-./upload-scene.sh --scene_dir ./scene-test --env prod --dry_run --verbose
+**Option 3: PowerShell**
+```powershell
+Import-Module ./C3DUploadTools  # Auto-loads .env file
+# Or set manually:
+$env:C3D_DEVELOPER_API_KEY = "your_api_key"
 ```
 
-### Features
+> **Security:** `.env` files are git-ignored automatically. Never commit API keys to version control.
 
-**Enhanced Security & Reliability:**
+## Command Reference
 
-- Secure API key handling without local storage
-- Safe file operations with automatic backup and rollback
-- Comprehensive input validation (UUID format, file sizes, SDK version)
+### Scene Upload
 
-**Advanced Logging & Monitoring:**
-
-- Timestamped, color-coded logging (INFO, WARN, ERROR, DEBUG)
-- Upload timing and performance metrics
-- File size validation and reporting (100MB limit per file)
-
-**Smart Error Handling:**
-
-- Specific guidance for common errors (401 key expired, 403 forbidden, 404 not found)
-- Step-by-step instructions for API key rotation
-- Clear troubleshooting steps for authentication issues
-
-**Safe Testing:**
-
-- `--dry_run` mode previews all operations without execution
-- Shows exact curl commands and file operations
-- Validates inputs before making any changes
-
-### Behavior
-
-- Validates all inputs (scene_id UUID format, SDK version, file sizes)
-- Creates backup of `settings.json` before modification
-- Reads SDK version from `sdk-version.txt` and updates `settings.json`
-- Uploads all four files to the API endpoint with timing metrics
-- Returns scene ID for new scenes with next-step guidance
-
-### Help
-
-```bash
-./upload-scene.sh --help
-```
-
-## Dynamic Object Upload Script
-
-Uploads dynamic 3D object assets to the Cognitive3D platform. **Requires a scene to be uploaded first.**
-
-### Usage
-
-```bash
-./upload-object.sh \
-  [--scene_id <scene-uuid>] \
-  --object_filename <object-name> \
-  --object_dir <path-to-object-directory> \
-  [--object_id <existing-object-id>] \
-  [--env <prod|dev>] \
-  [--verbose] \
-  [--dry_run]
-```
-
-### Parameters
-
-**Required:**
-
-- `--scene_id` - Scene ID UUID where object will be uploaded (or set C3D_SCENE_ID environment variable)
-- `--object_filename` - Base filename (no extension) for `.gltf` and `.bin` files
-- `--object_dir` - Directory containing object files
-
-**Optional:**
-
-- `--object_id` - Upload as new version of existing object
-- `--env` - Target environment (`prod` or `dev`). Defaults to `prod`
-- `--verbose` - Enable detailed logging
-- `--dry_run` - Show `curl` command without executing
-
-### File Requirements
-
-Must exist in `--object_dir`:
-
-- `<object_filename>.gltf`
-- `<object_filename>.bin`
-- `cvr_object_thumbnail.png` (optional, recommended) - Object thumbnail for dashboard
-- Additional `.png` textures (optional) - Any textures used by the model
-
-### Example
-
-```bash
-export C3D_DEVELOPER_API_KEY="your-api-key"
-
-./upload-object.sh \
-  --scene_id "your-scene-id-here" \
-  --object_filename cube \
-  --object_dir object-test \
-  --env prod \
-  --object_id cube \
-  --verbose
-```
-
-### Exit Codes
-
-- `0` - Success
-- `1` - Missing argument or setup error
-- Non-zero - `curl` upload failure
-
-## Object Manifest Upload Script
-
-Uploads object manifest to display objects in the Cognitive3D dashboard. Run after uploading object assets.
-
-### Usage
-
-```bash
-./upload-object-manifest.sh \
-  [--scene_id <scene-uuid>] \
-  [--env <prod|dev>] \
-  [--verbose] \
-  [--dry_run]
-```
-
-### Parameters
-
-**Required:**
-
-- `--scene_id` - Scene ID UUID (or set C3D_SCENE_ID environment variable)
-
-**Optional:**
-
-- `--env` - Target environment (`prod` or `dev`). Defaults to `prod`
-- `--verbose` - Enable detailed logging
-- `--dry_run` - Show `curl` command without executing
-
-### File Requirements
-
-Must exist in current directory:
-
-- `<scene_id>_object_manifest.json` - Auto-generated after object upload
-
-### Example
-
-```bash
-./upload-object-manifest.sh \
-  --scene_id "your-scene-id-here" \
-  --env prod \
-  --verbose
-```
-
-> **Note**: The manifest is auto-generated but can be manually edited before upload to modify object properties like starting position.
-
-## List Objects Script
-
-Lists all dynamic objects associated with a scene.
-
-### Usage
-
-```bash
-./list-objects.sh [--scene_id <scene_id>] --env <prod|dev> [--verbose] [--debug]
-```
-
-### Parameters
-
-**Required:**
-
-- `--scene_id` - Scene ID UUID (or set C3D_SCENE_ID environment variable)
-- `--env` - Target environment (`prod` or `dev`)
-
-**Optional:**
-
-- `--verbose` - Enable detailed logging
-- `--debug` - Enable debug output
-
-### Example
-
-```bash
-./list-objects.sh --scene_id "your-scene-id-here" --env prod --verbose
-```
-
-## Test Scripts
-
-### Environment Workflow Test Scripts
-
-Test the complete upload workflow with environment-specific configuration.
+Upload 3D scene files (GLTF, textures, settings) to create or update a scene.
 
 **Bash:**
-
 ```bash
-./test-env-workflow.sh --env <prod|dev> [--verbose] [--dry_run]
+./upload-scene.sh --scene_dir <directory> [--env prod|dev] [--scene_id <uuid>] [--verbose] [--dry_run]
 ```
 
 **PowerShell:**
-
 ```powershell
-./Test-EnvWorkflow.ps1 -Environment <prod|dev> [-Verbose] [-DryRun]
+Upload-C3DScene -SceneDirectory <directory> [-Environment prod|dev] [-SceneId <uuid>] [-Verbose] [-DryRun]
 ```
 
-These scripts automatically:
+**Required Files in Scene Directory:**
+- `scene.bin`, `scene.gltf`, `screenshot.png`, `settings.json`
 
-1. Copy `.env.sample.<env>` to `.env`
-2. Upload test scene to get scene ID
-3. Add scene ID to `.env` file
-4. Test object upload using C3D_SCENE_ID environment variable
-5. Upload object manifest and list objects
-6. Clean up temporary `.env` file
+**Examples:**
+```bash
+# Create new scene
+./upload-scene.sh --scene_dir scene-test --env prod
+
+# Update existing scene
+./upload-scene.sh --scene_dir scene-test --scene_id "12345678-1234-1234-1234-123456789012" --env prod
+
+# Preview changes (safe testing)
+./upload-scene.sh --scene_dir scene-test --dry_run --verbose
+```
+
+### Object Upload
+
+Upload dynamic 3D objects to an existing scene.
+
+**Bash:**
+```bash
+./upload-object.sh --object_filename <name> --object_dir <directory> [--scene_id <uuid>] [--env prod|dev] [--verbose] [--dry_run]
+```
+
+**PowerShell:**
+```powershell
+Upload-C3DObject -ObjectFilename <name> -ObjectDirectory <directory> [-SceneId <uuid>] [-Environment prod|dev] [-Verbose] [-DryRun]
+```
+
+**Required Files in Object Directory:**
+- `<filename>.gltf`, `<filename>.bin`
+- `cvr_object_thumbnail.png` (optional, recommended)
+
+**Examples:**
+```bash
+# Upload object (scene ID from environment)
+./upload-object.sh --object_filename cube --object_dir object-test --env prod
+
+# Upload with explicit scene ID
+./upload-object.sh --object_filename cube --object_dir object-test --scene_id "your-scene-id" --env prod
+```
+
+### Object Manifest Upload
+
+Upload object manifest to display objects in the dashboard.
+
+**Bash:**
+```bash
+./upload-object-manifest.sh [--scene_id <uuid>] [--env prod|dev] [--verbose] [--dry_run]
+```
+
+**PowerShell:**
+```powershell
+Upload-C3DObjectManifest [-SceneId <uuid>] [-Environment prod|dev] [-Verbose] [-DryRun]
+```
+
+### List Objects
+
+List all objects associated with a scene.
+
+**Bash:**
+```bash
+./list-objects.sh [--scene_id <uuid>] --env <prod|dev> [--verbose]
+```
+
+**PowerShell:**
+```powershell
+Get-C3DObjects [-SceneId <uuid>] -Environment <prod|dev> [-Verbose]
+```
+
+### Universal Options
+
+| Option | Description |
+|--------|-------------|
+| `--env` / `-Environment` | Target environment: `prod` (production) or `dev` (development) |
+| `--scene_id` / `-SceneId` | Scene UUID (optional if set in environment variables) |
+| `--verbose` / `-Verbose` | Enable detailed logging and debug information |
+| `--dry_run` / `-DryRun` | Preview operations without executing (safe testing mode) |
+
+**Security Features:**
+- Automatic input validation (UUID format, file sizes, SDK versions)
+- Safe file operations with backup/rollback
+- API key validation with helpful error messages
+- 100MB file size limit with clear warnings
+
+## Testing & Validation
+
+### Complete Workflow Test
+
+Test the entire upload workflow with sample assets.
+
+**Bash:**
+```bash
+./test-env-workflow.sh --env prod [--verbose] [--dry_run]
+```
+
+**PowerShell:**
+```powershell
+./Test-EnvWorkflow.ps1 -Environment prod [-Verbose] [-DryRun]
+```
+
+**Automated Test Steps:**
+1. Set up temporary environment configuration
+2. Upload test scene and capture scene ID
+3. Upload test objects (cube, lantern)
+4. Upload object manifests
+5. Verify objects are listed correctly
+6. Clean up temporary files
+
+### Individual Component Testing
+
+**Test scene upload:**
+```bash
+./upload-scene.sh --scene_dir scene-test --env dev --dry_run --verbose
+```
+
+**Test object upload:**
+```bash
+./upload-object.sh --object_filename cube --object_dir object-test --env dev --dry_run
+```
 
 ### Legacy Test Script
 
-Comprehensive testing script that runs the complete upload workflow.
-
-### Usage
-
+For existing workflows:
 ```bash
-./test-all.sh [scene_id] [env]
+./test-all.sh [scene_id] [env]  # Use after manual scene upload
 ```
 
-### Parameters
+## Workflow Examples
 
-- `scene_id` - Existing scene ID (run scene upload first to get this, or set C3D_SCENE_ID environment variable)
-- `env` - Target environment (`prod` or `dev`), defaults to `prod`
+### Complete Upload Workflow
 
-### Example
-
-**Traditional approach:**
-
+**For New Projects:**
 ```bash
-# First upload a scene to get scene_id
-./upload-scene.sh --scene_dir scene-test --env prod
+# 1. Set up configuration
+cp .env.example .env
+# Edit .env with your API key
 
-# Use returned scene_id for testing
-./test-all.sh "your-scene-id-here" prod
-```
+# 2. Upload scene
+./upload-scene.sh --scene_dir your-scene --env prod
+# Save the returned Scene ID
 
-**Environment variable approach:**
-
-```bash
-# Option 1: Set in .env file
+# 3. Add Scene ID to environment (optional but recommended)
 echo "C3D_SCENE_ID=your-scene-id-here" >> .env
-./test-all.sh
 
-# Option 2: Set manually in shell
-export C3D_SCENE_ID="your-scene-id-here"
-./test-all.sh
+# 4. Upload objects (as needed)
+./upload-object.sh --object_filename object1 --object_dir your-objects --env prod
+./upload-object.sh --object_filename object2 --object_dir your-objects --env prod
+
+# 5. Upload manifest to display in dashboard
+./upload-object-manifest.sh --env prod
+
+# 6. Verify objects
+./list-objects.sh --env prod
 ```
 
-> **Tested**: This workflow has been verified with both dev and prod environments using real API uploads.
+**For Existing Projects:**
+```bash
+# Update existing scene
+./upload-scene.sh --scene_dir updated-scene --scene_id "existing-uuid" --env prod
 
-### Test Workflow
-
-1. Uploads scene (new version)
-2. Uploads cube object
-3. Uploads object manifest
-4. Uploads Lantern object
-5. Uploads updated object manifest
-6. Lists all objects
-
-## Logging and Output
-
-All scripts support:
-
-- **Colored output** - Info (blue), warnings (yellow), errors (red), debug (cyan)
-- **Verbose mode** - `--verbose` flag shows detailed steps
-- **Dry run mode** - `--dry_run` flag shows commands without executing
-- **Consistent exit codes** - `0` for success, `1` for setup errors, other codes for API failures
+# Add new objects to existing scene
+./upload-object.sh --object_filename new-object --object_dir objects --env prod
+./upload-object-manifest.sh --env prod
+```
 
 ## Troubleshooting
 
-### Common Issues
+### Common Setup Issues
 
-**"jq: command not found"**
+| Issue | Solution |
+|-------|----------|
+| **"jq: command not found"** | Install dependencies: `brew install jq curl` (macOS) or `sudo apt install jq curl` (Ubuntu) |
+| **"API key not set"** | Set `C3D_DEVELOPER_API_KEY` in `.env` file or environment |
+| **"Invalid scene_id format"** | Scene IDs must be valid UUIDs: `12345678-1234-1234-1234-123456789012` |
+| **PowerShell execution policy** | Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 
+### Common Upload Issues
+
+| Issue | Solution |
+|-------|----------|
+| **"Scene not found" (objects)** | Upload a scene first; objects require an existing scene |
+| **"Manifest file not found"** | Object manifests auto-generate after successful object upload |
+| **File size errors** | Individual files cannot exceed 100MB; check with `--verbose` |
+| **HTTP 401 "Key expired"** | Generate new API key from Dashboard → Settings → "Manage developer key" |
+| **HTTP 403 "Forbidden"** | Verify API key permissions and scene ownership |
+
+### Debug and Testing
+
+**Use dry-run mode for safe testing:**
 ```bash
-# Install jq using your package manager
-brew install jq              # macOS
-sudo apt install jq          # Ubuntu/Debian
+./upload-scene.sh --scene_dir scene-test --dry_run --verbose
 ```
 
-**"API key not set"**
-
+**Enable verbose logging:**
 ```bash
-# Set the environment variable
-export C3D_DEVELOPER_API_KEY="your_api_key"
+./upload-object.sh --object_filename cube --object_dir object-test --verbose
 ```
 
-**"Scene not found" when uploading objects**
+**Check file contents and structure:**
+```bash
+# Verify scene directory structure
+ls -la scene-test/
+# Should contain: scene.bin, scene.gltf, screenshot.png, settings.json
 
-- Objects require an existing scene. Upload a scene first and use the returned scene_id
+# Verify object directory structure
+ls -la object-test/
+# Should contain: <filename>.gltf, <filename>.bin, optional textures
+```
 
-**Manifest file not found**
+### Windows-Specific Issues
 
-- Object manifests are auto-generated after successful object upload
-- Check that object upload completed successfully before uploading manifest
+**PowerShell module not loading:**
+```powershell
+# Ensure you're in the correct directory
+Import-Module ./C3DUploadTools -Force
+```
 
-**"Your developer API key has expired" (HTTP 401)**
-
-- Follow the step-by-step instructions provided by the script
-- Generate a new key from Dashboard → Settings → 'Manage developer key'
-- Update environment variable: `export C3D_DEVELOPER_API_KEY="your_new_key"`
-
-**"Invalid scene_id format" error**
-
-- Scene IDs must be in UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
-- Check the scene ID from your dashboard or previous upload response
-
-**File size errors**
-
-- Individual files cannot exceed 100MB
-- Use `--verbose` flag to see actual file sizes
-- Compress or optimize large assets before upload
+**.env file not recognized:**
+```powershell
+# PowerShell automatically loads .env files when importing the module
+# Alternatively, set variables manually:
+$env:C3D_DEVELOPER_API_KEY = "your_api_key"
+```
 
 ### Getting Help
 
-- Use `--help` flag on any script for usage information
-- Use `--verbose` flag to see detailed execution steps
-- Use `--dry_run` flag to preview API calls without executing
+**Built-in Help:**
+- `./upload-scene.sh --help` - Show usage information
+- `--verbose` flag - Enable detailed logging
+- `--dry_run` flag - Preview operations safely
 
-### Support
+**Support Channels:**
+- [GitHub Issues](https://github.com/cognitive3d/c3d-upload-tools/issues) - Bug reports and feature requests
+- [Discord Community](https://discord.gg/x38sNUdDRH) - Community support and discussion
+- [Cognitive3D Support](https://cognitive3d.com/support) - Official technical support
 
-For questions or issues:
+## Project Structure
 
-- Open an issue in this repository
-- Join our [Discord](https://discord.gg/x38sNUdDRH)
-- Contact support via the Intercom button on any Cognitive3D web page
+```
+c3d-upload-tools/
+├── upload-scene.sh           # Scene upload (Bash)
+├── upload-object.sh          # Object upload (Bash)
+├── upload-object-manifest.sh # Manifest upload (Bash)
+├── list-objects.sh           # List objects (Bash)
+├── test-*.sh                 # Test scripts (Bash)
+├── C3DUploadTools/           # PowerShell module
+│   ├── C3DUploadTools.psd1   # Module manifest
+│   ├── Public/               # User-facing functions
+│   └── Private/              # Internal utilities
+├── scene-test/               # Sample scene assets
+├── object-test/              # Sample object assets
+├── .env.example              # Configuration template
+└── sdk-version.txt           # Current SDK version
+```
+
+**Sample Assets Included:**
+- `scene-test/` - Complete scene for testing uploads
+- `object-test/` - Dynamic object (cube) for testing
+- `lantern-test/` - Additional object example
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.

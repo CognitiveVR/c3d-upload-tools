@@ -31,6 +31,16 @@ function Upload-C3DObjectManifest {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Position = 0, HelpMessage = "Scene ID (UUID format) or set C3D_SCENE_ID environment variable")]
+        [ValidateScript({
+            if ([string]::IsNullOrWhiteSpace($_) -and [string]::IsNullOrWhiteSpace($env:C3D_SCENE_ID)) {
+                throw "SceneId is required. Provide via parameter or set C3D_SCENE_ID environment variable"
+            }
+            $sceneIdToValidate = if ([string]::IsNullOrWhiteSpace($_)) { $env:C3D_SCENE_ID } else { $_ }
+            if ($sceneIdToValidate -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+                throw "Invalid UUID format for SceneId: '$sceneIdToValidate'. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            }
+            $true
+        })]
         [string]$SceneId = $env:C3D_SCENE_ID,
         
         [Parameter(HelpMessage = "Target environment: 'prod' or 'dev'")]

@@ -33,6 +33,16 @@ function Get-C3DObjects {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0, HelpMessage = "Scene ID (UUID format) or set C3D_SCENE_ID environment variable")]
+        [ValidateScript({
+            if ([string]::IsNullOrWhiteSpace($_) -and [string]::IsNullOrWhiteSpace($env:C3D_SCENE_ID)) {
+                throw "SceneId is required. Provide via parameter or set C3D_SCENE_ID environment variable"
+            }
+            $sceneIdToValidate = if ([string]::IsNullOrWhiteSpace($_)) { $env:C3D_SCENE_ID } else { $_ }
+            if ($sceneIdToValidate -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+                throw "Invalid UUID format for SceneId: '$sceneIdToValidate'. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            }
+            $true
+        })]
         [string]$SceneId = $env:C3D_SCENE_ID,
         
         [Parameter(HelpMessage = "Target environment: 'prod' or 'dev'")]
@@ -40,6 +50,20 @@ function Get-C3DObjects {
         [string]$Environment = $(if ($env:C3D_DEFAULT_ENVIRONMENT) { $env:C3D_DEFAULT_ENVIRONMENT } else { 'prod' }),
         
         [Parameter(HelpMessage = "Optional path to save raw JSON response")]
+        [ValidateScript({
+            if ([string]::IsNullOrWhiteSpace($_)) {
+                return $true  # Allow empty
+            }
+            $parentDir = Split-Path $_ -Parent
+            if ($parentDir -and -not (Test-Path $parentDir -PathType Container)) {
+                throw "Output directory does not exist: $parentDir"
+            }
+            $extension = [System.IO.Path]::GetExtension($_)
+            if ($extension -notin @('.json', '.txt', '')) {
+                throw "Invalid file extension for OutputFile: '$extension'. Use .json or .txt"
+            }
+            $true
+        })]
         [string]$OutputFile,
         
         [Parameter(HelpMessage = "Format output as object manifest JSON structure")]

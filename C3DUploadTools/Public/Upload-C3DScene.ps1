@@ -60,6 +60,27 @@ function Upload-C3DScene {
             if (-not (Test-Path $_ -PathType Container)) {
                 throw "Scene directory does not exist: $_"
             }
+            # Validate required files exist in directory
+            $requiredFiles = @('scene.bin', 'scene.gltf', 'screenshot.png', 'settings.json')
+            $missingFiles = @()
+            foreach ($file in $requiredFiles) {
+                $filePath = Join-Path $_ $file
+                if (-not (Test-Path $filePath -PathType Leaf)) {
+                    $missingFiles += $file
+                }
+            }
+            if ($missingFiles.Count -gt 0) {
+                throw "Missing required files in scene directory: $($missingFiles -join ', '). Required files: $($requiredFiles -join ', ')"
+            }
+            # Validate file sizes (100MB limit)
+            foreach ($file in $requiredFiles) {
+                $filePath = Join-Path $_ $file
+                $fileSize = (Get-Item $filePath).Length
+                if ($fileSize -gt 100MB) {
+                    $sizeMB = [math]::Round($fileSize / 1MB, 2)
+                    throw "File '$file' is too large: $sizeMB MB (maximum: 100 MB)"
+                }
+            }
             $true
         })]
         [string]$SceneDirectory,
@@ -70,8 +91,11 @@ function Upload-C3DScene {
         
         [Parameter(HelpMessage = "Optional UUID of existing scene to update")]
         [ValidateScript({
-            if ($_ -and -not (Test-C3DUuidFormat -Uuid $_ -FieldName 'SceneId')) {
-                throw "Invalid UUID format for SceneId: $_"
+            if ([string]::IsNullOrWhiteSpace($_)) {
+                return $true  # Allow empty/null for new scene creation
+            }
+            if ($_ -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+                throw "Invalid UUID format for SceneId: '$_'. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
             }
             $true
         })]
@@ -93,10 +117,10 @@ function Upload-C3DScene {
     try {
         # Validate prerequisites
         Write-C3DLog -Message "Validating prerequisites..." -Level Info
-        
+
         # Test API key
         Test-C3DApiKey -Throw
-        
+
         # Test environment
         Test-C3DEnvironment -Environment $Environment -Throw
         Write-C3DLog -Message "Using environment: $Environment" -Level Info
@@ -276,9 +300,11 @@ function Upload-C3DScene {
             Write-C3DLog -Message "4. Run Upload-C3DObjectManifest after uploading objects to display them in dashboard" -Level Info
         }
         
-    } catch {
-        Write-C3DLog -Message "Scene upload failed: $($_.Exception.Message)" -Level Error
-        
+    } catch [System.Net.WebException] {
+        $errorRecord = New-C3DErrorRecord -Message "Network error during scene upload: $($_.Exception.Message)" -ErrorId "SceneUploadNetworkError" -Category ([System.Management.Automation.ErrorCategory]::ConnectionError) -TargetObject $_.Exception.Response -InnerException $_.Exception -RecommendedAction "Check network connectivity and API endpoint availability"
+
+        Write-C3DLog -Message "Scene upload failed due to network error: $($_.Exception.Message)" -Level Error
+
         # Clean up backup file on error
         if (Get-Variable -Name 'backupFile' -Scope Local -ErrorAction SilentlyContinue) {
             if ($backupFile -and (Test-Path -Path $backupFile) -and -not $DryRun) {
@@ -290,7 +316,43 @@ function Upload-C3DScene {
                 }
             }
         }
-        
+
+        $PSCmdlet.ThrowTerminatingError($errorRecord)
+
+    } catch [System.IO.IOException] {
+        $errorRecord = New-C3DErrorRecord -Message "File I/O error during scene upload: $($_.Exception.Message)" -ErrorId "SceneUploadFileError" -Category ([System.Management.Automation.ErrorCategory]::ReadError) -TargetObject $_.Exception.FileName -InnerException $_.Exception -RecommendedAction "Check file permissions and ensure all required files exist"
+
+        Write-C3DLog -Message "Scene upload failed due to file error: $($_.Exception.Message)" -Level Error
+
+        # Clean up backup file on error
+        if (Get-Variable -Name 'backupFile' -Scope Local -ErrorAction SilentlyContinue) {
+            if ($backupFile -and (Test-Path -Path $backupFile) -and -not $DryRun) {
+                try {
+                    Remove-Item -Path $backupFile -Force
+                    Write-C3DLog -Message "Cleaned up backup file after error" -Level Debug
+                } catch {
+                    Write-C3DLog -Message "Warning: Could not clean up backup file: $backupFile" -Level Warn
+                }
+            }
+        }
+
+        $PSCmdlet.ThrowTerminatingError($errorRecord)
+
+    } catch {
+        Write-C3DLog -Message "Scene upload failed: $($_.Exception.Message)" -Level Error
+
+        # Clean up backup file on error
+        if (Get-Variable -Name 'backupFile' -Scope Local -ErrorAction SilentlyContinue) {
+            if ($backupFile -and (Test-Path -Path $backupFile) -and -not $DryRun) {
+                try {
+                    Remove-Item -Path $backupFile -Force
+                    Write-C3DLog -Message "Cleaned up backup file after error" -Level Debug
+                } catch {
+                    Write-C3DLog -Message "Warning: Could not clean up backup file: $backupFile" -Level Warn
+                }
+            }
+        }
+
         throw
     }
 }

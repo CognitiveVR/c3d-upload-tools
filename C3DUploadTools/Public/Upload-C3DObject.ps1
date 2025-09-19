@@ -68,6 +68,16 @@ function Upload-C3DObject {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Position = 0, HelpMessage = "Scene ID (UUID format) where object will be uploaded, or set C3D_SCENE_ID environment variable")]
+        [ValidateScript({
+            if ([string]::IsNullOrWhiteSpace($_) -and [string]::IsNullOrWhiteSpace($env:C3D_SCENE_ID)) {
+                throw "SceneId is required. Provide via parameter or set C3D_SCENE_ID environment variable"
+            }
+            $sceneIdToValidate = if ([string]::IsNullOrWhiteSpace($_)) { $env:C3D_SCENE_ID } else { $_ }
+            if ($sceneIdToValidate -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+                throw "Invalid UUID format for SceneId: '$sceneIdToValidate'. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            }
+            $true
+        })]
         [string]$SceneId = $env:C3D_SCENE_ID,
         
         [Parameter(Mandatory, Position = 1, HelpMessage = "Object filename without extension (e.g., 'cube' for cube.gltf and cube.bin)")]
@@ -84,6 +94,15 @@ function Upload-C3DObject {
         [string]$ObjectDirectory,
         
         [Parameter(HelpMessage = "Optional object ID. Defaults to ObjectFilename if not provided")]
+        [ValidateScript({
+            if ([string]::IsNullOrWhiteSpace($_)) {
+                return $true  # Allow empty - will use ObjectFilename
+            }
+            if ($_ -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+                throw "Invalid UUID format for ObjectId: '$_'. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            }
+            $true
+        })]
         [string]$ObjectId,
         
         [Parameter(HelpMessage = "Target environment: 'prod' or 'dev'")]
