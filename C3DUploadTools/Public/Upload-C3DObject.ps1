@@ -42,15 +42,56 @@ function Upload-C3DObject {
 
     .EXAMPLE
         Upload-C3DObject -SceneId "12345678-1234-1234-1234-123456789012" -ObjectFilename "cube" -ObjectDirectory "./my-objects"
-        Uploads cube.gltf, cube.bin, and textures to production environment
+
+        Uploads a cube object to production environment. The function will:
+        - Look for cube.gltf and cube.bin in ./my-objects/
+        - Include cvr_object_thumbnail.png for dashboard preview
+        - Auto-detect and include any .png texture files
+        - Generate and upload object manifest automatically
+        - Make object visible in Cognitive3D dashboard
 
     .EXAMPLE
         Upload-C3DObject -SceneId "12345678-1234-1234-1234-123456789012" -ObjectFilename "lamp" -ObjectDirectory "./objects" -Environment dev -ObjectId "87654321-4321-4321-4321-210987654321"
-        Uploads lamp object to development environment with specific object ID
+
+        Updates an existing lamp object in development environment with specific UUID.
+        Use this when:
+        - Updating an existing object with new geometry or textures
+        - Testing object changes before production deployment
+        - Maintaining consistent object IDs across environments
 
     .EXAMPLE
         Upload-C3DObject -SceneId "12345678-1234-1234-1234-123456789012" -ObjectFilename "chair" -ObjectDirectory "./furniture" -DryRun -Verbose
-        Preview object upload with detailed logging
+
+        Preview object upload without making changes. Shows:
+        - Required files validation (chair.gltf, chair.bin, thumbnail)
+        - Texture files that will be included
+        - Total upload size and file count
+        - Generated manifest structure
+
+    .EXAMPLE
+        # Environment variable workflow
+        $env:C3D_SCENE_ID = "12345678-1234-1234-1234-123456789012"
+        Upload-C3DObject -ObjectFilename "table" -ObjectDirectory "./furniture"
+        Upload-C3DObject -ObjectFilename "chair" -ObjectDirectory "./furniture"
+        Upload-C3DObject -ObjectFilename "lamp" -ObjectDirectory "./furniture"
+
+        Efficient batch upload using environment variable for scene ID.
+        Each object is automatically added to the same scene.
+
+    .EXAMPLE
+        # Complete workflow with error handling
+        try {
+            $result = Upload-C3DObject -SceneId $sceneId -ObjectFilename "interactive_button" -ObjectDirectory "./ui_objects" -AutoUploadManifest:$false
+            if ($result.Success) {
+                Write-Host "Object uploaded: $($result.ObjectId)"
+                # Custom manifest logic here
+                Upload-C3DObjectManifest -SceneId $sceneId
+            }
+        } catch {
+            Write-Error "Upload failed: $($_.Exception.Message)"
+        }
+
+        Advanced workflow with manual manifest control and error handling.
 
     .OUTPUTS
         Object upload results with manifest generation and next steps guidance
@@ -58,11 +99,48 @@ function Upload-C3DObject {
     .NOTES
         Prerequisites:
         - C3D_DEVELOPER_API_KEY environment variable must be set
-        - Scene must exist (created with Upload-C3DScene)
-        - Object directory must contain required files (.gltf, .bin, thumbnail.png)
+        - Target scene must exist (create with Upload-C3DScene first)
+        - Object directory must contain required files:
+          * {ObjectFilename}.gltf (3D object geometry and materials)
+          * {ObjectFilename}.bin (binary data for the object)
+          * cvr_object_thumbnail.png (preview image for dashboard)
+        - All texture .png files in directory are automatically included
         - Files must be under 100MB each
-        
-        This function automatically creates object manifest and uploads it for dashboard display.
+        - PowerShell 5.1 or higher
+
+        Automatic Features:
+        - Auto-detects and uploads all .png texture files
+        - Generates object manifest with proper positioning and scaling
+        - Automatically uploads manifest for dashboard visibility
+        - Creates unique object IDs if not specified
+        - Progress tracking for multi-file uploads
+
+        Object Manifest:
+        - Automatically generated with default transform values
+        - Position: (0, 0, 0)
+        - Rotation: (0, 0, 0, 1) quaternion
+        - Scale: (1, 1, 1)
+        - Saved as {SceneId}_object_manifest.json
+
+        Environment Variables:
+        - C3D_SCENE_ID: Set once to avoid repeating SceneId parameter
+        - C3D_DEFAULT_ENVIRONMENT: Set default environment (prod/dev)
+
+        Best Practices:
+        - Upload scenes before objects
+        - Use consistent naming conventions for objects
+        - Test in dev environment before production
+        - Keep object files organized in dedicated directories
+        - Use descriptive ObjectFilename values
+
+    .LINK
+        Upload-C3DScene
+
+    .LINK
+        Upload-C3DObjectManifest
+
+    .LINK
+        Get-C3DObjects
     #>
     
     [CmdletBinding(SupportsShouldProcess)]

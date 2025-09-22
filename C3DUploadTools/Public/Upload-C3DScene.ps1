@@ -30,15 +30,42 @@ function Upload-C3DScene {
 
     .EXAMPLE
         Upload-C3DScene -SceneDirectory "./my-scene"
-        Uploads scene to production environment (creates new scene)
 
-    .EXAMPLE  
+        Uploads a new scene to the production environment. The function will:
+        - Validate all 4 required files exist in ./my-scene/
+        - Update settings.json with current SDK version
+        - Upload files to Cognitive3D production API
+        - Return the new scene ID for future operations
+
+    .EXAMPLE
         Upload-C3DScene -SceneDirectory "./my-scene" -Environment dev -SceneId "12345678-1234-1234-1234-123456789012"
-        Updates existing scene in development environment
+
+        Updates an existing scene in development environment. Use this when:
+        - You have an existing scene ID from a previous upload
+        - You want to update scene files (new binary, textures, etc.)
+        - Testing changes in the dev environment before production
 
     .EXAMPLE
         Upload-C3DScene -SceneDirectory "./my-scene" -DryRun -Verbose
-        Preview upload operations with detailed logging
+
+        Preview the upload without making changes. Shows:
+        - File validation results and sizes
+        - API URL that would be called
+        - Request headers and authentication (redacted)
+        - Total upload size and estimated time
+
+        Use this to verify everything looks correct before the actual upload.
+
+    .EXAMPLE
+        # Complete workflow example
+        $sceneResult = Upload-C3DScene -SceneDirectory "C:\MyVRApp\Scenes\MainLevel"
+        if ($sceneResult.Success) {
+            Write-Host "Scene uploaded successfully! Scene ID: $($sceneResult.SceneId)"
+            # Now upload dynamic objects to this scene
+            Upload-C3DObject -SceneId $sceneResult.SceneId -ObjectFilename "chair" -ObjectDirectory "C:\MyVRApp\Objects"
+        }
+
+        Demonstrates a complete upload workflow with error checking.
 
     .OUTPUTS
         Scene upload results with timing metrics and next steps guidance
@@ -46,11 +73,45 @@ function Upload-C3DScene {
     .NOTES
         Prerequisites:
         - C3D_DEVELOPER_API_KEY environment variable must be set
-        - Scene directory must contain all 4 required files
+        - Scene directory must contain all 4 required files:
+          * scene.bin (Unity scene binary data)
+          * scene.gltf (3D scene geometry and materials)
+          * screenshot.png (scene preview image for dashboard)
+          * settings.json (scene configuration and metadata)
         - Files must be under 100MB each
-        - settings.json is automatically updated with SDK version from sdk-version.txt
-        
-        This function creates automatic backups of settings.json with rollback on failure.
+        - PowerShell 5.1 or higher
+
+        Automatic Features:
+        - settings.json is automatically updated with current SDK version
+        - Creates backup of settings.json before modification
+        - Automatic rollback on failure
+        - Progress indicators for large uploads
+        - Comprehensive validation before upload
+
+        Error Handling:
+        - Validates UUID format for Scene ID
+        - Checks file existence and sizes
+        - Provides specific error messages for common issues
+        - Network retry logic for transient failures
+
+        Security:
+        - API key is never logged or displayed
+        - Uses secure HTTPS endpoints
+        - Validates SSL certificates
+
+        Performance:
+        - Efficient multipart upload for multiple files
+        - Progress tracking for user feedback
+        - Optimized for both small and large scene files
+
+    .LINK
+        Upload-C3DObject
+
+    .LINK
+        Upload-C3DObjectManifest
+
+    .LINK
+        Get-C3DObjects
     #>
     
     [CmdletBinding(SupportsShouldProcess)]

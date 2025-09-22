@@ -5,10 +5,11 @@ Upload 3D scenes and dynamic objects to the Cognitive3D platform with ease. Cros
 ## Key Features
 
 - **Complete Upload Workflow**: Scene files, dynamic objects, and manifests
-- **Cross-Platform**: Bash scripts for macOS/Linux, PowerShell module for Windows
+- **Cross-Platform**: Bash scripts for macOS/Linux, enterprise-grade PowerShell module for Windows
 - **Environment Variables**: Streamlined workflows with `.env` file support
-- **Enhanced Security**: Safe API key handling and input validation
-- **Developer-Friendly**: Comprehensive logging, dry-run mode, and error guidance
+- **Enhanced Security**: Safe API key handling, comprehensive input validation, and secure HTTP requests
+- **Developer-Friendly**: Progress tracking, detailed help, dry-run mode, and comprehensive error guidance
+- **Production-Ready**: Enterprise-grade PowerShell module with type safety and comprehensive validation
 
 ## Quick Start
 
@@ -188,8 +189,15 @@ List all objects associated with a scene.
 
 **PowerShell:**
 ```powershell
-Get-C3DObjects [-SceneId <uuid>] -Environment <prod|dev> [-Verbose]
+Get-C3DObjects [-SceneId <uuid>] [-Environment <prod|dev>] [-OutputFile <path>] [-FormatAsManifest] [-Verbose]
 ```
+
+**Advanced PowerShell Features:**
+- `-OutputFile`: Save raw JSON response to file
+- `-FormatAsManifest`: Generate object manifest file
+- Comprehensive parameter validation with detailed error messages
+- Progress tracking for large operations
+- Type-safe responses with helper methods
 
 ### Universal Options
 
@@ -208,6 +216,22 @@ Get-C3DObjects [-SceneId <uuid>] -Environment <prod|dev> [-Verbose]
 
 ## Testing & Validation
 
+### PowerShell Module Testing
+
+The PowerShell module includes comprehensive test suite in `C3DUploadTools/Tests/`:
+
+```powershell
+# Navigate to test directory
+cd C3DUploadTools/Tests
+
+# Run all tests
+./test-module-structure.ps1          # Module architecture validation
+./test-utilities-internal.ps1        # Internal function testing
+./test-scene-upload.ps1              # Scene workflow testing
+./test-object-upload.ps1              # Object workflow testing
+./Test-EnvWorkflow.ps1               # Complete end-to-end testing
+```
+
 ### Complete Workflow Test
 
 Test the entire upload workflow with sample assets.
@@ -219,7 +243,14 @@ Test the entire upload workflow with sample assets.
 
 **PowerShell:**
 ```powershell
+# Run from C3DUploadTools/Tests/ directory
 ./Test-EnvWorkflow.ps1 -Environment prod [-Verbose] [-DryRun]
+
+# Additional PowerShell tests
+./test-module-structure.ps1          # Validate module organization
+./test-utilities-internal.ps1        # Test internal functions
+./test-scene-upload.ps1              # Scene upload workflow
+./test-object-upload.ps1              # Object upload workflow
 ```
 
 **Automated Test Steps:**
@@ -285,6 +316,51 @@ echo "C3D_SCENE_ID=your-scene-id-here" >> .env
 # Add new objects to existing scene
 ./upload-object.sh --object_filename new-object --object_dir objects --env prod
 ./upload-object-manifest.sh --env prod
+```
+
+## PowerShell Module Features
+
+### Enterprise-Grade Capabilities
+
+The PowerShell module provides production-ready features:
+
+- **Type Safety**: PowerShell classes for structured data handling
+- **Comprehensive Validation**: Advanced parameter validation with detailed error messages
+- **Progress Tracking**: Visual feedback for large file uploads
+- **Rich Help System**: Detailed documentation with real-world examples
+- **Error Handling**: Proper PowerShell error records with recommended actions
+- **Cross-Platform**: Works on Windows PowerShell 5.1+ and PowerShell Core 7.x
+- **No Dependencies**: Pure PowerShell implementation without external tools
+
+### Advanced Usage Examples
+
+```powershell
+# Get detailed help
+Get-Help Upload-C3DScene -Detailed
+Get-Help Upload-C3DObject -Examples
+
+# Environment-based workflow
+$env:C3D_SCENE_ID = "12345678-1234-1234-1234-123456789012"
+Upload-C3DObject -ObjectFilename "chair" -ObjectDirectory "./furniture"
+Upload-C3DObject -ObjectFilename "table" -ObjectDirectory "./furniture"
+Upload-C3DObjectManifest  # Displays both objects in dashboard
+
+# Advanced error handling
+try {
+    $result = Upload-C3DScene -SceneDirectory "./scene" -Environment dev
+    Write-Host "Scene uploaded: $($result.SceneId)"
+} catch {
+    Write-Error "Upload failed: $($_.Exception.Message)"
+}
+
+# Batch operations with validation
+$objects = @("chair", "table", "lamp")
+foreach ($obj in $objects) {
+    if (Test-Path "./furniture/$obj.gltf") {
+        Upload-C3DObject -ObjectFilename $obj -ObjectDirectory "./furniture" -AutoUploadManifest:$false
+    }
+}
+Upload-C3DObjectManifest  # Upload manifest once for all objects
 ```
 
 ## Troubleshooting

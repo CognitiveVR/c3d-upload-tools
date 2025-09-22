@@ -8,26 +8,80 @@ function Get-C3DObjects {
         objects associated with a scene from the Cognitive3D API.
 
     .PARAMETER SceneId
-        UUID of the scene to list objects for. Can be provided as parameter or 
+        UUID of the scene to list objects for. Can be provided as parameter or
         set via C3D_SCENE_ID environment variable.
+
+        The scene must exist and contain uploaded objects to return results.
 
     .PARAMETER Environment
         Target environment for API call. Valid values: 'prod' (default), 'dev'
+        - prod: https://data.cognitive3d.com/v0/scenes/{SceneId}
+        - dev: https://data.c3ddev.com/v0/scenes/{SceneId}
 
     .PARAMETER OutputFile
-        Optional path to save raw JSON response to file.
+        Optional path to save raw JSON response to file. Supports .json and .txt extensions.
+        The parent directory must exist. Useful for:
+        - Archiving object data
+        - Offline analysis
+        - Integration with other tools
+        - Backup and audit trails
 
     .PARAMETER FormatAsManifest
-        Format output as object manifest JSON structure.
+        Format output as object manifest JSON structure and save to
+        {SceneId}_object_manifest.json in current directory.
+
+        The manifest includes:
+        - Object IDs and names
+        - Mesh references
+        - Transform data (position, rotation, scale)
+        - Custom properties and metadata
 
     .EXAMPLE
         Get-C3DObjects -SceneId "12345678-1234-1234-1234-123456789012"
-        Lists objects using scene ID parameter
 
-    .EXAMPLE  
+        Lists all objects associated with a scene. Returns:
+        - Object names and IDs
+        - Mesh information and file references
+        - Transform data (position, rotation, scale)
+        - Upload timestamps and metadata
+        - Object status and visibility settings
+
+    .EXAMPLE
         $env:C3D_SCENE_ID = "12345678-1234-1234-1234-123456789012"
         Get-C3DObjects
-        Lists objects using environment variable
+
+        Uses environment variable for scene ID. Convenient when working
+        with the same scene repeatedly or in batch operations.
+
+    .EXAMPLE
+        Get-C3DObjects -SceneId "12345678-1234-1234-1234-123456789012" -Environment dev -OutputFile "objects.json"
+
+        Retrieves objects from development environment and saves raw JSON response
+        to file for:
+        - Backup and version control
+        - Offline analysis
+        - Integration with other tools
+        - Debugging and troubleshooting
+
+    .EXAMPLE
+        Get-C3DObjects -SceneId "12345678-1234-1234-1234-123456789012" -FormatAsManifest
+
+        Formats output as an object manifest and saves to {SceneId}_object_manifest.json.
+        Useful for:
+        - Creating manifest templates
+        - Migrating objects between scenes
+        - Backup and restore operations
+        - Batch object management
+
+    .EXAMPLE
+        # Verify objects after upload
+        $uploadedObjects = Get-C3DObjects -SceneId $sceneId
+        Write-Host "Scene contains $($uploadedObjects.Count) objects:"
+        foreach ($obj in $uploadedObjects) {
+            Write-Host "  - $($obj.name) (ID: $($obj.sdkId))"
+        }
+
+        Displays a summary of all objects in a scene with names and IDs.
     #>
     
     [CmdletBinding()]

@@ -173,7 +173,7 @@ try {
 
     # Step 2: Import PowerShell module
     Write-TestLog -Message "Step 2: Importing C3DUploadTools PowerShell module"
-    Import-Module "./C3DUploadTools" -Force
+    Import-Module "../" -Force
     Write-TestLog -Message "C3DUploadTools module loaded successfully"
 
     # Step 3: Upload scene to get scene ID (using bash script for now since PowerShell Upload-C3DScene is placeholder)

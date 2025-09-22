@@ -58,7 +58,7 @@ function Test-ModuleImport {
     Write-Host "`n🔍 Testing module import..." -ForegroundColor Yellow
     
     try {
-        Import-Module ./C3DUploadTools -Force -Verbose:$false
+        Import-Module ../ -Force -Verbose:$false
         $module = Get-Module C3DUploadTools
         
         if ($module) {

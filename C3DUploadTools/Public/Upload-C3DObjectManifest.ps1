@@ -9,23 +9,66 @@ function Upload-C3DObjectManifest {
         in the Cognitive3D dashboard.
 
     .PARAMETER SceneId
-        UUID of the scene to upload manifest for. Can be provided as parameter or 
+        UUID of the scene to upload manifest for. Can be provided as parameter or
         set via C3D_SCENE_ID environment variable.
+
+        The manifest file must exist as {SceneId}_object_manifest.json in the
+        current directory. This file is automatically created by Upload-C3DObject.
 
     .PARAMETER Environment
         Target environment for upload. Valid values: 'prod' (default), 'dev'
+        - prod: https://data.cognitive3d.com/v0/objects/{SceneId}
+        - dev: https://data.c3ddev.com/v0/objects/{SceneId}
 
     .PARAMETER DryRun
-        Preview operations without executing them.
+        Preview operations without executing them. Shows:
+        - Manifest file that would be uploaded
+        - JSON structure validation
+        - API endpoint and request details
+        - File size and object count
 
     .EXAMPLE
         Upload-C3DObjectManifest -SceneId "12345678-1234-1234-1234-123456789012"
-        Uploads manifest using scene ID parameter
 
-    .EXAMPLE  
+        Uploads the object manifest for a scene to make objects visible in dashboard.
+        The function will:
+        - Look for {SceneId}_object_manifest.json in current directory
+        - Validate the JSON structure
+        - Upload to Cognitive3D API
+        - Objects become interactive in the dashboard
+
+    .EXAMPLE
         $env:C3D_SCENE_ID = "12345678-1234-1234-1234-123456789012"
         Upload-C3DObjectManifest
-        Uploads manifest using environment variable
+
+        Uses environment variable for scene ID. Helpful when working with
+        the same scene across multiple operations:
+        - Upload multiple objects
+        - Upload manifest once at the end
+        - All objects become visible together
+
+    .EXAMPLE
+        Upload-C3DObjectManifest -SceneId "12345678-1234-1234-1234-123456789012" -Environment dev -DryRun
+
+        Preview manifest upload in development environment:
+        - Shows manifest file that would be uploaded
+        - Validates JSON structure
+        - Displays API endpoint
+        - No actual upload performed
+
+    .EXAMPLE
+        # Complete object upload workflow
+        $sceneId = "12345678-1234-1234-1234-123456789012"
+
+        # Upload multiple objects (manifest auto-generated)
+        Upload-C3DObject -SceneId $sceneId -ObjectFilename "table" -ObjectDirectory "./furniture" -AutoUploadManifest:$false
+        Upload-C3DObject -SceneId $sceneId -ObjectFilename "chair" -ObjectDirectory "./furniture" -AutoUploadManifest:$false
+        Upload-C3DObject -SceneId $sceneId -ObjectFilename "lamp" -ObjectDirectory "./furniture" -AutoUploadManifest:$false
+
+        # Upload manifest once for all objects
+        Upload-C3DObjectManifest -SceneId $sceneId
+
+        Efficient workflow: upload all objects first, then manifest once.
     #>
     
     [CmdletBinding(SupportsShouldProcess)]

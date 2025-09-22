@@ -19,7 +19,7 @@ Write-Host "=================================================================" -
 
 # Import the module
 try {
-    Import-Module ./C3DUploadTools -Force -Verbose:$false
+    Import-Module ../ -Force -Verbose:$false
     Write-Host "✅ Module imported successfully" -ForegroundColor Green
 } catch {
     Write-Host "❌ Failed to import module: $($_.Exception.Message)" -ForegroundColor Red
