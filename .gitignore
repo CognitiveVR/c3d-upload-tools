@@ -1,2 +1,9 @@
 .DS_Store
 *object*.json
+
+# Environment variables (contains secrets)
+.env
+.env.sample.prod
+.env.sample.dev
+.env.webxr*
+.env.backup

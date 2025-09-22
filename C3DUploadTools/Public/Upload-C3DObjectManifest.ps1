@@ -1,0 +1,171 @@
+function Upload-C3DObjectManifest {
+    <#
+    .SYNOPSIS
+        Uploads object manifest for a Cognitive3D scene to display objects in dashboard.
+
+    .DESCRIPTION
+        PowerShell equivalent of upload-object-manifest.sh that uploads a JSON manifest 
+        file containing object definitions for a scene. This enables objects to appear 
+        in the Cognitive3D dashboard.
+
+    .PARAMETER SceneId
+        UUID of the scene to upload manifest for. Can be provided as parameter or
+        set via C3D_SCENE_ID environment variable.
+
+        The manifest file must exist as {SceneId}_object_manifest.json in the
+        current directory. This file is automatically created by Upload-C3DObject.
+
+    .PARAMETER Environment
+        Target environment for upload. Valid values: 'prod' (default), 'dev'
+        - prod: https://data.cognitive3d.com/v0/objects/{SceneId}
+        - dev: https://data.c3ddev.com/v0/objects/{SceneId}
+
+    .PARAMETER DryRun
+        Preview operations without executing them. Shows:
+        - Manifest file that would be uploaded
+        - JSON structure validation
+        - API endpoint and request details
+        - File size and object count
+
+    .EXAMPLE
+        Upload-C3DObjectManifest -SceneId "12345678-1234-1234-1234-123456789012"
+
+        Uploads the object manifest for a scene to make objects visible in dashboard.
+        The function will:
+        - Look for {SceneId}_object_manifest.json in current directory
+        - Validate the JSON structure
+        - Upload to Cognitive3D API
+        - Objects become interactive in the dashboard
+
+    .EXAMPLE
+        $env:C3D_SCENE_ID = "12345678-1234-1234-1234-123456789012"
+        Upload-C3DObjectManifest
+
+        Uses environment variable for scene ID. Helpful when working with
+        the same scene across multiple operations:
+        - Upload multiple objects
+        - Upload manifest once at the end
+        - All objects become visible together
+
+    .EXAMPLE
+        Upload-C3DObjectManifest -SceneId "12345678-1234-1234-1234-123456789012" -Environment dev -DryRun
+
+        Preview manifest upload in development environment:
+        - Shows manifest file that would be uploaded
+        - Validates JSON structure
+        - Displays API endpoint
+        - No actual upload performed
+
+    .EXAMPLE
+        # Complete object upload workflow
+        $sceneId = "12345678-1234-1234-1234-123456789012"
+
+        # Upload multiple objects (manifest auto-generated)
+        Upload-C3DObject -SceneId $sceneId -ObjectFilename "table" -ObjectDirectory "./furniture" -AutoUploadManifest:$false
+        Upload-C3DObject -SceneId $sceneId -ObjectFilename "chair" -ObjectDirectory "./furniture" -AutoUploadManifest:$false
+        Upload-C3DObject -SceneId $sceneId -ObjectFilename "lamp" -ObjectDirectory "./furniture" -AutoUploadManifest:$false
+
+        # Upload manifest once for all objects
+        Upload-C3DObjectManifest -SceneId $sceneId
+
+        Efficient workflow: upload all objects first, then manifest once.
+    #>
+    
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Position = 0, HelpMessage = "Scene ID (UUID format) or set C3D_SCENE_ID environment variable")]
+        [ValidateScript({
+            if ([string]::IsNullOrWhiteSpace($_) -and [string]::IsNullOrWhiteSpace($env:C3D_SCENE_ID)) {
+                throw "SceneId is required. Provide via parameter or set C3D_SCENE_ID environment variable"
+            }
+            $sceneIdToValidate = if ([string]::IsNullOrWhiteSpace($_)) { $env:C3D_SCENE_ID } else { $_ }
+            if ($sceneIdToValidate -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+                throw "Invalid UUID format for SceneId: '$sceneIdToValidate'. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            }
+            $true
+        })]
+        [string]$SceneId = $env:C3D_SCENE_ID,
+        
+        [Parameter(HelpMessage = "Target environment: 'prod' or 'dev'")]
+        [ValidateSet('prod', 'dev')]
+        [string]$Environment = $(if ($env:C3D_DEFAULT_ENVIRONMENT) { $env:C3D_DEFAULT_ENVIRONMENT } else { 'prod' }),
+        
+        [Parameter(HelpMessage = "Preview operations without executing them")]
+        [switch]$DryRun
+    )
+    
+    # Initialize timing
+    $startTime = Get-Date
+    Write-C3DLog -Message "Starting object manifest upload process" -Level Info
+    
+    # Validate SceneId is provided and has correct format
+    if ([string]::IsNullOrWhiteSpace($SceneId)) {
+        Write-C3DLog -Message "SceneId is required. Provide via parameter or set C3D_SCENE_ID environment variable" -Level Error
+        throw "Missing required parameter: SceneId"
+    }
+    
+    if (-not (Test-C3DUuidFormat -Uuid $SceneId -FieldName 'SceneId')) {
+        throw "Invalid UUID format for SceneId: $SceneId"
+    }
+    
+    if ($SceneId -eq $env:C3D_SCENE_ID) {
+        Write-C3DLog -Message "Using C3D_SCENE_ID from environment: $SceneId" -Level Debug
+    }
+    
+    try {
+        # Validate prerequisites
+        Write-C3DLog -Message "Validating prerequisites..." -Level Info
+        Test-C3DApiKey
+        
+        # Look for manifest file
+        $manifestFile = "${SceneId}_object_manifest.json"
+        if (-not (Test-C3DFile -Path $manifestFile -MaxSizeBytes 10MB)) {
+            throw "Manifest file not found: $manifestFile (run Upload-C3DObject first)"
+        }
+        
+        Write-C3DLog -Message "Found manifest file: $manifestFile" -Level Info
+        
+        # Get API URL
+        $apiUrl = Get-C3DApiUrl -Environment $Environment -Endpoint "objects/$SceneId"
+        Write-C3DLog -Message "Upload URL: $apiUrl" -Level Debug
+        
+        if ($DryRun) {
+            Write-C3DLog -Message "DRY RUN - Would upload manifest to: $apiUrl" -Level Info
+            Write-C3DLog -Message "File that would be uploaded: $manifestFile" -Level Info
+            Write-C3DLog -Message "DRY RUN completed" -Level Info
+            return
+        }
+        
+        # Upload manifest
+        Write-C3DLog -Message "Uploading object manifest..." -Level Info
+        $uploadStartTime = Get-Date
+        
+        $manifestContent = Get-Content $manifestFile -Raw
+        $response = Invoke-C3DApiRequest -Uri $apiUrl -Method POST -Body $manifestContent -ContentType 'application/json'
+        
+        $uploadEndTime = Get-Date
+        $uploadDuration = ($uploadEndTime - $uploadStartTime).TotalSeconds
+        Write-C3DLog -Message "Upload completed in $($uploadDuration) seconds (HTTP $($response.StatusCode))" -Level Info
+        
+        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
+            Write-C3DLog -Message "Object manifest uploaded successfully" -Level Info
+            if ($response.Content) {
+                $responseObj = $response.Content | ConvertFrom-Json -ErrorAction SilentlyContinue
+                if ($responseObj) {
+                    Write-C3DLog -Message "Response: $($responseObj | ConvertTo-Json -Compress)" -Level Debug
+                }
+            }
+        } else {
+            throw "Upload failed with HTTP $($response.StatusCode): $($response.Content)"
+        }
+        
+        # Log execution time
+        $endTime = Get-Date
+        $totalDuration = ($endTime - $startTime).TotalSeconds
+        Write-C3DLog -Message "Object manifest upload process completed in $($totalDuration) seconds" -Level Info
+        
+    } catch {
+        Write-C3DLog -Message "Object manifest upload failed: $($_.Exception.Message)" -Level Error
+        throw
+    }
+}

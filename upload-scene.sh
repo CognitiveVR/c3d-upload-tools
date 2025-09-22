@@ -1,65 +1,26 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Source shared utilities
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/upload-utils.sh"
 
-# Treat unset variables as an error.
-set -u
+# Load environment variables from .env file (if present)
+load_env_file
 
 # Uncomment for debugging
 # set -x
 
 # Define script variables
 SCRIPT_NAME="$(basename "$0")"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# ANSI color codes
-COLOR_RESET="\033[0m"
-COLOR_INFO="\033[1;34m"
-COLOR_WARN="\033[1;33m"
-COLOR_ERROR="\033[1;31m"
-COLOR_DEBUG="\033[0;36m"
-
-# Logging helpers
-log_info()  { echo -e "${COLOR_INFO}[INFO] $1${COLOR_RESET}"; }
-log_warn()  { echo -e "${COLOR_WARN}[WARN] $1${COLOR_RESET}"; }
-log_error() { echo -e "${COLOR_ERROR}[ERROR] $1${COLOR_RESET}"; }
-log_debug() { [ "$VERBOSE" = true ] && echo -e "${COLOR_DEBUG}[DEBUG] $1${COLOR_RESET}"; }
-
-# --- Check Dependencies ---
-if ! command -v jq >/dev/null 2>&1; then
-  log_error "'jq' is not installed. Please install it before running this script."
-  exit 1
-fi
-
-if ! command -v curl >/dev/null 2>&1; then
-  log_error "'curl' is not installed. Please install it before running this script."
-  exit 1
-fi
-
-get_api_base_url() {
-  local env="$1"
-  case "$env" in
-    prod)
-      echo "https://data.cognitive3d.com/v0/scenes"
-      ;;
-    dev)
-      echo "https://data.c3ddev.com/v0/scenes"
-      ;;
-    *)
-      log_error "Unknown environment: $env"
-      exit 1
-      ;;
-  esac
-}
 
 # Main function
 main() {
   # Default values
   SCENE_DIRECTORY=""
-  ENVIRONMENT="prod"
-  SCENE_ID=""
+  ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
+  SCENE_ID="${C3D_SCENE_ID:-}"
   VERBOSE=false
+  DRY_RUN=false
 
   # Parse named arguments
   while [[ $# -gt 0 ]]; do
@@ -80,12 +41,17 @@ main() {
         VERBOSE=true
         shift
         ;;
+      --dry_run)
+        DRY_RUN=true
+        shift
+        ;;
       --help|-h)
-        echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose]"
+        echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
         echo "  --scene_dir   Path to folder containing 4 files: scene.bin, scene.gltf, screenshot.png, settings.json"
         echo "  --env         Optional. Either 'prod' (default) or 'dev'"
         echo "  --scene_id    Optional. Appended to API URL if present"
         echo "  --verbose     Optional. Enables verbose output"
+        echo "  --dry_run     Optional. Preview operations without executing them"
         echo
         echo "Environment Variables:"
         echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
@@ -98,47 +64,42 @@ main() {
     esac
   done
 
-  # Logging helper for verbose mode
-  log_verbose() {
-    if [ "$VERBOSE" = true ]; then
-      echo "[VERBOSE] $1"
-    fi
+  # Fix log_verbose to use consistent debug logging (keeping for compatibility)
+  log_verbose() { 
+    log_debug "$1"
   }
+  
+  # Start timing
+  local start_time=$(date +%s)
+  log_info "Starting scene upload process"
 
   # Validate required CLI parameter
   if [[ -z "$SCENE_DIRECTORY" ]]; then
     log_error "Missing required argument: --scene_dir"
-    echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose]"
+    echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
     exit 1
   fi
 
-  if [[ ! -d "$SCENE_DIRECTORY" ]]; then
-    log_error "The specified scene directory does not exist: $SCENE_DIRECTORY"
-    exit 1
-  fi
-
-  if [[ "$ENVIRONMENT" != "prod" && "$ENVIRONMENT" != "dev" ]]; then
-    log_error "Invalid environment: $ENVIRONMENT. Must be 'prod' or 'dev'."
-    exit 1
-  fi
-
+  validate_directory "$SCENE_DIRECTORY" "scene directory"
+  validate_environment "$ENVIRONMENT"
   log_info "Using environment: $ENVIRONMENT"
-  [[ -n "$SCENE_ID" ]] && log_info "Using scene ID: $SCENE_ID"
-  log_verbose "SCENE_DIRECTORY: $SCENE_DIRECTORY"
-
-  # Import environment variable
-  if [[ -z "${C3D_DEVELOPER_API_KEY:-}" ]]; then
-    log_error "C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key"
-    exit 1
+  
+  # Validate scene_id format if provided (UUID format)
+  if [[ -n "$SCENE_ID" ]]; then
+    validate_uuid_format "$SCENE_ID" "scene_id"
+    log_info "Using scene ID: $SCENE_ID"
   fi
+  
+  log_debug "SCENE_DIRECTORY: $SCENE_DIRECTORY"
 
-  local C3D_DEVELOPER_API_KEY="$C3D_DEVELOPER_API_KEY"
-  log_info "C3D_DEVELOPER_API_KEY has been set."
+  # Check dependencies and validate API key
+  check_dependencies
+  validate_api_key
   log_info "SCENE_DIRECTORY is: $SCENE_DIRECTORY"
 
   # Determine API base URL
   local BASE_URL
-  BASE_URL=$(get_api_base_url "$ENVIRONMENT")
+  BASE_URL=$(get_api_base_url "$ENVIRONMENT" "scenes")
   if [[ -n "$SCENE_ID" ]]; then
     BASE_URL+="/$SCENE_ID"
   fi
@@ -150,12 +111,9 @@ main() {
   local PNG_FILE="$SCENE_DIRECTORY/screenshot.png"
   local JSON_FILE="$SCENE_DIRECTORY/settings.json"
 
-  # Validate file existence
+  # Validate file existence and sizes
   for file in "$BIN_FILE" "$GLTF_FILE" "$PNG_FILE" "$JSON_FILE"; do
-    if [[ ! -f "$file" ]]; then
-      log_error "Required file missing: $file"
-      exit 1
-    fi
+    validate_file "$file" 100  # 100MB limit
   done
 
   # Read sdk-version.txt
@@ -166,38 +124,119 @@ main() {
   fi
   local SDK_VERSION
   SDK_VERSION=$(cat "$SDK_VERSION_FILE")
+  
+  # Validate SDK version format (semantic versioning: x.y.z)
+  validate_semantic_version "$SDK_VERSION" "SDK version"
+  
   log_info "Read SDK version: $SDK_VERSION"
 
   # Update settings.json with new sdkVersion using jq
   local TMP_JSON_FILE="$SCENE_DIRECTORY/settings-updated.json"
-  jq --arg sdk "$SDK_VERSION" '.sdkVersion = $sdk' "$JSON_FILE" > "$TMP_JSON_FILE"
-  rm "$JSON_FILE"
-  mv "$TMP_JSON_FILE" "$JSON_FILE"
-
-  # Perform API call
-  log_info "Uploading scene files to API..."
-  local RESPONSE
-  RESPONSE=$(curl --silent --write-out "\n%{http_code}" --location "$BASE_URL" \
-    --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
-    --form "scene.bin=@$BIN_FILE" \
-    --form "scene.gltf=@$GLTF_FILE" \
-    --form "screenshot.png=@$PNG_FILE" \
-    --form "settings.json=@$JSON_FILE")
-
-  # Separate body and status code
-  local HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
-  local HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-
-  if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
-    log_info "Upload successful. Server response:"
-    echo "$HTTP_BODY"
+  local BACKUP_JSON_FILE="$JSON_FILE.backup"
+  
+  log_info "Updating settings.json with SDK version: $SDK_VERSION"
+  
+  if [[ "$DRY_RUN" = true ]]; then
+    log_info "DRY RUN - Would perform these file operations:"
+    echo "  1. Create backup: cp '$JSON_FILE' '$BACKUP_JSON_FILE'"
+    echo "  2. Update JSON: jq --arg sdk '$SDK_VERSION' '.sdkVersion = \$sdk' '$BACKUP_JSON_FILE' > '$TMP_JSON_FILE'"
+    echo "  3. Replace file: mv '$TMP_JSON_FILE' '$JSON_FILE'"
+    echo "  4. Clean backup: rm '$BACKUP_JSON_FILE'"
   else
-    log_error "Upload failed with status $HTTP_STATUS"
-    echo "$HTTP_BODY"
-    exit 1
+    # Create backup of original settings.json
+    if ! cp "$JSON_FILE" "$BACKUP_JSON_FILE"; then
+      log_error "Failed to create backup of settings.json"
+      exit 1
+    fi
+    log_debug "Created backup: $BACKUP_JSON_FILE"
+    
+    # Update settings.json with jq
+    if ! jq --arg sdk "$SDK_VERSION" '.sdkVersion = $sdk' "$BACKUP_JSON_FILE" > "$TMP_JSON_FILE"; then
+      log_error "Failed to update settings.json with jq"
+      rm -f "$TMP_JSON_FILE"
+      rm -f "$BACKUP_JSON_FILE"
+      exit 1
+    fi
+    log_debug "Updated JSON written to temporary file"
+    
+    # Replace original file with updated version
+    if ! mv "$TMP_JSON_FILE" "$JSON_FILE"; then
+      log_error "Failed to replace settings.json with updated version"
+      # Attempt rollback
+      log_warn "Attempting to restore backup..."
+      if mv "$BACKUP_JSON_FILE" "$JSON_FILE"; then
+        log_info "Successfully restored backup"
+      else
+        log_error "Failed to restore backup - settings.json may be corrupted"
+      fi
+      exit 1
+    fi
+    log_debug "Successfully replaced settings.json with updated version"
+    
+    # Clean up backup file
+    rm -f "$BACKUP_JSON_FILE"
+    log_debug "Cleaned up backup file"
   fi
 
-  log_info "Script complete."
+  # Perform API call
+  if [[ "$DRY_RUN" = true ]]; then
+    log_info "DRY RUN - Would execute this curl command:"
+    echo "curl --silent --write-out \"\\n%{http_code}\" --location '$BASE_URL' \\"
+    echo "  --header 'Authorization: APIKEY:DEVELOPER [REDACTED]' \\"
+    echo "  --form 'scene.bin=@$BIN_FILE' \\"
+    echo "  --form 'scene.gltf=@$GLTF_FILE' \\"
+    echo "  --form 'screenshot=@$PNG_FILE' \\"
+    echo "  --form 'settings.json=@$JSON_FILE'"
+    echo ""
+    echo "Files that would be uploaded:"
+    for file in "$BIN_FILE" "$GLTF_FILE" "$PNG_FILE" "$JSON_FILE"; do
+      if [[ -f "$file" ]]; then
+        local file_size
+        if command -v stat >/dev/null 2>&1; then
+          file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+          echo "  - $(basename "$file"): $(($file_size / 1024))KB"
+        else
+          echo "  - $(basename "$file"): [size unknown]"
+        fi
+      fi
+    done
+    
+    # Calculate and log total execution time
+    local end_time=$(date +%s)
+    local total_duration=$((end_time - start_time))
+    log_info "DRY RUN completed in ${total_duration} seconds"
+    log_info "Re-run without --dry_run to perform actual upload"
+    exit 0
+  else
+    log_info "Uploading scene files to API..."
+    log_debug "Upload URL: $BASE_URL"
+    log_debug "Files to upload: scene.bin, scene.gltf, screenshot.png, settings.json"
+    
+    local upload_start_time=$(date +%s)
+    local RESPONSE
+    RESPONSE=$(curl --silent --write-out "\n%{http_code}" --location "$BASE_URL" \
+      --header "Authorization: APIKEY:DEVELOPER ${C3D_DEVELOPER_API_KEY}" \
+      --form "scene.bin=@$BIN_FILE" \
+      --form "scene.gltf=@$GLTF_FILE" \
+      --form "screenshot=@$PNG_FILE" \
+      --form "settings.json=@$JSON_FILE")
+    local upload_end_time=$(date +%s)
+    local upload_duration=$((upload_end_time - upload_start_time))
+
+    # Separate body and status code
+    parse_http_response "$RESPONSE"
+
+    log_info "Upload completed in ${upload_duration} seconds (HTTP $HTTP_STATUS)"
+
+    if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
+      process_json_response "$HTTP_BODY" "Upload"
+    else
+      handle_http_error "$HTTP_STATUS" "$HTTP_BODY" "Upload"
+    fi
+
+    # Calculate and log total execution time
+    log_execution_time "$start_time" "Script"
+  fi
 
   log_info "You can now upload your dynamic objects using the upload-object.sh script."
   log_info "You'll need the scene ID from the upload response."

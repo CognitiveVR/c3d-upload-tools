@@ -1,200 +1,219 @@
 #!/bin/bash
 
-# Default values
-environment="prod"
-object_id=""
-verbose=false
-dry_run=false
+# Source shared utilities
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/upload-utils.sh"
 
-# ANSI color codes
-COLOR_RESET="\033[0m"
-COLOR_INFO="\033[1;34m"
-COLOR_WARN="\033[1;33m"
-COLOR_ERROR="\033[1;31m"
-COLOR_DEBUG="\033[0;36m"
+# Load environment variables from .env file (if present)
+load_env_file
 
-# --- Check Dependencies ---
-if ! command -v jq >/dev/null 2>&1; then
-  echo "Error: 'jq' is not installed. Please install it before running this script."
-  exit 1
-fi
+# Main function
+main() {
+  # Default values
+  ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
+  OBJECT_ID=""
+  VERBOSE=false
+  DRY_RUN=false
+  SCENE_ID="${C3D_SCENE_ID:-}"
+  OBJECT_FILENAME=""
+  OBJECT_DIRECTORY=""
 
-if ! command -v curl >/dev/null 2>&1; then
-  echo "Error: 'curl' is not installed. Please install it before running this script."
-  exit 1
-fi
+  # Parse named arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --scene_id)
+        SCENE_ID="$2"
+        shift 2
+        ;;
+      --object_filename)
+        OBJECT_FILENAME="$2"
+        shift 2
+        ;;
+      --object_id)
+        OBJECT_ID="$2"
+        shift 2
+        ;;
+      --env)
+        ENVIRONMENT="$2"
+        shift 2
+        ;;
+      --object_dir)
+        OBJECT_DIRECTORY="$2"
+        shift 2
+        ;;
+      --verbose)
+        VERBOSE=true
+        shift
+        ;;
+      --dry_run)
+        DRY_RUN=true
+        shift
+        ;;
+      --help|-h)
+        echo "Usage: $0 [--scene_id <scene_id>] --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
+        echo "  --scene_id        Scene ID to upload object to (or set C3D_SCENE_ID environment variable)"
+        echo "  --object_filename Object filename (without extension)"
+        echo "  --object_dir      Path to directory containing object files"
+        echo "  --object_id       Optional. Object ID (defaults to object_filename)"
+        echo "  --env             Optional. Either 'prod' (default) or 'dev'"
+        echo "  --verbose         Optional. Enables verbose output"
+        echo "  --dry_run         Optional. Preview operations without executing them"
+        echo
+        echo "Environment Variables:"
+        echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
+        echo "  C3D_SCENE_ID            Default scene ID (avoids --scene_id parameter)"
+        exit 0
+        ;;
+      *)
+        log_error "Unknown argument: $1"
+        exit 1
+        ;;
+    esac
+  done
 
-# Parse named arguments
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --scene_id)
-      scene_id="$2"
-      shift 2
-      ;;
-    --object_filename)
-      object_filename="$2"
-      shift 2
-      ;;
-    --object_id)
-      object_id="$2"
-      shift 2
-      ;;
-    --env)
-      environment="$2"
-      shift 2
-      ;;
-    --object_dir)
-      OBJECT_DIRECTORY="$2"
-      shift 2
-      ;;
-    --verbose)
-      verbose=true
-      shift
-      ;;
-    --dry_run)
-      dry_run=true
-      shift
-      ;;
-    *)
-      echo -e "${COLOR_ERROR}Unknown argument: $1${COLOR_RESET}"
-      exit 1
-      ;;
-  esac
-done
+  # Start timing
+  local start_time=$(date +%s)
+  log_info "Starting object upload process"
 
-# Logging helpers
-log_info()  { echo -e "${COLOR_INFO}[INFO] $1${COLOR_RESET}"; }
-log_warn()  { echo -e "${COLOR_WARN}[WARN] $1${COLOR_RESET}"; }
-log_error() { echo -e "${COLOR_ERROR}[ERROR] $1${COLOR_RESET}"; }
-log_debug() { [ "$verbose" = true ] && echo -e "${COLOR_DEBUG}[DEBUG] $1${COLOR_RESET}"; }
-
-# Validate required arguments
-if [[ -z "$scene_id" ]]; then
-  log_error "--scene_id is required"
-  exit 1
-fi
-
-if [[ -z "$object_filename" ]]; then
-  log_error "--object_filename is required"
-  exit 1
-fi
-
-if [[ -z "$OBJECT_DIRECTORY" ]]; then
-  log_error "--object_dir is required"
-  exit 1
-fi
-
-if [[ ! -d "$OBJECT_DIRECTORY" ]]; then
-  log_error "Directory not found: $OBJECT_DIRECTORY"
-  exit 1
-fi
-
-if [[ -z "$C3D_DEVELOPER_API_KEY" ]]; then
-  log_error "Environment variable C3D_DEVELOPER_API_KEY is not set"
-  exit 1
-fi
-
-# if object_id is not provided, it will be created from the object_filename
-if [[ -z "$object_id" ]]; then
-  object_id=$(basename "$object_filename")
-  log_debug "Object ID not provided, using derived ID: $object_id"
-fi
-# Log the parameters
-log_debug "Scene ID: $scene_id"
-log_debug "Object Filename: $object_filename"
-log_debug "Object Directory: $OBJECT_DIRECTORY"
-log_debug "Environment: $environment"
-log_debug "Object ID: $object_id"
-
-# Construct file paths
-gltf_file="$OBJECT_DIRECTORY/${object_filename}.gltf"
-bin_file="$OBJECT_DIRECTORY/${object_filename}.bin"
-thumbnail_file="$OBJECT_DIRECTORY/cvr_object_thumbnail.png"
-
-# Verify required files exist
-if [[ ! -f "$gltf_file" ]]; then
-  log_error "File not found: $gltf_file"
-  exit 1
-fi
-if [[ ! -f "$bin_file" ]]; then
-  log_error "File not found: $bin_file"
-  exit 1
-fi
-
-# Collect texture .png files (excluding thumbnail)
-texture_forms=()
-for texture_file in "$OBJECT_DIRECTORY"/*.png; do
-  if [[ "$texture_file" != "$thumbnail_file" ]]; then
-    texture_name=$(basename "$texture_file")
-    texture_forms+=(--form "$texture_name=@$texture_file")
-    log_debug "Adding texture: $texture_name"
+  # Use environment variable fallback for scene_id
+  if [[ -z "$SCENE_ID" ]]; then
+    SCENE_ID="${C3D_SCENE_ID:-}"
+    if [[ -n "$SCENE_ID" ]]; then
+      log_debug "Using C3D_SCENE_ID from environment: $SCENE_ID"
+    fi
   fi
-done
+  
+  # Validate required arguments
+  if [[ -z "$SCENE_ID" ]]; then
+    log_error "Missing required argument: --scene_id (not provided as parameter or C3D_SCENE_ID environment variable)"
+    echo "Usage: $0 [--scene_id <scene_id>] --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
+    echo "       Set C3D_SCENE_ID environment variable to avoid --scene_id parameter"
+    exit 1
+  fi
 
-# Set API base URL based on environment
-if [[ "$environment" == "prod" ]]; then
-  api_base_url="https://data.cognitive3d.com/v0/objects"
-elif [[ "$environment" == "dev" ]]; then
-  api_base_url="https://data.c3ddev.com/v0/objects"
-else
-  log_error "Unknown environment '$environment'. Use 'prod' or 'dev'."
-  exit 1
-fi
+  if [[ -z "$OBJECT_FILENAME" ]]; then
+    log_error "Missing required argument: --object_filename"
+    echo "Usage: $0 --scene_id <scene_id> --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
+    exit 1
+  fi
 
-# Construct upload URL
-upload_url="$api_base_url/$scene_id"
-if [[ -n "$object_id" ]]; then
-  upload_url+="/$object_id"
-fi
+  if [[ -z "$OBJECT_DIRECTORY" ]]; then
+    log_error "Missing required argument: --object_dir"
+    echo "Usage: $0 --scene_id <scene_id> --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
+    exit 1
+  fi
 
-log_debug "Upload URL: $upload_url"
-log_debug "Using API key from environment variable"
+  validate_directory "$OBJECT_DIRECTORY" "object directory"
+  validate_environment "$ENVIRONMENT"
+  validate_uuid_format "$SCENE_ID" "scene_id"
 
-# Build curl command array
-curl_cmd=(curl --silent --show-error --location --globoff "$upload_url" \
-  --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
-  --form "cvr_object_thumbnail.png=@$thumbnail_file" \
-  --form "${object_filename}.bin=@$bin_file" \
-  --form "${object_filename}.gltf=@$gltf_file")
+  # Check dependencies and validate API key
+  check_dependencies
+  validate_api_key
 
-# Add texture .png files to curl command
-curl_cmd+=("${texture_forms[@]}")
+  log_info "Using environment: $ENVIRONMENT"
 
-# Show and optionally skip execution
-if [ "$verbose" = true ] || [ "$dry_run" = true ]; then
-  echo -e "${COLOR_DEBUG}[DEBUG] Final curl command:${COLOR_RESET}"
-  printf '%q ' "${curl_cmd[@]}"
-  echo
-fi
+  # if object_id is not provided, it will be created from the object_filename
+  if [[ -z "$OBJECT_ID" ]]; then
+    OBJECT_ID=$(basename "$OBJECT_FILENAME")
+    log_debug "Object ID not provided, using derived ID: $OBJECT_ID"
+  fi
 
-if [ "$dry_run" = true ]; then
-  log_info "Dry run mode: upload skipped."
-  exit 0
-fi
+  # Log the parameters
+  log_debug "Scene ID: $SCENE_ID"
+  log_debug "Object Filename: $OBJECT_FILENAME"
+  log_debug "Object Directory: $OBJECT_DIRECTORY"
+  log_debug "Environment: $ENVIRONMENT"
+  log_debug "Object ID: $OBJECT_ID"
 
-log_info "Executing curl command..."
-response=$("${curl_cmd[@]}" 2>&1)
-status=$?
+  # Construct file paths
+  local GLTF_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.gltf"
+  local BIN_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.bin"
+  local THUMBNAIL_FILE="$OBJECT_DIRECTORY/cvr_object_thumbnail.png"
 
-if [ $status -ne 0 ]; then
-  log_error "Upload failed with status $status"
-  log_error "Response: $response"
-  exit $status
-fi
+  # Verify required files exist
+  validate_file "$GLTF_FILE"
+  validate_file "$BIN_FILE"
+  validate_file "$THUMBNAIL_FILE"
 
-log_info "Upload complete."
-log_info "$response"
+  # Collect texture .png files (excluding thumbnail)
+  local TEXTURE_FORMS=()
+  for TEXTURE_FILE in "$OBJECT_DIRECTORY"/*.png; do
+    if [[ "$TEXTURE_FILE" != "$THUMBNAIL_FILE" ]]; then
+      local TEXTURE_NAME=$(basename "$TEXTURE_FILE")
+      TEXTURE_FORMS+=(--form "$TEXTURE_NAME=@$TEXTURE_FILE")
+      log_debug "Adding texture: $TEXTURE_NAME"
+    fi
+  done
 
-# -------------------------------
-# Create or Overwrite Manifest File
-# -------------------------------
-cat > "${scene_id}_object_manifest.json" <<EOF
+  # Construct upload URL
+  local API_BASE_URL
+  API_BASE_URL=$(get_api_base_url "$ENVIRONMENT" "objects")
+  local UPLOAD_URL="$API_BASE_URL/$SCENE_ID"
+  if [[ -n "$OBJECT_ID" ]]; then
+    UPLOAD_URL+="/$OBJECT_ID"
+  fi
+
+  log_debug "Upload URL: $UPLOAD_URL"
+  log_debug "Using API key from environment variable"
+
+  # Build curl command array
+  local CURL_CMD=(curl --silent --write-out "\n%{http_code}" --location --globoff "$UPLOAD_URL" \
+    --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
+    --form "cvr_object_thumbnail.png=@$THUMBNAIL_FILE" \
+    --form "${OBJECT_FILENAME}.bin=@$BIN_FILE" \
+    --form "${OBJECT_FILENAME}.gltf=@$GLTF_FILE")
+
+  # Add texture .png files to curl command
+  if [[ ${#TEXTURE_FORMS[@]} -gt 0 ]]; then
+    CURL_CMD+=("${TEXTURE_FORMS[@]}")
+  fi
+
+  # Show and optionally skip execution
+  if [[ "$DRY_RUN" = true ]]; then
+    log_info "DRY RUN - Would execute this curl command:"
+    # Print command with redacted API key for security
+    printf '%q ' "${CURL_CMD[@]}"
+    echo
+    log_info "DRY RUN completed"  
+    log_info "Re-run without --dry_run to perform actual upload"
+    exit 0
+  fi
+
+  log_info "Uploading object files to API..."
+  log_debug "Upload URL: $UPLOAD_URL"
+  log_debug "Files to upload: ${OBJECT_FILENAME}.bin, ${OBJECT_FILENAME}.gltf, cvr_object_thumbnail.png, textures"
+
+  local upload_start_time=$(date +%s)
+  local RESPONSE
+  RESPONSE=$("${CURL_CMD[@]}")
+  local upload_end_time=$(date +%s)
+  local upload_duration=$((upload_end_time - upload_start_time))
+
+  # Separate body and status code
+  parse_http_response "$RESPONSE"
+
+  log_info "Upload completed in ${upload_duration} seconds (HTTP $HTTP_STATUS)"
+
+  if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
+    process_json_response "$HTTP_BODY" "Object upload"
+  else
+    handle_http_error "$HTTP_STATUS" "$HTTP_BODY" "Object upload"
+  fi
+
+  # -------------------------------
+  # Create or Overwrite Manifest File
+  # -------------------------------
+  local MANIFEST_FILE="${SCENE_ID}_object_manifest.json"
+  log_info "Creating manifest file: $MANIFEST_FILE"
+
+  cat > "$MANIFEST_FILE" <<EOF
 {
   "objects": [
     {
-      "id": "$object_id",
-      "mesh": "$object_filename",
-      "name": "$object_filename",
+      "id": "$OBJECT_ID",
+      "mesh": "$OBJECT_FILENAME",
+      "name": "$OBJECT_FILENAME",
       "scaleCustom": [
         1.0,
         1.0,
@@ -216,9 +235,15 @@ cat > "${scene_id}_object_manifest.json" <<EOF
 }
 EOF
 
-log_debug "Manifest file created: ${scene_id}_object_manifest.json"
+  log_debug "Manifest file created: $MANIFEST_FILE"
 
-log_info "Automatically uploading the manifest."
-./upload-object-manifest.sh --scene_id $scene_id --env $environment
+  log_info "Automatically uploading the manifest."
+  ./upload-object-manifest.sh --scene_id "$SCENE_ID" --env "$ENVIRONMENT" --verbose
 
-log_info "Upload complete. Object ID: $object_id"
+  # Calculate and log total execution time
+  log_execution_time "$start_time" "Object upload process"
+  log_info "Upload complete. Object ID: $OBJECT_ID"
+}
+
+# Run main
+main "$@"

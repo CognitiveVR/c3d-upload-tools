@@ -4,6 +4,13 @@
 
 set -e
 
+# Source shared utilities and load .env file
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/upload-utils.sh"
+
+# Load environment variables from .env file (if present)
+load_env_file
+
 # --- Default values ---
 VERBOSE=false
 DEBUG=false
@@ -24,7 +31,17 @@ debug() {
 }
 
 usage() {
-  echo "Usage: $0 --scene_id <scene_id> --env <prod|dev> [--verbose] [--debug]"
+  echo "Usage: $0 [--scene_id <scene_id>] [--env <prod|dev>] [--verbose] [--debug]"
+  echo "  --scene_id   Scene ID (or set C3D_SCENE_ID environment variable)"
+  echo "  --env        Either 'prod' or 'dev' (or set C3D_ENV environment variable)"
+  echo "  --verbose    Enable verbose logging"
+  echo "  --debug      Enable debug logging"
+  echo
+  echo "Environment Variables:"
+  echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
+  echo "  C3D_SCENE_ID            Default scene ID (avoids --scene_id parameter)"
+  echo "  C3D_ENV                 Default environment (avoids --env parameter)"
+  echo "  C3D_DEFAULT_ENVIRONMENT Alternative name for default environment"
   exit 1
 }
 
@@ -65,6 +82,26 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# --- Use environment variable fallback for SCENE_ID ---
+if [ -z "$SCENE_ID" ]; then
+  SCENE_ID="${C3D_SCENE_ID:-}"
+  if [ -n "$SCENE_ID" ]; then
+    log "Using C3D_SCENE_ID from environment: $SCENE_ID"
+  fi
+fi
+
+# --- Use environment variable fallback for ENV ---
+if [ -z "$ENV" ]; then
+  ENV="${C3D_ENV:-${C3D_DEFAULT_ENVIRONMENT:-}}"
+  if [ -n "$ENV" ]; then
+    if [ -n "${C3D_ENV:-}" ]; then
+      log "Using C3D_ENV from environment: $ENV"
+    else
+      log "Using C3D_DEFAULT_ENVIRONMENT from environment: $ENV"
+    fi
+  fi
+fi
 
 # --- Validate Required Parameters ---
 if [ -z "$SCENE_ID" ] || [ -z "$ENV" ]; then
