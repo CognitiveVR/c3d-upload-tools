@@ -118,7 +118,6 @@ main() {
     OBJECT_ID=$(basename "$OBJECT_FILENAME")
     # OBJECT_ID="RANDOM_SOMETHING_1234"
     # make the OBJECT_ID a string as the current milliseconds timestamp to ensure uniqueness
-    # OBJECT_ID="${OBJECT_ID}_$(date +%s%3N)"
     log_debug "Object ID not provided, using derived ID: $OBJECT_ID"
   fi
 
