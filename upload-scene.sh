@@ -47,11 +47,18 @@ main() {
         ;;
       --help|-h)
         echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
-        echo "  --scene_dir   Path to folder containing 4 files: scene.bin, scene.gltf, screenshot.png, settings.json"
+        echo "  --scene_dir   Path to folder containing: scene.bin, scene.gltf, settings.json, screenshot.png"
         echo "  --env         Optional. Either 'prod' (default) or 'dev'"
         echo "  --scene_id    Optional. Appended to API URL if present"
         echo "  --verbose     Optional. Enables verbose output"
         echo "  --dry_run     Optional. Preview operations without executing them"
+        echo
+        echo "Required Files:"
+        echo "  - scene.bin, scene.gltf, settings.json"
+        echo "  - screenshot.png (required, used as primary scene screenshot)"
+        echo
+        echo "Optional Additional Images:"
+        echo "  Any other PNG, JPG, or JPEG files in the scene directory will also be uploaded"
         echo
         echo "Environment Variables:"
         echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
@@ -108,13 +115,42 @@ main() {
   # Prepare file paths
   local BIN_FILE="$SCENE_DIRECTORY/scene.bin"
   local GLTF_FILE="$SCENE_DIRECTORY/scene.gltf"
-  local PNG_FILE="$SCENE_DIRECTORY/screenshot.png"
   local JSON_FILE="$SCENE_DIRECTORY/settings.json"
 
-  # Validate file existence and sizes
-  for file in "$BIN_FILE" "$GLTF_FILE" "$PNG_FILE" "$JSON_FILE"; do
+  # Validate required files (bin, gltf, json)
+  for file in "$BIN_FILE" "$GLTF_FILE" "$JSON_FILE"; do
     validate_file "$file" 100  # 100MB limit
   done
+
+  # Handle screenshot.png as a required special file
+  local SCREENSHOT_FILE="$SCENE_DIRECTORY/screenshot.png"
+  validate_file "$SCREENSHOT_FILE" 100  # 100MB limit
+
+  # Collect additional image files (png, jpg, jpeg) for upload
+  local IMAGE_FORMS=()
+  local IMAGE_COUNT=0
+  for IMAGE_FILE in "$SCENE_DIRECTORY"/*.png "$SCENE_DIRECTORY"/*.jpg "$SCENE_DIRECTORY"/*.jpeg; do
+    # Skip if no matching files (bash glob expands literally if no match)
+    [[ -f "$IMAGE_FILE" ]] || continue
+
+    local IMAGE_NAME=$(basename "$IMAGE_FILE")
+
+    # Skip screenshot.png as it's handled separately
+    if [[ "$IMAGE_NAME" == "screenshot.png" ]]; then
+      continue
+    fi
+
+    validate_file "$IMAGE_FILE" 100  # 100MB limit
+    IMAGE_FORMS+=(--form "$IMAGE_NAME=@$IMAGE_FILE")
+    log_debug "Adding additional image: $IMAGE_NAME"
+    ((IMAGE_COUNT++))
+  done
+
+  if [[ $IMAGE_COUNT -gt 0 ]]; then
+    log_info "Found $IMAGE_COUNT additional image file(s) to upload (plus required screenshot.png)"
+  else
+    log_info "Uploading screenshot.png (no additional images found)"
+  fi
 
   # Read sdk-version.txt
   local SDK_VERSION_FILE="$SCRIPT_DIR/sdk-version.txt"
@@ -185,11 +221,15 @@ main() {
     echo "  --header 'Authorization: APIKEY:DEVELOPER [REDACTED]' \\"
     echo "  --form 'scene.bin=@$BIN_FILE' \\"
     echo "  --form 'scene.gltf=@$GLTF_FILE' \\"
-    echo "  --form 'screenshot=@$PNG_FILE' \\"
+    echo "  --form 'screenshot.png=@$SCREENSHOT_FILE' \\"
+    # Print additional image forms
+    for form in "${IMAGE_FORMS[@]}"; do
+      echo "  $form \\"
+    done
     echo "  --form 'settings.json=@$JSON_FILE'"
     echo ""
     echo "Files that would be uploaded:"
-    for file in "$BIN_FILE" "$GLTF_FILE" "$PNG_FILE" "$JSON_FILE"; do
+    for file in "$BIN_FILE" "$GLTF_FILE" "$SCREENSHOT_FILE" "$JSON_FILE"; do
       if [[ -f "$file" ]]; then
         local file_size
         if command -v stat >/dev/null 2>&1; then
@@ -198,6 +238,21 @@ main() {
         else
           echo "  - $(basename "$file"): [size unknown]"
         fi
+      fi
+    done
+    # Print additional image files (excluding screenshot.png which is already listed)
+    for IMAGE_FILE in "$SCENE_DIRECTORY"/*.png "$SCENE_DIRECTORY"/*.jpg "$SCENE_DIRECTORY"/*.jpeg; do
+      [[ -f "$IMAGE_FILE" ]] || continue
+      local IMAGE_NAME=$(basename "$IMAGE_FILE")
+      # Skip screenshot.png as it's already listed
+      [[ "$IMAGE_NAME" == "screenshot.png" ]] && continue
+
+      local file_size
+      if command -v stat >/dev/null 2>&1; then
+        file_size=$(stat -f%z "$IMAGE_FILE" 2>/dev/null || stat -c%s "$IMAGE_FILE" 2>/dev/null)
+        echo "  - $IMAGE_NAME: $(($file_size / 1024))KB"
+      else
+        echo "  - $IMAGE_NAME: [size unknown]"
       fi
     done
     
@@ -210,16 +265,26 @@ main() {
   else
     log_info "Uploading scene files to API..."
     log_debug "Upload URL: $BASE_URL"
-    log_debug "Files to upload: scene.bin, scene.gltf, screenshot.png, settings.json"
-    
-    local upload_start_time=$(date +%s)
-    local RESPONSE
-    RESPONSE=$(curl --silent --write-out "\n%{http_code}" --location "$BASE_URL" \
+    log_debug "Files to upload: scene.bin, scene.gltf, images (png/jpg/jpeg), settings.json"
+
+    # Build curl command array
+    local CURL_CMD=(curl --silent --write-out "\n%{http_code}" --location "$BASE_URL" \
       --header "Authorization: APIKEY:DEVELOPER ${C3D_DEVELOPER_API_KEY}" \
       --form "scene.bin=@$BIN_FILE" \
       --form "scene.gltf=@$GLTF_FILE" \
-      --form "screenshot=@$PNG_FILE" \
-      --form "settings.json=@$JSON_FILE")
+      --form "screenshot.png=@$SCREENSHOT_FILE")
+
+    # Add additional image forms (if any)
+    if [[ ${#IMAGE_FORMS[@]} -gt 0 ]]; then
+      CURL_CMD+=("${IMAGE_FORMS[@]}")
+    fi
+
+    # Add settings.json
+    CURL_CMD+=(--form "settings.json=@$JSON_FILE")
+
+    local upload_start_time=$(date +%s)
+    local RESPONSE
+    RESPONSE=$("${CURL_CMD[@]}")
     local upload_end_time=$(date +%s)
     local upload_duration=$((upload_end_time - upload_start_time))
 

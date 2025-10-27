@@ -116,6 +116,9 @@ main() {
   # if object_id is not provided, it will be created from the object_filename
   if [[ -z "$OBJECT_ID" ]]; then
     OBJECT_ID=$(basename "$OBJECT_FILENAME")
+    # OBJECT_ID="RANDOM_SOMETHING_1234"
+    # make the OBJECT_ID a string as the current milliseconds timestamp to ensure uniqueness
+    # OBJECT_ID="${OBJECT_ID}_$(date +%s%3N)"
     log_debug "Object ID not provided, using derived ID: $OBJECT_ID"
   fi
 
@@ -136,9 +139,12 @@ main() {
   validate_file "$BIN_FILE"
   validate_file "$THUMBNAIL_FILE"
 
-  # Collect texture .png files (excluding thumbnail)
+  # Collect texture files (png, jpg, jpeg - excluding thumbnail)
   local TEXTURE_FORMS=()
-  for TEXTURE_FILE in "$OBJECT_DIRECTORY"/*.png; do
+  for TEXTURE_FILE in "$OBJECT_DIRECTORY"/*.png "$OBJECT_DIRECTORY"/*.jpg "$OBJECT_DIRECTORY"/*.jpeg; do
+    # Skip if no matching files (bash glob expands literally if no match)
+    [[ -f "$TEXTURE_FILE" ]] || continue
+
     if [[ "$TEXTURE_FILE" != "$THUMBNAIL_FILE" ]]; then
       local TEXTURE_NAME=$(basename "$TEXTURE_FILE")
       TEXTURE_FORMS+=(--form "$TEXTURE_NAME=@$TEXTURE_FILE")
@@ -182,7 +188,7 @@ main() {
 
   log_info "Uploading object files to API..."
   log_debug "Upload URL: $UPLOAD_URL"
-  log_debug "Files to upload: ${OBJECT_FILENAME}.bin, ${OBJECT_FILENAME}.gltf, cvr_object_thumbnail.png, textures"
+  log_debug "Files to upload: ${OBJECT_FILENAME}.bin, ${OBJECT_FILENAME}.gltf, cvr_object_thumbnail.png, textures (png/jpg/jpeg)"
 
   local upload_start_time=$(date +%s)
   local RESPONSE
