@@ -11,8 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./upload-scene.sh --scene_dir <dir> [--env prod|dev] [--scene_id <id>] [--verbose] [--dry_run]` - Upload scene files with enhanced security and validation
 - `./upload-scene.sh --help` - Show usage information
 
-### Object Operations  
-- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects
+### Object Operations
+
+- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects (supports PNG, JPG, JPEG textures)
 - `./upload-object-manifest.sh [--scene_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload object manifest after object upload
 - `./list-objects.sh [--scene_id <id>] --env <env> --verbose` - List objects for a scene
 
@@ -34,10 +35,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **API endpoints**: Support both prod (cognitive3d.com) and dev (c3ddev.com) environments
 
 ### Upload Workflow
+
 1. Upload scene first to get scene_id
 2. Upload objects using scene_id (can be set in .env file for convenience)
 3. Upload object manifest to display objects in dashboard
 4. Object manifests are automatically generated but can be manually edited before upload
+
+### Texture Format Support
+
+- **Object uploads** support PNG, JPG, and JPEG texture files
+- Textures are automatically detected and uploaded with object files
+- Thumbnail must be named `cvr_object_thumbnail.png` (PNG format required)
 
 ### Environment Variable Support (SDK-191) ✅
 **Streamlined Workflow with .env:**

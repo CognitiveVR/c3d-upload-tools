@@ -50,7 +50,11 @@ export C3D_SCENE_ID="$SCENE_ID"
 
 ./upload-object-manifest.sh --env $ENV --verbose
 
-./upload-object.sh --object_filename Lantern --object_id Lantern --object_dir lantern-test --env $ENV --verbose
+./upload-object.sh --object_filename Lantern --object_id Lantern-PNG --object_dir lantern-test --env $ENV --verbose
+
+./upload-object-manifest.sh --env $ENV --verbose
+
+./upload-object.sh --object_filename Lantern --object_id Lantern-JPEG --object_dir lantern-test-jpg --env $ENV --verbose
 
 ./upload-object-manifest.sh --env $ENV --verbose
 
