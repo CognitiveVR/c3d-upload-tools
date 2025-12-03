@@ -7,3 +7,5 @@
 .env.sample.dev
 .env.webxr*
 .env.backup
+.env.dev
+.env.prod
