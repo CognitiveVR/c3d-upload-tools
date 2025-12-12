@@ -119,6 +119,36 @@ check_html_error_detection() {
   fi
 }
 
+# Update scene name with current timestamp
+update_scene_timestamp() {
+  local scene_dir="$1"
+  local settings_file="$scene_dir/settings.json"
+
+  if [[ ! -f "$settings_file" ]]; then
+    echo "Warning: settings.json not found at $settings_file"
+    return 1
+  fi
+
+  # Generate ISO8601 timestamp (e.g., 2025-12-11T17:30:45Z)
+  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  # Read current scene name
+  local current_name=$(jq -r '.sceneName' "$settings_file")
+
+  # Strip any existing date/timestamp suffix (pattern: YYYY-MM-DD* or YYYY-MM-DDTHH:MM:SSZ)
+  # Keep the base name before any date pattern
+  local base_name=$(echo "$current_name" | sed -E 's/ [0-9]{4}-[0-9]{2}-[0-9]{2}[^ ]*$//')
+
+  # Append new timestamp
+  local new_name="${base_name} ${timestamp}"
+
+  # Update settings.json with new scene name
+  jq --arg name "$new_name" '.sceneName = $name' "$settings_file" > "${settings_file}.tmp" && \
+    mv "${settings_file}.tmp" "$settings_file"
+
+  echo "Updated scene name: $new_name"
+}
+
 # Main test execution
 main() {
   print_section "SCENE UPLOAD IMPROVEMENT TESTS"
@@ -130,6 +160,13 @@ main() {
   echo "Test scenes: scene-test, vancouver-scene-test"
   echo ""
   read -p "Press Enter to start tests..."
+
+  # Update scene names with current timestamp for unique test runs
+  echo ""
+  echo "Updating scene names with timestamps..."
+  update_scene_timestamp "scene-test"
+  update_scene_timestamp "vancouver-scene-test"
+  echo ""
 
   # ============================================================
   # TEST 1: Dry Run (verify no breaking changes)
