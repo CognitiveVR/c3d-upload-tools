@@ -1,7 +1,25 @@
 #!/bin/bash
 
-# upload-object-manifest.sh
-# Upload a JSON object manifest to the Cognitive3D platform
+# upload-object-manifest.sh - Upload dynamic object manifest to Cognitive3D platform
+#
+# API INTERACTION FLOW (aligned with Unity SDK):
+#
+# 1. Pre-upload Version Check:
+#    GET /v0/scenes/{sceneId}
+#    - Returns: JSON with versionNumber and versionId
+#    - Unity Reference: EditorCore.cs:453-578 (RefreshSceneVersion)
+#
+# 2. Manifest Upload:
+#    POST /v0/objects/{sceneId}?version={versionNumber}
+#    - Content-Type: application/json
+#    - Unity Reference: EditorCore.cs:2991-3139 (UploadManifest)
+#
+# WORKFLOW: Run this AFTER uploading all dynamic objects.
+# The manifest file ({sceneId}_object_manifest.json) should contain
+# all objects you want to display in the dashboard.
+#
+# IMPORTANT: Version parameter ensures manifest is associated with
+# the correct scene version, matching Unity SDK behavior.
 
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -85,11 +103,35 @@ main() {
   check_dependencies
   validate_api_key
 
+  # Pre-upload version check (Unity SDK Reference: EditorCore.cs:453-578)
+  # Get scene version before uploading manifest to ensure version consistency
+  log_info "Retrieving current scene version..."
+  if get_scene_version "$SCENE_ID" "$ENVIRONMENT"; then
+    log_info "Will upload manifest to scene version: $SCENE_VERSION_NUMBER"
+
+    # Validate version number is present
+    if [[ -z "$SCENE_VERSION_NUMBER" ]]; then
+      log_error "Failed to retrieve scene version number"
+      log_error "Cannot upload manifest without version information"
+      exit 1
+    fi
+  else
+    log_error "Failed to retrieve scene version information"
+    log_error "Manifest upload requires valid scene version"
+    exit 1
+  fi
+  echo ""
+
   # Set API URL and JSON file
   local ENDPOINT
   ENDPOINT=$(get_api_base_url "$ENVIRONMENT" "objects")
   ENDPOINT+="/$SCENE_ID"
-  
+
+  # Add version parameter (Unity SDK Reference: CognitiveStatics.cs:46-49)
+  # Format: /v0/objects/{sceneId}?version={versionNumber}
+  ENDPOINT+="?version=${SCENE_VERSION_NUMBER}"
+  log_debug "Manifest upload URL with version: $ENDPOINT"
+
   local MANIFEST_FILE="${SCENE_ID}_object_manifest.json"
   validate_file "$MANIFEST_FILE"
   

@@ -126,8 +126,9 @@ get_scene_version() {
 
   if [[ "$HTTP_STATUS" -eq 200 ]]; then
     # Parse version info from JSON response
-    SCENE_VERSION_NUMBER=$(echo "$HTTP_BODY" | jq -r '.versionNumber // empty')
-    SCENE_VERSION_ID=$(echo "$HTTP_BODY" | jq -r '.versionId // empty')
+    # API returns versions array, get the latest version (last element)
+    SCENE_VERSION_NUMBER=$(echo "$HTTP_BODY" | jq -r '.versions[-1].versionNumber // empty')
+    SCENE_VERSION_ID=$(echo "$HTTP_BODY" | jq -r '.versions[-1].id // empty')
 
     if [[ -n "$SCENE_VERSION_NUMBER" ]]; then
       log_info "Current scene version: $SCENE_VERSION_NUMBER (versionId: $SCENE_VERSION_ID)"

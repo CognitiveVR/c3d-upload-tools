@@ -1,5 +1,31 @@
 #!/bin/bash
 
+# upload-object.sh - Upload dynamic 3D objects to Cognitive3D platform
+#
+# API INTERACTION FLOW (aligned with Unity SDK):
+#
+# 1. Pre-upload Version Check:
+#    GET /v0/scenes/{sceneId}
+#    - Returns: JSON with versionNumber and versionId
+#    - Unity Reference: EditorCore.cs:453-578 (RefreshSceneVersion)
+#
+# 2. Object Upload:
+#    POST /v0/objects/{sceneId}/{objectId}?version={versionNumber}
+#    - Content-Type: multipart/form-data
+#    - Unity Reference: ExportUtility.cs:2276-2456 (UploadDynamicObjects)
+#
+# 3. Manifest Accumulation:
+#    - Merges object into {sceneId}_object_manifest.json
+#    - Unity Reference: EditorCore.cs:3036-3099 (manifest generation)
+#
+# 4. Manifest Upload (separate script):
+#    POST /v0/objects/{sceneId}?version={versionNumber}
+#    - Unity Reference: EditorCore.cs:2991-3139 (UploadManifest)
+#
+# IMPORTANT: This implementation matches Unity SDK API patterns.
+# Objects are uploaded one at a time (user-specified directory).
+# Manifest is accumulated and uploaded separately after all objects.
+
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/upload-utils.sh"
@@ -50,18 +76,46 @@ main() {
         shift
         ;;
       --help|-h)
-        echo "Usage: $0 [--scene_id <scene_id>] --object_filename <object_filename> --object_dir <object_directory> [--object_id <object_id>] [--env <prod|dev>] [--verbose] [--dry_run]"
-        echo "  --scene_id        Scene ID to upload object to (or set C3D_SCENE_ID environment variable)"
-        echo "  --object_filename Object filename (without extension)"
-        echo "  --object_dir      Path to directory containing object files"
-        echo "  --object_id       Optional. Object ID (defaults to object_filename)"
-        echo "  --env             Optional. Either 'prod' (default) or 'dev'"
-        echo "  --verbose         Optional. Enables verbose output"
-        echo "  --dry_run         Optional. Preview operations without executing them"
-        echo
-        echo "Environment Variables:"
-        echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
-        echo "  C3D_SCENE_ID            Default scene ID (avoids --scene_id parameter)"
+        cat <<'EOF'
+Usage: upload-object.sh [--scene_id <scene_id>] --object_filename <object_filename> --object_dir <object_directory> [OPTIONS]
+
+Required:
+  --scene_id <id>            Scene UUID (can also use C3D_SCENE_ID env var)
+  --object_filename <name>   Object filename without extension
+  --object_dir <path>        Directory containing object files
+
+Optional:
+  --object_id <id>           Custom object ID (defaults to filename)
+  --env <prod|dev>           Environment (default: prod)
+  --verbose                  Enable verbose logging
+  --dry_run                  Preview operations without executing
+
+Required Files in Object Directory:
+  - <filename>.gltf          GLTF scene definition
+  - <filename>.bin           Binary scene data
+  - cvr_object_thumbnail.png Object thumbnail (required)
+  - *.png, *.jpg, *.jpeg     Additional textures (optional)
+
+Workflow:
+  1. Upload objects: ./upload-object.sh --scene_id <id> --object_filename obj1 --object_dir dir1
+  2. Upload more:    ./upload-object.sh --scene_id <id> --object_filename obj2 --object_dir dir2
+  3. Upload manifest: ./upload-object-manifest.sh --scene_id <id> --env prod
+
+Note: Manifest is accumulated locally but NOT uploaded automatically.
+      After uploading all objects, run upload-object-manifest.sh to upload the manifest.
+
+Examples:
+  export C3D_SCENE_ID="76653a38-71a1-423a-a1b1-2fe6676033d6"
+  export C3D_DEVELOPER_API_KEY="your_api_key_here"
+
+  ./upload-object.sh --object_filename cube --object_dir ./objects
+  ./upload-object.sh --object_filename lamp --object_dir ./objects
+  ./upload-object-manifest.sh --env prod
+
+Environment Variables:
+  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key
+  C3D_SCENE_ID            Default scene ID (avoids --scene_id parameter)
+EOF
         exit 0
         ;;
       *)
@@ -128,6 +182,25 @@ main() {
   log_debug "Environment: $ENVIRONMENT"
   log_debug "Object ID: $OBJECT_ID"
 
+  # Pre-upload version check (Unity SDK Reference: EditorCore.cs:453-578)
+  # Get scene version before uploading objects to ensure version consistency
+  log_info "Retrieving current scene version..."
+  if get_scene_version "$SCENE_ID" "$ENVIRONMENT"; then
+    log_info "Will upload to scene version: $SCENE_VERSION_NUMBER"
+
+    # Validate version number is present
+    if [[ -z "$SCENE_VERSION_NUMBER" ]]; then
+      log_error "Failed to retrieve scene version number"
+      log_error "Cannot upload object without version information"
+      exit 1
+    fi
+  else
+    log_error "Failed to retrieve scene version information"
+    log_error "Object upload requires valid scene version"
+    exit 1
+  fi
+  echo ""
+
   # Construct file paths
   local GLTF_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.gltf"
   local BIN_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.bin"
@@ -159,7 +232,11 @@ main() {
     UPLOAD_URL+="/$OBJECT_ID"
   fi
 
-  log_debug "Upload URL: $UPLOAD_URL"
+  # Add version parameter (Unity SDK Reference: CognitiveStatics.cs:52-55)
+  # Format: /v0/objects/{sceneId}/{objectId}?version={versionNumber}
+  UPLOAD_URL+="?version=${SCENE_VERSION_NUMBER}"
+
+  log_debug "Upload URL with version: $UPLOAD_URL"
   log_debug "Using API key from environment variable"
 
   # Build curl command array
@@ -207,43 +284,62 @@ main() {
   fi
 
   # -------------------------------
-  # Create or Overwrite Manifest File
+  # Generate/Update Object Manifest (Unity SDK Reference: EditorCore.cs:3036-3099)
   # -------------------------------
   local MANIFEST_FILE="${SCENE_ID}_object_manifest.json"
-  log_info "Creating manifest file: $MANIFEST_FILE"
 
-  cat > "$MANIFEST_FILE" <<EOF
+  log_info "Updating object manifest: $MANIFEST_FILE"
+
+  # Create new object entry with Unity SDK format (4 decimal places)
+  local NEW_OBJECT=$(cat <<'EOF'
 {
-  "objects": [
-    {
-      "id": "$OBJECT_ID",
-      "mesh": "$OBJECT_FILENAME",
-      "name": "$OBJECT_FILENAME",
-      "scaleCustom": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "initialPosition": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "initialRotation": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ]
-    }
-  ]
+  "id": "OBJECT_ID_PLACEHOLDER",
+  "mesh": "MESH_PLACEHOLDER",
+  "name": "NAME_PLACEHOLDER",
+  "scaleCustom": [1.0000, 1.0000, 1.0000],
+  "initialPosition": [0.0000, 0.0000, 0.0000],
+  "initialRotation": [0.0000, 0.0000, 0.0000, 1.0000]
 }
 EOF
+  )
 
-  log_debug "Manifest file created: $MANIFEST_FILE"
+  # Replace placeholders
+  NEW_OBJECT=$(echo "$NEW_OBJECT" | sed "s/OBJECT_ID_PLACEHOLDER/$OBJECT_ID/g" | sed "s/MESH_PLACEHOLDER/$OBJECT_FILENAME/g" | sed "s/NAME_PLACEHOLDER/$OBJECT_FILENAME/g")
 
-  log_info "Automatically uploading the manifest."
-  ./upload-object-manifest.sh --scene_id "$SCENE_ID" --env "$ENVIRONMENT" --verbose
+  # Merge with existing manifest or create new one
+  if [[ -f "$MANIFEST_FILE" ]]; then
+    log_debug "Manifest file exists, merging with existing objects"
+
+    # Check if object ID already exists in manifest
+    if jq -e ".objects[] | select(.id == \"$OBJECT_ID\")" "$MANIFEST_FILE" >/dev/null 2>&1; then
+      log_warn "Object ID '$OBJECT_ID' already exists in manifest, updating entry"
+      # Update existing object entry
+      jq --argjson obj "$NEW_OBJECT" \
+        '(.objects[] | select(.id == $obj.id)) = $obj' \
+        "$MANIFEST_FILE" > "${MANIFEST_FILE}.tmp" && mv "${MANIFEST_FILE}.tmp" "$MANIFEST_FILE"
+    else
+      log_debug "Adding new object to manifest"
+      # Append new object to objects array
+      jq --argjson obj "$NEW_OBJECT" \
+        '.objects += [$obj]' \
+        "$MANIFEST_FILE" > "${MANIFEST_FILE}.tmp" && mv "${MANIFEST_FILE}.tmp" "$MANIFEST_FILE"
+    fi
+  else
+    log_debug "Creating new manifest file"
+    # Create new manifest with single object
+    echo "{\"objects\": [$NEW_OBJECT]}" | jq '.' > "$MANIFEST_FILE"
+  fi
+
+  log_info "Manifest updated: $MANIFEST_FILE"
+  log_debug "Current manifest contains $(jq '.objects | length' "$MANIFEST_FILE") object(s)"
+
+  # Manifest has been updated but NOT uploaded yet
+  # Unity SDK uploads manifest AFTER all objects are uploaded (not after each one)
+  log_info ""
+  log_info "💡 TIP: Manifest file updated but NOT uploaded yet"
+  log_info "   After uploading all objects, run:"
+  log_info "   ./upload-object-manifest.sh --scene_id \"$SCENE_ID\" --env \"$ENVIRONMENT\""
+  echo ""
 
   # Calculate and log total execution time
   log_execution_time "$start_time" "Object upload process"
