@@ -105,6 +105,46 @@ validate_api_key() {
   log_info "C3D_DEVELOPER_API_KEY has been set."
 }
 
+# Get current scene version info from API
+# Usage: get_scene_version "$SCENE_ID" "$ENVIRONMENT"
+# Returns: Sets SCENE_VERSION_NUMBER and SCENE_VERSION_ID globals
+# Return codes: 0 = success, 1 = scene not found or error (non-fatal)
+get_scene_version() {
+  local scene_id="$1"
+  local env="$2"
+
+  local version_url=$(get_api_base_url "$env" "scenes")
+  version_url+="/${scene_id}"
+
+  log_debug "Checking current scene version: GET $version_url"
+
+  local response=$(curl --silent --write-out "\n%{http_code}" \
+    --header "Authorization: APIKEY:DEVELOPER ${C3D_DEVELOPER_API_KEY}" \
+    "$version_url")
+
+  parse_http_response "$response"
+
+  if [[ "$HTTP_STATUS" -eq 200 ]]; then
+    # Parse version info from JSON response
+    SCENE_VERSION_NUMBER=$(echo "$HTTP_BODY" | jq -r '.versionNumber // empty')
+    SCENE_VERSION_ID=$(echo "$HTTP_BODY" | jq -r '.versionId // empty')
+
+    if [[ -n "$SCENE_VERSION_NUMBER" ]]; then
+      log_info "Current scene version: $SCENE_VERSION_NUMBER (versionId: $SCENE_VERSION_ID)"
+    else
+      log_debug "Version info not found in response"
+    fi
+    return 0
+  elif [[ "$HTTP_STATUS" -eq 404 ]]; then
+    log_debug "Scene not found (HTTP 404) - this is expected for new scene uploads"
+    return 1
+  else
+    log_warn "Could not retrieve scene version (HTTP $HTTP_STATUS) - continuing anyway"
+    log_debug "Response: $HTTP_BODY"
+    return 1
+  fi
+}
+
 # Get API base URL based on environment
 get_api_base_url() {
   local env="$1"
@@ -159,9 +199,22 @@ handle_http_error() {
   local status="$1"
   local body="$2"
   local operation="${3:-Upload}"
-  
+
   log_error "$operation failed with status $status"
-  
+
+  # Check for HTML error pages (server-side errors that return HTML instead of JSON)
+  # Unity SDK Reference: ExportUtility.cs:542-547
+  if echo "$body" | grep -qi "Internal Server Error\|Bad Request\|<html"; then
+    log_error "Server returned an HTML error page instead of API response"
+    log_error "This usually indicates a server-side issue. Please try again later."
+    echo ""
+    log_debug "Raw server response:"
+    if [ "${VERBOSE:-false}" = true ]; then
+      echo "$body" | head -20
+    fi
+    exit 1
+  fi
+
   case "$status" in
     401)
       if echo "$body" | grep -i "key expired" >/dev/null 2>&1; then

@@ -1,5 +1,33 @@
 #!/bin/bash
 
+# upload-scene.sh - Upload 3D scenes to Cognitive3D platform
+#
+# API INTERACTION FLOW (aligned with Unity SDK):
+#
+# 1. Pre-upload Version Check (for existing scenes):
+#    GET /v0/scenes/{sceneId}
+#    - Returns: JSON with versionNumber and versionId
+#    - Unity Reference: EditorCore.cs:453-578 (RefreshSceneVersion)
+#
+# 2. Scene Upload:
+#    POST /v0/scenes (new scene)
+#    POST /v0/scenes/{sceneId} (update existing)
+#    - Content-Type: multipart/form-data
+#    - Unity Reference: ExportUtility.cs:367-550 (UploadDecimatedScene)
+#
+# 3. Success Response Formats:
+#    - HTTP 201 (new scene): Plain text scene ID (e.g., "76653a38-71a1-423a-a1b1-2fe6676033d6")
+#    - HTTP 200 (updated scene): Empty response body
+#    - Unity Reference: ExportUtility.cs:495-550 (PostSceneUploadResponse)
+#
+# 4. Error Response Handling:
+#    - HTML error pages detected via content matching
+#    - Specific guidance for 401 (expired key), 403 (forbidden), 404 (not found)
+#    - Unity Reference: ExportUtility.cs:542-547 (HTML error detection)
+#
+# IMPORTANT: This implementation matches the Unity SDK's API interaction patterns
+# to ensure consistency across different upload methods.
+
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/upload-utils.sh"
@@ -214,6 +242,19 @@ main() {
     log_debug "Cleaned up backup file"
   fi
 
+  # Pre-upload version check (Unity SDK Reference: EditorCore.cs:453-578)
+  # If updating an existing scene, retrieve current version information first
+  if [[ -n "$SCENE_ID" ]]; then
+    log_info "Retrieving current scene version information..."
+    if get_scene_version "$SCENE_ID" "$ENVIRONMENT"; then
+      log_debug "Pre-upload version check completed successfully"
+      # Version info is now available in SCENE_VERSION_NUMBER and SCENE_VERSION_ID globals
+    else
+      log_debug "Pre-upload version check skipped or failed (non-fatal) - continuing with upload"
+    fi
+    echo ""
+  fi
+
   # Perform API call
   if [[ "$DRY_RUN" = true ]]; then
     log_info "DRY RUN - Would execute this curl command:"
@@ -293,8 +334,39 @@ main() {
 
     log_info "Upload completed in ${upload_duration} seconds (HTTP $HTTP_STATUS)"
 
-    if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
-      process_json_response "$HTTP_BODY" "Upload"
+    # Unity SDK Reference: ExportUtility.cs:495-550
+    # Success codes: 200 (scene updated) or 201 (scene created)
+    # Response formats:
+    #   - HTTP 201: Plain text scene ID (new scene)
+    #   - HTTP 200: Empty body (scene updated)
+    if [[ "$HTTP_STATUS" -eq 200 ]] || [[ "$HTTP_STATUS" -eq 201 ]]; then
+      if [[ "$HTTP_STATUS" -eq 201 ]]; then
+        # New scene created - response body is plain text scene ID
+        if [[ -n "$HTTP_BODY" ]]; then
+          # Trim whitespace and quotes from scene ID
+          SCENE_ID=$(echo "$HTTP_BODY" | tr -d '\n\r"' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          log_info "✓ Scene created successfully!"
+          log_info "Scene ID: $SCENE_ID"
+          echo ""
+          log_info "💡 TIP: Save this Scene ID for uploading objects:"
+          log_info "   export C3D_SCENE_ID=\"$SCENE_ID\""
+          log_info "   Or add it to your .env file: C3D_SCENE_ID=$SCENE_ID"
+        else
+          log_warn "Scene created (HTTP 201) but no scene ID returned in response"
+        fi
+      elif [[ "$HTTP_STATUS" -eq 200 ]]; then
+        # Scene updated - response body is typically empty
+        log_info "✓ Scene updated successfully!"
+        if [[ -n "$HTTP_BODY" ]]; then
+          # Unexpected: got response body for update
+          log_debug "Received unexpected response body:"
+          if echo "$HTTP_BODY" | jq -e . >/dev/null 2>&1; then
+            echo "$HTTP_BODY" | jq '.'
+          else
+            echo "$HTTP_BODY"
+          fi
+        fi
+      fi
     else
       handle_http_error "$HTTP_STATUS" "$HTTP_BODY" "Upload"
     fi
