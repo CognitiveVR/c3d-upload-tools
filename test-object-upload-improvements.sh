@@ -10,6 +10,8 @@
 # 4. Manifest upload with version parameter
 # 5. Duplicate object ID handling
 # 6. Dry-run mode URL validation
+# 7. Re-upload same objects (version consistency)
+# 8. Re-upload manifest (idempotency)
 
 set -e
 set -u
@@ -307,6 +309,56 @@ main() {
   fi
 
   # ============================================================
+  # TEST 7: Re-upload Same Objects - Update Test
+  # ============================================================
+  print_test "7" "Re-upload Same Objects - Version Consistency"
+
+  echo "Re-uploading cube (should update existing entry)..."
+  OUTPUT_REUPLOAD=$(./upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir object-test --env dev --verbose 2>&1)
+
+  if check_success "$OUTPUT_REUPLOAD"; then
+    # Verify it still uploaded to version 1
+    if echo "$OUTPUT_REUPLOAD" | grep -q "scene version: 1"; then
+      OBJECT_COUNT=$(get_manifest_object_count "$MANIFEST_FILE")
+      if [ "$OBJECT_COUNT" -eq 2 ]; then
+        print_pass "Object re-uploaded successfully, manifest still has 2 objects (updated, not duplicated)"
+      else
+        print_fail "Expected 2 objects in manifest after re-upload, found $OBJECT_COUNT"
+      fi
+    else
+      print_fail "Re-upload may have gone to wrong version"
+      echo "$OUTPUT_REUPLOAD" | grep -E "version|Version"
+    fi
+  else
+    print_fail "Object re-upload failed"
+    echo "$OUTPUT_REUPLOAD"
+  fi
+
+  # ============================================================
+  # TEST 8: Re-upload Manifest - Idempotency Test
+  # ============================================================
+  print_test "8" "Re-upload Manifest - Idempotency"
+
+  OUTPUT_MAN_REUPLOAD=$(./upload-object-manifest.sh --scene_id "$SCENE_ID" --env dev --verbose 2>&1)
+
+  if check_version_check "$OUTPUT_MAN_REUPLOAD"; then
+    if echo "$OUTPUT_MAN_REUPLOAD" | grep -q "scene version: 1"; then
+      if check_success "$OUTPUT_MAN_REUPLOAD"; then
+        print_pass "Manifest re-uploaded successfully to same version"
+      else
+        print_fail "Manifest re-upload failed"
+        echo "$OUTPUT_MAN_REUPLOAD"
+      fi
+    else
+      print_fail "Manifest may have uploaded to wrong version"
+      echo "$OUTPUT_MAN_REUPLOAD" | grep -E "version|Version"
+    fi
+  else
+    print_fail "Version check not executed for manifest re-upload"
+    echo "$OUTPUT_MAN_REUPLOAD"
+  fi
+
+  # ============================================================
   # CLEANUP
   # ============================================================
   echo ""
@@ -317,6 +369,20 @@ main() {
   # SUMMARY
   # ============================================================
   print_summary
+
+  # ============================================================
+  # DASHBOARD LINK
+  # ============================================================
+  echo ""
+  echo -e "${COLOR_BLUE}========================================${COLOR_RESET}"
+  echo -e "${COLOR_BLUE}View Test Results in Dashboard${COLOR_RESET}"
+  echo -e "${COLOR_BLUE}========================================${COLOR_RESET}"
+  echo ""
+  echo "Scene ID: $SCENE_ID"
+  echo ""
+  echo "View uploaded objects:"
+  echo "  https://app.c3ddev.com/v3/scenes/$SCENE_ID/v/1/objectlist"
+  echo ""
 }
 
 # Run main function
