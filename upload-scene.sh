@@ -9,10 +9,11 @@
 #    - Returns: JSON with versionNumber and versionId
 #    - Unity Reference: EditorCore.cs:453-578 (RefreshSceneVersion)
 #
-# 2. Scene Upload:
+# 2. Scene Upload (includes screenshot in multipart form):
 #    POST /v0/scenes (new scene)
 #    POST /v0/scenes/{sceneId} (update existing)
 #    - Content-Type: multipart/form-data
+#    - Includes: scene.bin, scene.gltf, screenshot.png, settings.json
 #    - Unity Reference: ExportUtility.cs:367-550 (UploadDecimatedScene)
 #
 # 3. Success Response Formats:
@@ -20,13 +21,20 @@
 #    - HTTP 200 (updated scene): Empty response body
 #    - Unity Reference: ExportUtility.cs:495-550 (PostSceneUploadResponse)
 #
-# 4. Error Response Handling:
+# 4. Separate Screenshot Upload (after scene upload succeeds):
+#    POST /v0/scenes/{sceneId}/screenshot?version={versionNumber}
+#    - Content-Type: multipart/form-data
+#    - Uploads screenshot.png via dedicated endpoint
+#    - Unity Reference: EditorCore.cs:2357-2378 (UploadSceneThumbnail), UploadTools.cs:360
+#
+# 5. Error Response Handling:
 #    - HTML error pages detected via content matching
 #    - Specific guidance for 401 (expired key), 403 (forbidden), 404 (not found)
 #    - Unity Reference: ExportUtility.cs:542-547 (HTML error detection)
 #
 # IMPORTANT: This implementation matches the Unity SDK's API interaction patterns
-# to ensure consistency across different upload methods.
+# to ensure consistency across different upload methods. Screenshots are uploaded
+# both WITH the scene data AND separately via the dedicated screenshot endpoint.
 
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -366,6 +374,17 @@ main() {
             echo "$HTTP_BODY"
           fi
         fi
+      fi
+
+      # Separate screenshot upload (Unity SDK Reference: EditorCore.cs:2357-2378, UploadTools.cs:360)
+      # Upload screenshot separately after scene upload succeeds
+      echo ""
+      log_info "Uploading screenshot via separate API call..."
+      if upload_screenshot "$SCENE_ID" "$SCREENSHOT_FILE" "$ENVIRONMENT"; then
+        log_debug "Screenshot upload completed successfully"
+      else
+        log_warn "Screenshot upload failed, but scene upload was successful"
+        log_warn "You can manually retry screenshot upload later if needed"
       fi
     else
       handle_http_error "$HTTP_STATUS" "$HTTP_BODY" "Upload"

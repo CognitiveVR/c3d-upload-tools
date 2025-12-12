@@ -321,10 +321,69 @@ process_json_response() {
 validate_semantic_version() {
   local version="$1"
   local field_name="${2:-version}"
-  
+
   if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     log_error "Invalid $field_name format: $version"
     log_error "Expected semantic versioning format: x.y.z (e.g., 1.2.3)"
     exit 1
+  fi
+}
+
+# Upload scene screenshot separately (Unity SDK Reference: EditorCore.cs:2357-2378)
+# Usage: upload_screenshot "$SCENE_ID" "$SCREENSHOT_FILE" "$ENVIRONMENT"
+# Returns: 0 = success, 1 = failure
+upload_screenshot() {
+  local scene_id="$1"
+  local screenshot_file="$2"
+  local env="$3"
+
+  log_info "Uploading scene screenshot separately..."
+
+  # Validate screenshot file exists
+  if [[ ! -f "$screenshot_file" ]]; then
+    log_error "Screenshot file not found: $screenshot_file"
+    return 1
+  fi
+
+  # Get current scene version for the screenshot upload
+  if ! get_scene_version "$scene_id" "$env"; then
+    log_error "Failed to retrieve scene version for screenshot upload"
+    return 1
+  fi
+
+  if [[ -z "$SCENE_VERSION_NUMBER" ]]; then
+    log_error "Scene version number is empty, cannot upload screenshot"
+    return 1
+  fi
+
+  # Build screenshot upload URL (Unity SDK Reference: CognitiveStatics.cs:66-69)
+  # Format: /v0/scenes/{sceneId}/screenshot?version={versionNumber}
+  local api_base_url=$(get_api_base_url "$env" "scenes")
+  local screenshot_url="${api_base_url}/${scene_id}/screenshot?version=${SCENE_VERSION_NUMBER}"
+
+  log_debug "Screenshot upload URL: $screenshot_url"
+
+  # Upload screenshot using multipart/form-data
+  local upload_start_time=$(date +%s)
+  local response
+  response=$(curl --silent --write-out "\n%{http_code}" \
+    --location "$screenshot_url" \
+    --header "Authorization: APIKEY:DEVELOPER ${C3D_DEVELOPER_API_KEY}" \
+    --form "screenshot=@$screenshot_file")
+  local upload_end_time=$(date +%s)
+  local upload_duration=$((upload_end_time - upload_start_time))
+
+  # Parse response
+  parse_http_response "$response"
+
+  log_info "Screenshot upload completed in ${upload_duration} seconds (HTTP $HTTP_STATUS)"
+
+  if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
+    log_info "✓ Screenshot uploaded successfully"
+    return 0
+  else
+    log_warn "Screenshot upload failed with status $HTTP_STATUS"
+    log_debug "Response: $HTTP_BODY"
+    return 1
   fi
 }
