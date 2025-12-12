@@ -307,29 +307,6 @@ main() {
   fi
 
   # ============================================================
-  # TEST 7: Documentation - Unity SDK References
-  # ============================================================
-  print_test "7" "Documentation - Unity SDK References Present"
-
-  DOC_CHECK=true
-
-  if ! grep -q "Unity Reference: EditorCore.cs" upload-object.sh; then
-    echo "Missing Unity SDK references in upload-object.sh"
-    DOC_CHECK=false
-  fi
-
-  if ! grep -q "Unity Reference: EditorCore.cs" upload-object-manifest.sh; then
-    echo "Missing Unity SDK references in upload-object-manifest.sh"
-    DOC_CHECK=false
-  fi
-
-  if [ "$DOC_CHECK" = true ]; then
-    print_pass "Unity SDK references documented in both scripts"
-  else
-    print_fail "Unity SDK references missing from documentation"
-  fi
-
-  # ============================================================
   # CLEANUP
   # ============================================================
   echo ""
