@@ -19,127 +19,20 @@ set -u
 # Change to repo root directory (parent of test-scripts)
 cd "$(dirname "$0")/.."
 
-# Colors for output
-COLOR_RESET="\033[0m"
-COLOR_GREEN="\033[1;32m"
-COLOR_RED="\033[1;31m"
-COLOR_BLUE="\033[1;34m"
-COLOR_YELLOW="\033[1;33m"
+# Source common test utilities
+source "$(dirname "$0")/test-utils.sh"
 
-# Test results tracking
-TESTS_PASSED=0
-TESTS_FAILED=0
-TESTS_TOTAL=0
+# ============================================================
+# Test-specific helper functions
+# ============================================================
 
-# Helper functions
-print_section() {
-  echo ""
-  echo -e "${COLOR_BLUE}========================================${COLOR_RESET}"
-  echo -e "${COLOR_BLUE}$1${COLOR_RESET}"
-  echo -e "${COLOR_BLUE}========================================${COLOR_RESET}"
-  echo ""
-}
-
-print_test() {
-  echo -e "${COLOR_YELLOW}TEST $1: $2${COLOR_RESET}"
-  echo ""
-  TESTS_TOTAL=$((TESTS_TOTAL + 1))
-}
-
-print_pass() {
-  echo ""
-  echo -e "${COLOR_GREEN}✓ TEST PASSED: $1${COLOR_RESET}"
-  echo ""
-  TESTS_PASSED=$((TESTS_PASSED + 1))
-}
-
-print_fail() {
-  echo ""
-  echo -e "${COLOR_RED}✗ TEST FAILED: $1${COLOR_RESET}"
-  echo ""
-  TESTS_FAILED=$((TESTS_FAILED + 1))
-}
-
-print_summary() {
-  echo ""
-  echo -e "${COLOR_BLUE}========================================${COLOR_RESET}"
-  echo -e "${COLOR_BLUE}TEST SUMMARY${COLOR_RESET}"
-  echo -e "${COLOR_BLUE}========================================${COLOR_RESET}"
-  echo ""
-  echo "Total Tests:  $TESTS_TOTAL"
-  echo -e "Passed:       ${COLOR_GREEN}$TESTS_PASSED${COLOR_RESET}"
-  echo -e "Failed:       ${COLOR_RED}$TESTS_FAILED${COLOR_RESET}"
-  echo ""
-
-  if [ $TESTS_FAILED -eq 0 ]; then
-    echo -e "${COLOR_GREEN}🎉 ALL TESTS PASSED!${COLOR_RESET}"
-  else
-    echo -e "${COLOR_RED}⚠️  SOME TESTS FAILED${COLOR_RESET}"
-    exit 1
-  fi
-}
-
-# Extract scene ID from upload output
-extract_scene_id() {
-  local output="$1"
-  # Comprehensive ANSI stripping and UUID extraction
-  # 1. Strip ALL ANSI escape sequences (comprehensive pattern)
-  # 2. Extract UUID pattern with grep --color=never to prevent grep from adding colors
-  # 3. Clean any remaining whitespace or invisible characters
-  local scene_id=$(echo "$output" | \
-    sed 's/\x1b\[[0-9;]*[mKHfJABCDsu]//g' | \
-    grep --color=never -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | \
-    head -1 | \
-    tr -d '[:space:]')
-
-  if [[ -z "$scene_id" ]]; then
-    echo "[ERROR] Failed to extract scene ID from output" >&2
-    echo "[DEBUG] Searching for UUID pattern after cleaning" >&2
-    echo "[DEBUG] First 50 lines of output:" >&2
-    echo "$output" | head -50 >&2
-    return 1
-  fi
-
-  echo "$scene_id"
-}
-
-# Check if version check was performed
-check_version_check() {
-  local output="$1"
-  if echo "$output" | grep -q "Retrieving current scene version"; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-# Check if version parameter is in URL
-check_version_parameter() {
-  local output="$1"
-  if echo "$output" | grep -q "version="; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-# Check manifest object count
+# Check manifest object count (specific to object upload tests)
 get_manifest_object_count() {
   local manifest_file="$1"
   if [ -f "$manifest_file" ]; then
     jq '.objects | length' "$manifest_file"
   else
     echo "0"
-  fi
-}
-
-# Check if upload succeeded (HTTP 200 or 201)
-check_success() {
-  local output="$1"
-  if echo "$output" | grep -q "HTTP 200\|HTTP 201"; then
-    return 0
-  else
-    return 1
   fi
 }
 
