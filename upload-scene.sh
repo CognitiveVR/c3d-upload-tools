@@ -359,6 +359,8 @@ main() {
           log_info "💡 TIP: Save this Scene ID for uploading objects:"
           log_info "   export C3D_SCENE_ID=\"$SCENE_ID\""
           log_info "   Or add it to your .env file: C3D_SCENE_ID=$SCENE_ID"
+          # Output clean scene ID to stdout for programmatic parsing (no ANSI codes, no formatting)
+          echo "$SCENE_ID"
         else
           log_warn "Scene created (HTTP 201) but no scene ID returned in response"
         fi

@@ -76,7 +76,25 @@ print_summary() {
 # Extract scene ID from upload output
 extract_scene_id() {
   local output="$1"
-  echo "$output" | grep "Scene ID:" | sed 's/.*Scene ID: \([a-f0-9-]*\).*/\1/'
+  # Comprehensive ANSI stripping and UUID extraction
+  # 1. Strip ALL ANSI escape sequences (comprehensive pattern)
+  # 2. Extract UUID pattern with grep --color=never to prevent grep from adding colors
+  # 3. Clean any remaining whitespace or invisible characters
+  local scene_id=$(echo "$output" | \
+    sed 's/\x1b\[[0-9;]*[mKHfJABCDsu]//g' | \
+    grep --color=never -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | \
+    head -1 | \
+    tr -d '[:space:]')
+
+  if [[ -z "$scene_id" ]]; then
+    echo "[ERROR] Failed to extract scene ID from output" >&2
+    echo "[DEBUG] Searching for UUID pattern after cleaning" >&2
+    echo "[DEBUG] First 50 lines of output:" >&2
+    echo "$output" | head -50 >&2
+    return 1
+  fi
+
+  echo "$scene_id"
 }
 
 # Check if upload succeeded (HTTP 200 or 201)
