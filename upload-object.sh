@@ -94,7 +94,7 @@ Required Files in Object Directory:
   - <filename>.gltf          GLTF scene definition
   - <filename>.bin           Binary scene data
   - cvr_object_thumbnail.png Object thumbnail (required)
-  - *.png, *.jpg, *.jpeg     Additional textures (optional)
+  - *.png, *.jpg, *.jpeg, *.webp  Additional textures (optional)
 
 Workflow:
   1. Upload objects: ./upload-object.sh --scene_id <id> --object_filename obj1 --object_dir dir1
@@ -211,9 +211,9 @@ EOF
   validate_file "$BIN_FILE"
   validate_file "$THUMBNAIL_FILE"
 
-  # Collect texture files (png, jpg, jpeg - excluding thumbnail)
+  # Collect texture files (png, jpg, jpeg, webp - excluding thumbnail)
   local TEXTURE_FORMS=()
-  for TEXTURE_FILE in "$OBJECT_DIRECTORY"/*.png "$OBJECT_DIRECTORY"/*.jpg "$OBJECT_DIRECTORY"/*.jpeg; do
+  for TEXTURE_FILE in "$OBJECT_DIRECTORY"/*.png "$OBJECT_DIRECTORY"/*.jpg "$OBJECT_DIRECTORY"/*.jpeg "$OBJECT_DIRECTORY"/*.webp; do
     # Skip if no matching files (bash glob expands literally if no match)
     [[ -f "$TEXTURE_FILE" ]] || continue
 
@@ -264,7 +264,7 @@ EOF
 
   log_info "Uploading object files to API..."
   log_debug "Upload URL: $UPLOAD_URL"
-  log_debug "Files to upload: ${OBJECT_FILENAME}.bin, ${OBJECT_FILENAME}.gltf, cvr_object_thumbnail.png, textures (png/jpg/jpeg)"
+  log_debug "Files to upload: ${OBJECT_FILENAME}.bin, ${OBJECT_FILENAME}.gltf, cvr_object_thumbnail.png, textures (png/jpg/jpeg/webp)"
 
   local upload_start_time=$(date +%s)
   local RESPONSE

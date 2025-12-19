@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Object Operations
 
-- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects (supports PNG, JPG, JPEG textures)
+- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects (supports PNG, JPG, JPEG, WEBP textures)
 - `./upload-object-manifest.sh [--scene_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload object manifest after object upload
 - `./list-objects.sh [--scene_id <id>] --env <env> --verbose` - List objects for a scene
 
@@ -43,9 +43,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Texture Format Support
 
-- **Object uploads** support PNG, JPG, and JPEG texture files
-- Textures are automatically detected and uploaded with object files
-- Thumbnail must be named `cvr_object_thumbnail.png` (PNG format required)
+- **Scene uploads** support PNG, JPG, JPEG, and WEBP image files
+- **Object uploads** support PNG, JPG, JPEG, and WEBP texture files
+- Textures are automatically detected and uploaded with scene/object files
+- Object thumbnail must be named `cvr_object_thumbnail.png` (PNG format required)
 
 ### Environment Variable Support (SDK-191) ✅
 **Streamlined Workflow with .env:**
