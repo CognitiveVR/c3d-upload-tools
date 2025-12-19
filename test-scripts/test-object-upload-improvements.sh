@@ -53,7 +53,7 @@ main() {
   # ============================================================
   print_test "0" "Setup - Create Test Scene"
 
-  OUTPUT=$(./upload-scene.sh --scene_dir scene-test --env dev --verbose 2>&1)
+  OUTPUT=$(./upload-scene.sh --scene_dir SciFiHelmet --env dev --verbose 2>&1)
 
   if check_success "$OUTPUT"; then
     SCENE_ID=$(extract_scene_id "$OUTPUT")

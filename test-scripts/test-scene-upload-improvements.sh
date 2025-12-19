@@ -36,6 +36,7 @@ main() {
   echo "Updating scene names with timestamps..."
   update_scene_timestamp "scene-test"
   update_scene_timestamp "test-scene-vancouver"
+  update_scene_timestamp "SciFiHelmet"
   echo ""
 
   # ============================================================

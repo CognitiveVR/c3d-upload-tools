@@ -44,7 +44,7 @@ fi
 ## wait for enter key
 read -p "Press Enter to continue..."
 
-./upload-scene.sh --scene_id $SCENE_ID --scene_dir scene-test --env $ENV --verbose
+./upload-scene.sh --scene_id $SCENE_ID --scene_dir SciFiHelmet --env $ENV --verbose
 
 # Set C3D_SCENE_ID for remaining commands to test environment variable fallback
 export C3D_SCENE_ID="$SCENE_ID"
