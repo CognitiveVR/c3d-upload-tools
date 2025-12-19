@@ -13,6 +13,9 @@
 set -e
 set -u
 
+# Change to repo root directory (parent of test-scripts)
+cd "$(dirname "$0")/.."
+
 # Colors for output
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -182,8 +185,8 @@ main() {
   # Update scene names with current timestamp for unique test runs
   echo ""
   echo "Updating scene names with timestamps..."
-  update_scene_timestamp "../scene-test"
-  update_scene_timestamp "../vancouver-scene-test"
+  update_scene_timestamp "scene-test"
+  update_scene_timestamp "vancouver-scene-test"
   echo ""
 
   # ============================================================
@@ -191,7 +194,7 @@ main() {
   # ============================================================
   print_test "1" "Dry Run - No Breaking Changes"
 
-  OUTPUT=$(../upload-scene.sh --scene_dir ../scene-test --env dev --dry_run --verbose 2>&1)
+  OUTPUT=$(./upload-scene.sh --scene_dir scene-test --env dev --dry_run --verbose 2>&1)
 
   if echo "$OUTPUT" | grep -q "DRY RUN completed"; then
     print_pass "Dry run completed successfully, no breaking changes"
@@ -205,7 +208,7 @@ main() {
   # ============================================================
   print_test "2" "New Scene Upload - Plain Text Scene ID Extraction"
 
-  OUTPUT=$(../upload-scene.sh --scene_dir ../scene-test --env dev --verbose 2>&1)
+  OUTPUT=$(./upload-scene.sh --scene_dir scene-test --env dev --verbose 2>&1)
 
   if check_success "$OUTPUT"; then
     if check_scene_id_extracted "$OUTPUT"; then
@@ -232,7 +235,7 @@ main() {
   if [ -n "${SCENE_ID_1:-}" ]; then
     print_test "3" "Scene Update - Pre-Upload Version Check"
 
-    OUTPUT=$(../upload-scene.sh --scene_dir ../scene-test --scene_id "$SCENE_ID_1" --env dev --verbose 2>&1)
+    OUTPUT=$(./upload-scene.sh --scene_dir scene-test --scene_id "$SCENE_ID_1" --env dev --verbose 2>&1)
 
     if check_version_check "$OUTPUT"; then
       if check_success "$OUTPUT"; then
@@ -255,7 +258,7 @@ main() {
   print_test "4" "Large Scene Upload (76MB) - Performance Test"
 
   echo "Uploading large scene (this may take 30+ seconds)..."
-  OUTPUT=$(../upload-scene.sh --scene_dir ../vancouver-scene-test --env dev --verbose 2>&1)
+  OUTPUT=$(./upload-scene.sh --scene_dir vancouver-scene-test --env dev --verbose 2>&1)
 
   if check_success "$OUTPUT"; then
     if check_scene_id_extracted "$OUTPUT"; then
@@ -283,7 +286,7 @@ main() {
 
     # Note: This may succeed or fail depending on API behavior
     # The important thing is to check if HTML errors are detected when they occur
-    OUTPUT=$(../upload-scene.sh --scene_dir ../vancouver-scene-test --scene_id "$SCENE_ID_2" --env dev --verbose 2>&1 || true)
+    OUTPUT=$(./upload-scene.sh --scene_dir vancouver-scene-test --scene_id "$SCENE_ID_2" --env dev --verbose 2>&1 || true)
 
     if check_html_error_detection "$OUTPUT"; then
       print_pass "HTML error page detected and handled gracefully"
