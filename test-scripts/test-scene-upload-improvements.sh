@@ -16,8 +16,8 @@ set -u
 # Change to repo root directory (parent of test-scripts)
 cd "$(dirname "$0")/.."
 
-# Source common test utilities
-source "$(dirname "$0")/test-utils.sh"
+# Source common test utilities (from repo root)
+source test-scripts/test-utils.sh
 
 # Main test execution
 main() {
