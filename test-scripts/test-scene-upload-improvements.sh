@@ -27,7 +27,7 @@ main() {
   echo "with the Unity SDK's API interaction patterns."
   echo ""
   echo "Testing environment: dev (data.c3ddev.com)"
-  echo "Test scenes: scene-test, vancouver-scene-test"
+  echo "Test scenes: scene-test, test-scene-vancouver"
   echo ""
   read -p "Press Enter to start tests..."
 
@@ -35,7 +35,7 @@ main() {
   echo ""
   echo "Updating scene names with timestamps..."
   update_scene_timestamp "scene-test"
-  update_scene_timestamp "vancouver-scene-test"
+  update_scene_timestamp "test-scene-vancouver"
   echo ""
 
   # ============================================================
@@ -107,7 +107,7 @@ main() {
   print_test "4" "Large Scene Upload (76MB) - Performance Test"
 
   echo "Uploading large scene (this may take 30+ seconds)..."
-  OUTPUT=$(./upload-scene.sh --scene_dir vancouver-scene-test --env dev --verbose 2>&1)
+  OUTPUT=$(./upload-scene.sh --scene_dir test-scene-vancouver --env dev --verbose 2>&1)
 
   if check_success "$OUTPUT"; then
     if check_scene_id_extracted "$OUTPUT"; then
@@ -128,6 +128,42 @@ main() {
   fi
 
   # ============================================================
+  # TEST 4.5: Textured Scene Upload (SciFiHelmet)
+  # ============================================================
+  print_test "4.5" "Textured Scene Upload (SciFiHelmet) - Performance Test"
+
+  # Check if SciFiHelmet directory exists
+  if [[ ! -d "SciFiHelmet" ]]; then
+    print_fail "SciFiHelmet directory not found - skipping test"
+  else
+    echo "Uploading large textured scene (this may take 30+ seconds)..."
+
+    # Disable exit-on-error temporarily to capture failures
+    set +e
+    OUTPUT=$(./upload-scene.sh --scene_dir SciFiHelmet --env dev --verbose 2>&1)
+    UPLOAD_EXIT_CODE=$?
+    set -e
+
+    if [[ $UPLOAD_EXIT_CODE -eq 0 ]] && check_success "$OUTPUT"; then
+      if check_scene_id_extracted "$OUTPUT"; then
+        SCENE_ID_2_SCIFI=$(extract_scene_id "$OUTPUT")
+        echo "Extracted Scene ID: $SCENE_ID_2_SCIFI"
+
+        UPLOAD_TIME=$(echo "$OUTPUT" | grep "Upload completed in" | sed 's/.*Upload completed in \([0-9]*\) seconds.*/\1/')
+        echo "Upload time: ${UPLOAD_TIME}s"
+
+        print_pass "Textured scene uploaded successfully"
+      else
+        print_fail "Textured scene uploaded but scene ID not extracted"
+        echo "$OUTPUT"
+      fi
+    else
+      print_fail "Textured scene upload failed (exit code: $UPLOAD_EXIT_CODE)"
+      echo "$OUTPUT"
+    fi
+  fi
+
+  # ============================================================
   # TEST 5: HTML Error Detection
   # ============================================================
   if [ -n "${SCENE_ID_2:-}" ]; then
@@ -135,7 +171,7 @@ main() {
 
     # Note: This may succeed or fail depending on API behavior
     # The important thing is to check if HTML errors are detected when they occur
-    OUTPUT=$(./upload-scene.sh --scene_dir vancouver-scene-test --scene_id "$SCENE_ID_2" --env dev --verbose 2>&1 || true)
+    OUTPUT=$(./upload-scene.sh --scene_dir test-scene-vancouver --scene_id "$SCENE_ID_2" --env dev --verbose 2>&1 || true)
 
     if check_html_error_detection "$OUTPUT"; then
       print_pass "HTML error page detected and handled gracefully"
