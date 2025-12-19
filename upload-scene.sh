@@ -94,7 +94,7 @@ main() {
         echo "  - screenshot.png (required, used as primary scene screenshot)"
         echo
         echo "Optional Additional Images:"
-        echo "  Any other PNG, JPG, or JPEG files in the scene directory will also be uploaded"
+        echo "  Any other PNG, JPG, JPEG, or WEBP files in the scene directory will also be uploaded"
         echo
         echo "Environment Variables:"
         echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
@@ -162,10 +162,10 @@ main() {
   local SCREENSHOT_FILE="$SCENE_DIRECTORY/screenshot.png"
   validate_file "$SCREENSHOT_FILE" 100  # 100MB limit
 
-  # Collect additional image files (png, jpg, jpeg) for upload
+  # Collect additional image files (png, jpg, jpeg, webp) for upload
   local IMAGE_FORMS=()
   local IMAGE_COUNT=0
-  for IMAGE_FILE in "$SCENE_DIRECTORY"/*.png "$SCENE_DIRECTORY"/*.jpg "$SCENE_DIRECTORY"/*.jpeg; do
+  for IMAGE_FILE in "$SCENE_DIRECTORY"/*.png "$SCENE_DIRECTORY"/*.jpg "$SCENE_DIRECTORY"/*.jpeg "$SCENE_DIRECTORY"/*.webp; do
     # Skip if no matching files (bash glob expands literally if no match)
     [[ -f "$IMAGE_FILE" ]] || continue
 
@@ -290,7 +290,7 @@ main() {
       fi
     done
     # Print additional image files (excluding screenshot.png which is already listed)
-    for IMAGE_FILE in "$SCENE_DIRECTORY"/*.png "$SCENE_DIRECTORY"/*.jpg "$SCENE_DIRECTORY"/*.jpeg; do
+    for IMAGE_FILE in "$SCENE_DIRECTORY"/*.png "$SCENE_DIRECTORY"/*.jpg "$SCENE_DIRECTORY"/*.jpeg "$SCENE_DIRECTORY"/*.webp; do
       [[ -f "$IMAGE_FILE" ]] || continue
       local IMAGE_NAME=$(basename "$IMAGE_FILE")
       # Skip screenshot.png as it's already listed
@@ -314,7 +314,7 @@ main() {
   else
     log_info "Uploading scene files to API..."
     log_debug "Upload URL: $BASE_URL"
-    log_debug "Files to upload: scene.bin, scene.gltf, images (png/jpg/jpeg), settings.json"
+    log_debug "Files to upload: scene.bin, scene.gltf, images (png/jpg/jpeg/webp), settings.json"
 
     # Build curl command array
     local CURL_CMD=(curl --silent --write-out "\n%{http_code}" --location "$BASE_URL" \
@@ -359,6 +359,8 @@ main() {
           log_info "💡 TIP: Save this Scene ID for uploading objects:"
           log_info "   export C3D_SCENE_ID=\"$SCENE_ID\""
           log_info "   Or add it to your .env file: C3D_SCENE_ID=$SCENE_ID"
+          # Output clean scene ID to stdout for programmatic parsing (no ANSI codes, no formatting)
+          echo "$SCENE_ID"
         else
           log_warn "Scene created (HTTP 201) but no scene ID returned in response"
         fi

@@ -1,0 +1,181 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.2.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5125,
+      "count": 70074
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 70056,
+      "max": [
+        1.151152491569519,
+        1.4587184190750122,
+        1.2511277198791504
+      ],
+      "min": [
+        -1.151152491569519,
+        -1.4587182998657227,
+        -1.2511286735534668
+      ]
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5126,
+      "count": 70056
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 70056
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 189224
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 0
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 2
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 3
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 1
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/webp",
+      "uri": "SciFiHelmet_BaseColor.webp"
+    },
+    {
+      "mimeType": "image/webp",
+      "uri": "SciFiHelmet_MetallicRoughness.webp"
+    },
+    {
+      "mimeType": "image/webp",
+      "uri": "SciFiHelmet_Normal.webp"
+    },
+    {
+      "mimeType": "image/webp",
+      "uri": "SciFiHelmet_AmbientOcclusion.webp"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "SciFiHelmet.bin",
+      "byteLength": 189224
+    }
+  ],
+  "materials": [
+    {
+      "name": "SciFiHelmet",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicRoughnessTexture": {
+          "index": 3
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      },
+      "occlusionTexture": {
+        "index": 2
+      },
+      "extensions": {
+        "KHR_materials_unlit": {}
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "SciFiHelmet",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1,
+            "TANGENT": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0,
+          "extensions": {
+            "KHR_draco_mesh_compression": {
+              "bufferView": 0,
+              "attributes": {
+                "POSITION": 0,
+                "TANGENT": 1,
+                "TEXCOORD_0": 2
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "SciFiHelmet",
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_texture_webp",
+    "KHR_draco_mesh_compression",
+    "KHR_materials_unlit"
+  ],
+  "extensionsRequired": [
+    "EXT_texture_webp",
+    "KHR_draco_mesh_compression"
+  ]
+}
