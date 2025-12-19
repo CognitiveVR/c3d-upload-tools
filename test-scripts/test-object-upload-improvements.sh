@@ -139,7 +139,7 @@ main() {
   # ============================================================
   print_test "0" "Setup - Create Test Scene"
 
-  OUTPUT=$(./upload-scene.sh --scene_dir scene-test --env dev --verbose 2>&1)
+  OUTPUT=$(../upload-scene.sh --scene_dir ../scene-test --env dev --verbose 2>&1)
 
   if check_success "$OUTPUT"; then
     SCENE_ID=$(extract_scene_id "$OUTPUT")
@@ -164,7 +164,7 @@ main() {
   # ============================================================
   print_test "1" "Single Object Upload - Version Check & Version Parameter"
 
-  OUTPUT=$(./upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir object-test --env dev --verbose 2>&1)
+  OUTPUT=$(../upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir ../object-test --env dev --verbose 2>&1)
 
   if check_version_check "$OUTPUT"; then
     if check_version_parameter "$OUTPUT"; then
@@ -194,7 +194,7 @@ main() {
   # ============================================================
   print_test "2" "Multiple Objects - Manifest Accumulation (Not Overwrite)"
 
-  OUTPUT=$(./upload-object.sh --scene_id "$SCENE_ID" --object_filename Lantern --object_dir lantern-test --env dev --verbose 2>&1)
+  OUTPUT=$(../upload-object.sh --scene_id "$SCENE_ID" --object_filename Lantern --object_dir ../lantern-test --env dev --verbose 2>&1)
 
   if check_success "$OUTPUT"; then
     OBJECT_COUNT=$(get_manifest_object_count "$MANIFEST_FILE")
@@ -221,7 +221,7 @@ main() {
   # ============================================================
   print_test "3" "Manifest Upload - Pre-Upload Version Check & Version Parameter"
 
-  OUTPUT=$(./upload-object-manifest.sh --scene_id "$SCENE_ID" --env dev --verbose 2>&1)
+  OUTPUT=$(../upload-object-manifest.sh --scene_id "$SCENE_ID" --env dev --verbose 2>&1)
 
   if check_version_check "$OUTPUT"; then
     if check_version_parameter "$OUTPUT"; then
@@ -245,7 +245,7 @@ main() {
   # ============================================================
   print_test "4" "Duplicate Object ID - Update Not Duplicate"
 
-  OUTPUT=$(./upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir object-test --env dev --verbose 2>&1)
+  OUTPUT=$(../upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir ../object-test --env dev --verbose 2>&1)
 
   if echo "$OUTPUT" | grep -q "already exists in manifest"; then
     OBJECT_COUNT=$(get_manifest_object_count "$MANIFEST_FILE")
@@ -265,8 +265,8 @@ main() {
   # ============================================================
   print_test "5" "Dry-Run Mode - Version Parameters in URLs"
 
-  OUTPUT_OBJ=$(./upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir object-test --env dev --dry_run --verbose 2>&1)
-  OUTPUT_MAN=$(./upload-object-manifest.sh --scene_id "$SCENE_ID" --env dev --dry_run --verbose 2>&1)
+  OUTPUT_OBJ=$(../upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir ../object-test --env dev --dry_run --verbose 2>&1)
+  OUTPUT_MAN=$(../upload-object-manifest.sh --scene_id "$SCENE_ID" --env dev --dry_run --verbose 2>&1)
 
   OBJ_HAS_VERSION=false
   MAN_HAS_VERSION=false
@@ -314,7 +314,7 @@ main() {
   print_test "7" "Re-upload Same Objects - Version Consistency"
 
   echo "Re-uploading cube (should update existing entry)..."
-  OUTPUT_REUPLOAD=$(./upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir object-test --env dev --verbose 2>&1)
+  OUTPUT_REUPLOAD=$(../upload-object.sh --scene_id "$SCENE_ID" --object_filename cube --object_dir ../object-test --env dev --verbose 2>&1)
 
   if check_success "$OUTPUT_REUPLOAD"; then
     # Verify it still uploaded to version 1
@@ -339,7 +339,7 @@ main() {
   # ============================================================
   print_test "8" "Re-upload Manifest - Idempotency"
 
-  OUTPUT_MAN_REUPLOAD=$(./upload-object-manifest.sh --scene_id "$SCENE_ID" --env dev --verbose 2>&1)
+  OUTPUT_MAN_REUPLOAD=$(../upload-object-manifest.sh --scene_id "$SCENE_ID" --env dev --verbose 2>&1)
 
   if check_version_check "$OUTPUT_MAN_REUPLOAD"; then
     if echo "$OUTPUT_MAN_REUPLOAD" | grep -q "scene version: 1"; then

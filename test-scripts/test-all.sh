@@ -3,10 +3,10 @@
 # usage: test-all.sh [scene_id] [env]
 # This script runs a series of upload and list commands for a given scene and environment.
 
-# Required: Run `./upload-scene.sh` script with no scene_id first; use that scene_id for this script.
+# Required: Run `../upload-scene.sh` script with no scene_id first; use that scene_id for this script.
 
 # Source utilities to get load_env_file function
-source ./upload-utils.sh
+source ../upload-utils.sh
 
 # Load environment variables from .env file if it exists
 load_env_file
@@ -41,21 +41,21 @@ fi
 ## wait for enter key
 read -p "Press Enter to continue..."
 
-./upload-scene.sh --scene_id $SCENE_ID --scene_dir scene-test --env $ENV --verbose
+../upload-scene.sh --scene_id $SCENE_ID --scene_dir ../scene-test --env $ENV --verbose
 
 # Set C3D_SCENE_ID for remaining commands to test environment variable fallback
 export C3D_SCENE_ID="$SCENE_ID"
 
-./upload-object.sh --object_filename cube --object_id cube --object_dir object-test --env $ENV --verbose
+../upload-object.sh --object_filename cube --object_id cube --object_dir ../object-test --env $ENV --verbose
 
-./upload-object-manifest.sh --env $ENV --verbose
+../upload-object-manifest.sh --env $ENV --verbose
 
-./upload-object.sh --object_filename Lantern --object_id Lantern-PNG --object_dir lantern-test --env $ENV --verbose
+../upload-object.sh --object_filename Lantern --object_id Lantern-PNG --object_dir ../lantern-test --env $ENV --verbose
 
-./upload-object-manifest.sh --env $ENV --verbose
+../upload-object-manifest.sh --env $ENV --verbose
 
-./upload-object.sh --object_filename Lantern --object_id Lantern-JPEG --object_dir lantern-test-jpg --env $ENV --verbose
+../upload-object.sh --object_filename Lantern --object_id Lantern-JPEG --object_dir ../lantern-test-jpg --env $ENV --verbose
 
-./upload-object-manifest.sh --env $ENV --verbose
+../upload-object-manifest.sh --env $ENV --verbose
 
-./list-objects.sh --env $ENV --verbose
+../list-objects.sh --env $ENV --verbose
