@@ -10,3 +10,4 @@
 .env.dev
 .env.prod
 .env.upload2.dev
+.env*
