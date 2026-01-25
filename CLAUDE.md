@@ -41,6 +41,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. Upload object manifest to display objects in dashboard
 4. Object manifests are automatically generated but can be manually edited before upload
 
+### Object Manifest Structure
+
+The object manifest follows Unity SDK conventions. Each object entry has:
+- `id`: A unique UUID identifying this object instance (auto-generated if not provided)
+- `mesh`: The name of the 3D model file (e.g., "cube" for cube.gltf/cube.bin)
+- `name`: Display name for the object (defaults to mesh name)
+- `scaleCustom`: Scale factors [x, y, z]
+- `initialPosition`: Starting position [x, y, z]
+- `initialRotation`: Quaternion rotation [x, y, z, w]
+
+**Important:** The `id` field is a UUID, not the mesh name. Multiple objects can share the same `mesh` but must have unique `id` values. When no `--object_id` is provided, scripts auto-generate a UUID.
+
 ### Texture Format Support
 
 - **Scene uploads** support PNG, JPG, JPEG, and WEBP image files
