@@ -167,12 +167,11 @@ EOF
 
   log_info "Using environment: $ENVIRONMENT"
 
-  # if object_id is not provided, it will be created from the object_filename
+  # if object_id is not provided, generate a UUID (matches Unity SDK behavior)
+  # Unity SDK uses GUID for id, separate from mesh name
   if [[ -z "$OBJECT_ID" ]]; then
-    OBJECT_ID=$(basename "$OBJECT_FILENAME")
-    # OBJECT_ID="RANDOM_SOMETHING_1234"
-    # make the OBJECT_ID a string as the current milliseconds timestamp to ensure uniqueness
-    log_debug "Object ID not provided, using derived ID: $OBJECT_ID"
+    OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+    log_debug "Object ID not provided, generated UUID: $OBJECT_ID"
   fi
 
   # Log the parameters
