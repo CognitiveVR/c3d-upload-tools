@@ -232,11 +232,11 @@ function Upload-C3DObject {
         $SceneId = ConvertTo-C3DLowerUuid -Uuid $SceneId -FieldName 'SceneId'
         Write-C3DLog -Message "Scene ID: $SceneId" -Level Debug
         
-        # Handle Object ID - validate UUID format only if explicitly provided
+        # Handle Object ID - generate UUID if not explicitly provided (matches Unity SDK behavior)
+        # Unity SDK uses GUID for id, separate from mesh name
         if (-not $ObjectId) {
-            # Use object filename as ID (bash script behavior)
-            $ObjectId = $ObjectFilename
-            Write-C3DLog -Message "Object ID not provided, using derived ID: $ObjectId" -Level Debug
+            $ObjectId = [guid]::NewGuid().ToString().ToLower()
+            Write-C3DLog -Message "Object ID not provided, generated UUID: $ObjectId" -Level Debug
         } else {
             # Validate UUID format for explicitly provided ObjectId
             if (-not (Test-C3DUuidFormat -Uuid $ObjectId -FieldName 'ObjectId')) {

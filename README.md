@@ -155,6 +155,15 @@ Upload-C3DObject -ObjectFilename <name> -ObjectDirectory <directory> [-SceneId <
 - `<filename>.gltf`, `<filename>.bin`
 - `cvr_object_thumbnail.png` (optional, recommended)
 
+**Object Manifest:**
+When you upload an object, a manifest file (`{scene_id}_object_manifest.json`) is automatically created/updated. Each object entry includes:
+- A unique `id` (UUID) - auto-generated for each upload
+- `mesh` - the filename of the 3D model
+- `name` - display name in the dashboard
+- Transform data (position, rotation, scale)
+
+You can edit the manifest file before running `upload-object-manifest.sh` to customize positions or add multiple instances of the same object.
+
 **Examples:**
 ```bash
 # Upload object (scene ID from environment)
