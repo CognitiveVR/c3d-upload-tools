@@ -4,9 +4,11 @@ function Upload-C3DScene {
         Uploads a Cognitive3D scene to the API with comprehensive validation and progress tracking.
 
     .DESCRIPTION
-        PowerShell equivalent of upload-scene.sh that uploads scene files (scene.bin, scene.gltf, 
-        screenshot.png, settings.json) to the Cognitive3D API. Provides enhanced error handling,
-        progress indicators, and native JSON processing without external dependencies.
+        PowerShell equivalent of upload-scene.sh that uploads scene files (scene.bin, scene.gltf,
+        screenshot.png, settings.json) to the Cognitive3D API. Also discovers and uploads any
+        additional image files (PNG, JPG, JPEG, WEBP) in the scene directory as textures.
+        Provides enhanced error handling, progress indicators, and native JSON processing
+        without external dependencies.
 
     .PARAMETER SceneDirectory
         Path to directory containing the required scene files:
@@ -227,7 +229,35 @@ function Upload-C3DScene {
             $fileSize = Get-C3DFileSize -Path $filePath
             Write-C3DLog -Message "$fileName`: $($fileSize.FormattedSize)" -Level Debug
         }
-        
+
+        # Discover additional image files (png, jpg, jpeg, webp) excluding screenshot.png
+        $additionalImages = @()
+        $imageExtensions = @('*.png', '*.jpg', '*.jpeg', '*.webp')
+        foreach ($ext in $imageExtensions) {
+            $imageFiles = Get-ChildItem -Path $SceneDirectory -Filter $ext -File -ErrorAction SilentlyContinue
+            foreach ($imageFile in $imageFiles) {
+                # Skip screenshot.png as it's already in required files
+                if ($imageFile.Name -eq 'screenshot.png') {
+                    continue
+                }
+                # Validate file size (100MB limit)
+                if ($imageFile.Length -gt 100MB) {
+                    $sizeMB = [math]::Round($imageFile.Length / 1MB, 2)
+                    Write-C3DLog -Message "Warning: Skipping '$($imageFile.Name)' - too large: $sizeMB MB (maximum: 100 MB)" -Level Warn
+                    continue
+                }
+                $additionalImages += $imageFile
+                $filePaths[$imageFile.Name] = $imageFile.FullName
+                Write-C3DLog -Message "Adding additional image: $($imageFile.Name)" -Level Debug
+            }
+        }
+
+        if ($additionalImages.Count -gt 0) {
+            Write-C3DLog -Message "Found $($additionalImages.Count) additional image file(s) to upload (plus required screenshot.png)" -Level Info
+        } else {
+            Write-C3DLog -Message "Uploading screenshot.png (no additional images found)" -Level Info
+        }
+
         # Read and validate SDK version
         $sdkVersionFile = Join-Path -Path $PSScriptRoot -ChildPath "../../sdk-version.txt"
         if (-not (Test-Path -Path $sdkVersionFile -PathType Leaf)) {
@@ -291,8 +321,11 @@ function Upload-C3DScene {
         }
         Write-C3DLog -Message "Using API URL: $apiUrl" -Level Info
         
-        # Add settings.json to required files for upload
+        # Build upload file list: required files + settings.json + additional images
         $uploadFiles = $requiredFiles + @('settings.json')
+        foreach ($img in $additionalImages) {
+            $uploadFiles += $img.Name
+        }
 
         # Prepare upload
         if ($DryRun) {
@@ -303,7 +336,13 @@ function Upload-C3DScene {
                 Write-Host "  - $fileName`: $($fileSize.FormattedSize)" -ForegroundColor Cyan
             }
             Write-Host "  - settings.json: (generated)" -ForegroundColor Cyan
-            
+
+            # Show additional image files
+            foreach ($img in $additionalImages) {
+                $fileSize = Get-C3DFileSize -Path $img.FullName
+                Write-Host "  - $($img.Name): $($fileSize.FormattedSize)" -ForegroundColor Cyan
+            }
+
             Write-C3DLog -Message "API URL: $apiUrl" -Level Info
             Write-C3DLog -Message "Method: POST (multipart/form-data)" -Level Info
             Write-C3DLog -Message "Authorization: APIKEY:DEVELOPER [REDACTED]" -Level Info
