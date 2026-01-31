@@ -5,10 +5,10 @@ function Upload-C3DScene {
 
     .DESCRIPTION
         PowerShell equivalent of upload-scene.sh that uploads scene files (scene.bin, scene.gltf,
-        screenshot.png, settings.json) to the Cognitive3D API. Also discovers and uploads any
-        additional image files (PNG, JPG, JPEG, WEBP) in the scene directory as textures.
-        Provides enhanced error handling, progress indicators, and native JSON processing
-        without external dependencies.
+        screenshot.png) and auto-generates settings.json for the Cognitive3D API. Also discovers
+        and uploads any additional image files (PNG, JPG, JPEG, WEBP) in the scene directory as
+        textures. Provides enhanced error handling, progress indicators, and native JSON
+        processing without external dependencies.
 
     .PARAMETER SceneDirectory
         Path to directory containing the required scene files:
@@ -283,6 +283,10 @@ function Upload-C3DScene {
 
         # Generate settings.json
         $settingsFile = Join-Path -Path $SceneDirectory -ChildPath "settings.json"
+        # Warn if existing settings.json will be overwritten
+        if (Test-Path -Path $settingsFile -PathType Leaf) {
+            Write-C3DLog -Message "Existing settings.json found - it will be overwritten with auto-generated content" -Level Warn
+        }
         Write-C3DLog -Message "Generating settings.json with scene name '$settingsSceneName' and SDK version '$fullSdkVersion'" -Level Info
 
         if (-not $DryRun) {

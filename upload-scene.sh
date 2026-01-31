@@ -228,6 +228,10 @@ main() {
   fi
 
   # Generate settings.json internally
+  # Warn if existing settings.json will be overwritten
+  if [[ -f "$JSON_FILE" ]]; then
+    log_warn "Existing settings.json found - it will be overwritten with auto-generated content"
+  fi
   log_info "Generating settings.json with scene name '$SETTINGS_SCENE_NAME' and SDK version '$FULL_SDK_VERSION'"
 
   if [[ "$DRY_RUN" = true ]]; then
