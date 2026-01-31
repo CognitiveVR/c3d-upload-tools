@@ -9,11 +9,15 @@ function Upload-C3DScene {
         progress indicators, and native JSON processing without external dependencies.
 
     .PARAMETER SceneDirectory
-        Path to directory containing the 4 required scene files:
+        Path to directory containing the required scene files:
         - scene.bin (scene binary data)
         - scene.gltf (scene geometry/materials)
         - screenshot.png (scene preview image)
-        - settings.json (scene configuration)
+        Note: settings.json is generated automatically.
+
+    .PARAMETER SceneName
+        Name for the scene. Required when creating a new scene (no SceneId provided).
+        Optional when updating an existing scene.
 
     .PARAMETER Environment
         Target environment for upload. Valid values: 'prod' (default), 'dev'
@@ -73,18 +77,17 @@ function Upload-C3DScene {
     .NOTES
         Prerequisites:
         - C3D_DEVELOPER_API_KEY environment variable must be set
-        - Scene directory must contain all 4 required files:
+        - Scene directory must contain required files:
           * scene.bin (Unity scene binary data)
           * scene.gltf (3D scene geometry and materials)
           * screenshot.png (scene preview image for dashboard)
-          * settings.json (scene configuration and metadata)
+        - Note: settings.json is generated automatically with scene name and SDK version
         - Files must be under 100MB each
         - PowerShell 5.1 or higher
 
         Automatic Features:
-        - settings.json is automatically updated with current SDK version
-        - Creates backup of settings.json before modification
-        - Automatic rollback on failure
+        - settings.json is automatically generated with scene name and SDK version
+        - SDK version prefixed with "cli-powershell-v" for tracking
         - Progress indicators for large uploads
         - Comprehensive validation before upload
 
@@ -116,13 +119,13 @@ function Upload-C3DScene {
     
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory, Position = 0, HelpMessage = "Path to scene directory containing scene.bin, scene.gltf, screenshot.png, settings.json")]
+        [Parameter(Mandatory, Position = 0, HelpMessage = "Path to scene directory containing scene.bin, scene.gltf, screenshot.png")]
         [ValidateScript({
             if (-not (Test-Path $_ -PathType Container)) {
                 throw "Scene directory does not exist: $_"
             }
-            # Validate required files exist in directory
-            $requiredFiles = @('scene.bin', 'scene.gltf', 'screenshot.png', 'settings.json')
+            # Validate required files exist in directory (settings.json is generated automatically)
+            $requiredFiles = @('scene.bin', 'scene.gltf', 'screenshot.png')
             $missingFiles = @()
             foreach ($file in $requiredFiles) {
                 $filePath = Join-Path $_ $file
@@ -145,6 +148,9 @@ function Upload-C3DScene {
             $true
         })]
         [string]$SceneDirectory,
+
+        [Parameter(Position = 1, HelpMessage = "Name for the scene (required for new scenes, optional for updates)")]
+        [string]$SceneName,
         
         [Parameter(HelpMessage = "Target environment: 'prod' or 'dev'")]
         [ValidateSet('prod', 'dev')]
@@ -196,8 +202,13 @@ function Upload-C3DScene {
         $SceneDirectory = (Get-Item -Path $SceneDirectory).FullName
         Write-C3DLog -Message "Scene directory: $SceneDirectory" -Level Debug
         
-        # Define required files
-        $requiredFiles = @('scene.bin', 'scene.gltf', 'screenshot.png', 'settings.json')
+        # Validate SceneName is provided for new scenes
+        if (-not $SceneId -and [string]::IsNullOrWhiteSpace($SceneName)) {
+            throw "SceneName is required when creating a new scene (no SceneId provided)"
+        }
+
+        # Define required files (settings.json is generated automatically)
+        $requiredFiles = @('scene.bin', 'scene.gltf', 'screenshot.png')
         $filePaths = @{}
         
         # Validate scene directory and required files
@@ -232,45 +243,45 @@ function Upload-C3DScene {
         if ($sdkVersion -notmatch '^\d+\.\d+\.\d+$') {
             throw "Invalid SDK version format: $sdkVersion. Expected format: x.y.z"
         }
-        
-        Write-C3DLog -Message "Read SDK version: $sdkVersion" -Level Info
-        
-        # Backup and update settings.json
-        Write-C3DLog -Message "Updating settings.json with SDK version: $sdkVersion" -Level Info
-        
-        $settingsFile = $filePaths['settings.json']
-        
+
+        # Create full SDK version string with cli-powershell prefix
+        $fullSdkVersion = "cli-powershell-v$sdkVersion"
+        Write-C3DLog -Message "SDK version: $fullSdkVersion" -Level Info
+
+        # Determine scene name for settings.json
+        $settingsSceneName = if ([string]::IsNullOrWhiteSpace($SceneName)) { "Scene" } else { $SceneName }
+
+        # Generate settings.json
+        $settingsFile = Join-Path -Path $SceneDirectory -ChildPath "settings.json"
+        Write-C3DLog -Message "Generating settings.json with scene name '$settingsSceneName' and SDK version '$fullSdkVersion'" -Level Info
+
         if (-not $DryRun) {
-            # Create backup
-            $backupFile = Backup-C3DFile -Path $settingsFile
-            
             try {
-                # Read current settings.json
-                $settingsContent = Get-Content -Path $settingsFile -Raw | ConvertFrom-Json
-                
-                # Update SDK version
-                $settingsContent.sdkVersion = $sdkVersion
-                
-                # Write updated settings back to file
-                $settingsContent | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsFile -Encoding UTF8
-                Write-C3DLog -Message "Successfully updated settings.json with SDK version" -Level Debug
-                
-            } catch {
-                Write-C3DLog -Message "Failed to update settings.json: $($_.Exception.Message)" -Level Error
-                
-                # Attempt rollback
-                if ($backupFile -and (Test-Path -Path $backupFile)) {
-                    try {
-                        Copy-Item -Path $backupFile -Destination $settingsFile -Force
-                        Write-C3DLog -Message "Successfully restored settings.json from backup" -Level Info
-                    } catch {
-                        Write-C3DLog -Message "Failed to restore backup - settings.json may be corrupted" -Level Error
-                    }
+                # Create settings object
+                $settingsContent = @{
+                    scale = 1
+                    sceneName = $settingsSceneName
+                    sdkVersion = $fullSdkVersion
                 }
+
+                # Write settings.json
+                $settingsContent | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsFile -Encoding UTF8
+                Write-C3DLog -Message "Successfully generated settings.json" -Level Debug
+
+                # Add to file paths for upload
+                $filePaths['settings.json'] = $settingsFile
+
+            } catch {
+                Write-C3DLog -Message "Failed to generate settings.json: $($_.Exception.Message)" -Level Error
                 throw
             }
         } else {
-            Write-C3DLog -Message "DRY RUN - Would update settings.json with SDK version: $sdkVersion" -Level Info
+            Write-C3DLog -Message "DRY RUN - Would generate settings.json with:" -Level Info
+            Write-Host "  {" -ForegroundColor Cyan
+            Write-Host "    `"scale`": 1," -ForegroundColor Cyan
+            Write-Host "    `"sceneName`": `"$settingsSceneName`"," -ForegroundColor Cyan
+            Write-Host "    `"sdkVersion`": `"$fullSdkVersion`"" -ForegroundColor Cyan
+            Write-Host "  }" -ForegroundColor Cyan
         }
         
         # Build API URL
@@ -280,14 +291,18 @@ function Upload-C3DScene {
         }
         Write-C3DLog -Message "Using API URL: $apiUrl" -Level Info
         
+        # Add settings.json to required files for upload
+        $uploadFiles = $requiredFiles + @('settings.json')
+
         # Prepare upload
         if ($DryRun) {
             Write-C3DLog -Message "DRY RUN - Would upload these files:" -Level Info
-            
+
             foreach ($fileName in $requiredFiles) {
                 $fileSize = Get-C3DFileSize -Path $filePaths[$fileName]
                 Write-Host "  - $fileName`: $($fileSize.FormattedSize)" -ForegroundColor Cyan
             }
+            Write-Host "  - settings.json: (generated)" -ForegroundColor Cyan
             
             Write-C3DLog -Message "API URL: $apiUrl" -Level Info
             Write-C3DLog -Message "Method: POST (multipart/form-data)" -Level Info
@@ -301,13 +316,13 @@ function Upload-C3DScene {
         } else {
             # Perform actual upload
             Write-C3DLog -Message "Uploading scene files to API..." -Level Info
-            Write-C3DLog -Message "Files to upload: $($requiredFiles -join ', ')" -Level Debug
-            
+            Write-C3DLog -Message "Files to upload: $($uploadFiles -join ', ')" -Level Debug
+
             $uploadStartTime = Get-Date
-            
-            # Prepare multipart form data
+
+            # Prepare multipart form data (includes generated settings.json)
             $formData = @{}
-            foreach ($fileName in $requiredFiles) {
+            foreach ($fileName in $uploadFiles) {
                 $formData[$fileName] = $filePaths[$fileName]
             }
             
@@ -338,15 +353,7 @@ function Upload-C3DScene {
                 throw "Upload failed with HTTP $($response.StatusCode): $($response.Body)"
             }
         }
-        
-        # Clean up backup file
-        if (Get-Variable -Name 'backupFile' -Scope Local -ErrorAction SilentlyContinue) {
-            if ($backupFile -and (Test-Path -Path $backupFile) -and -not $DryRun) {
-                Remove-Item -Path $backupFile -Force
-                Write-C3DLog -Message "Cleaned up backup file" -Level Debug
-            }
-        }
-        
+
         # Final timing and next steps
         $endTime = Get-Date
         $totalDuration = ($endTime - $startTime).TotalSeconds
@@ -364,55 +371,16 @@ function Upload-C3DScene {
         $errorRecord = New-C3DErrorRecord -Message "Network error during scene upload: $($_.Exception.Message)" -ErrorId "SceneUploadNetworkError" -Category ([System.Management.Automation.ErrorCategory]::ConnectionError) -TargetObject $_.Exception.Response -InnerException $_.Exception -RecommendedAction "Check network connectivity and API endpoint availability"
 
         Write-C3DLog -Message "Scene upload failed due to network error: $($_.Exception.Message)" -Level Error
-
-        # Clean up backup file on error
-        if (Get-Variable -Name 'backupFile' -Scope Local -ErrorAction SilentlyContinue) {
-            if ($backupFile -and (Test-Path -Path $backupFile) -and -not $DryRun) {
-                try {
-                    Remove-Item -Path $backupFile -Force
-                    Write-C3DLog -Message "Cleaned up backup file after error" -Level Debug
-                } catch {
-                    Write-C3DLog -Message "Warning: Could not clean up backup file: $backupFile" -Level Warn
-                }
-            }
-        }
-
         $PSCmdlet.ThrowTerminatingError($errorRecord)
 
     } catch [System.IO.IOException] {
         $errorRecord = New-C3DErrorRecord -Message "File I/O error during scene upload: $($_.Exception.Message)" -ErrorId "SceneUploadFileError" -Category ([System.Management.Automation.ErrorCategory]::ReadError) -TargetObject $_.Exception.FileName -InnerException $_.Exception -RecommendedAction "Check file permissions and ensure all required files exist"
 
         Write-C3DLog -Message "Scene upload failed due to file error: $($_.Exception.Message)" -Level Error
-
-        # Clean up backup file on error
-        if (Get-Variable -Name 'backupFile' -Scope Local -ErrorAction SilentlyContinue) {
-            if ($backupFile -and (Test-Path -Path $backupFile) -and -not $DryRun) {
-                try {
-                    Remove-Item -Path $backupFile -Force
-                    Write-C3DLog -Message "Cleaned up backup file after error" -Level Debug
-                } catch {
-                    Write-C3DLog -Message "Warning: Could not clean up backup file: $backupFile" -Level Warn
-                }
-            }
-        }
-
         $PSCmdlet.ThrowTerminatingError($errorRecord)
 
     } catch {
         Write-C3DLog -Message "Scene upload failed: $($_.Exception.Message)" -Level Error
-
-        # Clean up backup file on error
-        if (Get-Variable -Name 'backupFile' -Scope Local -ErrorAction SilentlyContinue) {
-            if ($backupFile -and (Test-Path -Path $backupFile) -and -not $DryRun) {
-                try {
-                    Remove-Item -Path $backupFile -Force
-                    Write-C3DLog -Message "Cleaned up backup file after error" -Level Debug
-                } catch {
-                    Write-C3DLog -Message "Warning: Could not clean up backup file: $backupFile" -Level Warn
-                }
-            }
-        }
-
         throw
     }
 }

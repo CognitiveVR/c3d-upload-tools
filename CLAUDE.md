@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./test-all.sh <scene_id> <env>` - Run comprehensive tests for scene and object uploads (requires scene_id from previous upload)
 
 ### Scene Operations
-- `./upload-scene.sh --scene_dir <dir> [--env prod|dev] [--scene_id <id>] [--verbose] [--dry_run]` - Upload scene files with enhanced security and validation
+- `./upload-scene.sh --scene_dir <dir> --scene_name <name> [--env prod|dev] [--scene_id <id>] [--verbose] [--dry_run]` - Upload scene files with enhanced security and validation (--scene_name required for new scenes)
 - `./upload-scene.sh --help` - Show usage information
 
 ### Object Operations
@@ -30,8 +30,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Generated files**: `<scene_id>_object_manifest.json` files are created automatically after object uploads
 
 ### Key Components
-- `sdk-version.txt`: Contains current SDK version (0.2.0) that gets injected into settings.json during scene uploads
-- `settings.json`: Scene configuration with scale, sceneName, and sdkVersion fields (automatically backed up before modification)
+- `sdk-version.txt`: Contains current SDK version (1.0.0) used for generated settings.json
+- `settings.json`: Scene configuration with scale, sceneName, and sdkVersion fields - **generated automatically** during upload with SDK prefix (`cli-bash-v<version>` or `cli-powershell-v<version>`)
 - **API endpoints**: Support both prod (cognitive3d.com) and dev (c3ddev.com) environments
 
 ### Upload Workflow
@@ -65,7 +65,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Security & Reliability
 - Secure API key handling without local storage exposure
-- Safe file operations with automatic backup and rollback mechanisms
+- Safe file operations with comprehensive validation
+- Automatic settings.json generation with SDK version prefixes
 - Comprehensive input validation (UUID format, semantic versioning, file size limits)
 - Cross-platform compatibility (macOS and Linux)
 
@@ -135,7 +136,7 @@ PowerShell module provides full Windows compatibility with enterprise-grade feat
 Import-Module ./C3DUploadTools -Force
 
 # Available functions (all production-ready)
-Upload-C3DScene -SceneDirectory <path> [-Environment prod|dev] [-SceneId <uuid>] [-DryRun] [-Verbose]    # ✅ COMPLETE
+Upload-C3DScene -SceneDirectory <path> -SceneName <name> [-Environment prod|dev] [-SceneId <uuid>] [-DryRun] [-Verbose]    # ✅ COMPLETE (SceneName required for new scenes)
 Upload-C3DObject -ObjectFilename <name> -ObjectDirectory <path> [-SceneId <uuid>] [-Environment prod|dev] [-DryRun]  # ✅ COMPLETE
 Upload-C3DObjectManifest [-SceneId <uuid>] [-Environment prod|dev] [-DryRun]    # ✅ COMPLETE
 Get-C3DObjects [-SceneId <uuid>] [-Environment prod|dev] [-OutputFile <path>] [-FormatAsManifest]    # ✅ COMPLETE
@@ -205,7 +206,7 @@ C3DUploadTools/
 - **Memory efficiency**: Optimized file handling for large uploads without external dependencies
 - **Cross-platform**: Native Windows PowerShell and PowerShell Core compatibility
 - **Security**: Secure credential handling with no API key logging or exposure
-- **Robustness**: Automatic backup/rollback, retry logic, and comprehensive validation
+- **Robustness**: Automatic settings.json generation, retry logic, and comprehensive validation
 
 ### Compatibility & Production Readiness
 - **Bash Scripts**: Continue to work as before (no breaking changes)
