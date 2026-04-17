@@ -76,12 +76,16 @@ function Send-C3DHttpRequest {
         try {
             $webClient = New-Object System.Net.WebClient
             $webClient.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $webClient.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
+            $webClient.Headers[[System.Net.HttpRequestHeader]::UserAgent] = 'C3DUploadTools-PowerShell/1.0'
             $webClient.Headers.Add('Content-Type', $ContentType)
 
-            # Add additional headers
+            # Add additional headers (User-Agent is a restricted header requiring special handling)
             foreach ($headerName in $Headers.Keys) {
-                $webClient.Headers.Add($headerName, $Headers[$headerName])
+                if ($headerName -eq 'User-Agent') {
+                    $webClient.Headers[[System.Net.HttpRequestHeader]::UserAgent] = $Headers[$headerName]
+                } else {
+                    $webClient.Headers.Add($headerName, $Headers[$headerName])
+                }
             }
 
             # Perform the upload
@@ -136,15 +140,19 @@ function Send-C3DHttpRequest {
         Write-C3DLog -Message "Using System.Net.WebRequest for request" -Level Debug
 
         try {
-            $request = [System.Net.WebRequest]::Create($Uri)
+            $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($Uri)
             $request.Method = $Method.ToString().ToUpper()
             $request.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $request.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
+            $request.UserAgent = 'C3DUploadTools-PowerShell/1.0'
             $request.Timeout = $TimeoutSeconds * 1000
 
-            # Add additional headers
+            # Add additional headers (User-Agent is a restricted header requiring special handling)
             foreach ($headerName in $Headers.Keys) {
-                $request.Headers.Add($headerName, $Headers[$headerName])
+                if ($headerName -eq 'User-Agent') {
+                    $request.UserAgent = $Headers[$headerName]
+                } else {
+                    $request.Headers.Add($headerName, $Headers[$headerName])
+                }
             }
 
             # Add body for POST/PUT requests

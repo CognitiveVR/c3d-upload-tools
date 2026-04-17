@@ -24,7 +24,7 @@ function Upload-C3DObject {
         - *.png (texture files, automatically included)
 
     .PARAMETER ObjectId
-        Optional object ID. If not provided, defaults to ObjectFilename.
+        Optional object ID. Auto-generates a UUID if not provided.
         Must be valid UUID format if specified.
 
     .PARAMETER Environment
@@ -171,7 +171,7 @@ function Upload-C3DObject {
         })]
         [string]$ObjectDirectory,
         
-        [Parameter(HelpMessage = "Optional object ID. Defaults to ObjectFilename if not provided")]
+        [Parameter(HelpMessage = "Optional object ID. Auto-generates a UUID if not provided")]
         [ValidateScript({
             if ([string]::IsNullOrWhiteSpace($_)) {
                 return $true  # Allow empty - will use ObjectFilename
