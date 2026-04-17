@@ -76,13 +76,9 @@ function Send-C3DHttpRequest {
         try {
             $webClient = New-Object System.Net.WebClient
             $webClient.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $webClient.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
             $webClient.Headers.Add('Content-Type', $ContentType)
 
-            # Add additional headers
-            foreach ($headerName in $Headers.Keys) {
-                $webClient.Headers.Add($headerName, $Headers[$headerName])
-            }
+            Set-C3DRequestHeaders -Request $webClient -Headers $Headers
 
             # Perform the upload
             Write-C3DLog -Message "Uploading $($Body.Length) bytes via WebClient" -Level Debug
@@ -136,16 +132,12 @@ function Send-C3DHttpRequest {
         Write-C3DLog -Message "Using System.Net.WebRequest for request" -Level Debug
 
         try {
-            $request = [System.Net.WebRequest]::Create($Uri)
+            $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($Uri)
             $request.Method = $Method.ToString().ToUpper()
             $request.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $request.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
             $request.Timeout = $TimeoutSeconds * 1000
 
-            # Add additional headers
-            foreach ($headerName in $Headers.Keys) {
-                $request.Headers.Add($headerName, $Headers[$headerName])
-            }
+            Set-C3DRequestHeaders -Request $request -Headers $Headers
 
             # Add body for POST/PUT requests
             if ($Body) {
