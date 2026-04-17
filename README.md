@@ -38,11 +38,11 @@ cp .env.example .env
 
 ```bash
 # Bash (macOS/Linux)
-./upload-scene.sh --scene_dir scene-test --env prod
+./upload-scene.sh --scene_dir scene-test --scene_name "My First Scene" --env prod
 
 # PowerShell (Windows)
 Import-Module ./C3DUploadTools
-Upload-C3DScene -SceneDirectory scene-test -Environment prod
+Upload-C3DScene -SceneDirectory scene-test -SceneName "My First Scene" -Environment prod
 ```
 
 Save the returned Scene ID for object uploads, or add it to your `.env` file:
@@ -110,31 +110,33 @@ $env:C3D_DEVELOPER_API_KEY = "your_api_key"
 
 ### Scene Upload
 
-Upload 3D scene files (GLTF, textures, settings) to create or update a scene.
+Upload 3D scene files (GLTF, textures) to create or update a scene.
 
 **Bash:**
 ```bash
-./upload-scene.sh --scene_dir <directory> [--env prod|dev] [--scene_id <uuid>] [--verbose] [--dry_run]
+./upload-scene.sh --scene_dir <directory> --scene_name <name> [--env prod|dev] [--scene_id <uuid>] [--verbose] [--dry_run]
 ```
 
 **PowerShell:**
 ```powershell
-Upload-C3DScene -SceneDirectory <directory> [-Environment prod|dev] [-SceneId <uuid>] [-Verbose] [-DryRun]
+Upload-C3DScene -SceneDirectory <directory> -SceneName <name> [-Environment prod|dev] [-SceneId <uuid>] [-Verbose] [-DryRun]
 ```
 
 **Required Files in Scene Directory:**
-- `scene.bin`, `scene.gltf`, `screenshot.png`, `settings.json`
+- `scene.bin`, `scene.gltf`, `screenshot.png`
+
+**Note:** `settings.json` is generated automatically with the scene name and SDK version (`cli-bash-v<version>` or `cli-powershell-v<version>`).
 
 **Examples:**
 ```bash
-# Create new scene
-./upload-scene.sh --scene_dir scene-test --env prod
+# Create new scene (--scene_name required for new scenes)
+./upload-scene.sh --scene_dir scene-test --scene_name "My Scene" --env prod
 
-# Update existing scene
+# Update existing scene (--scene_name optional for updates)
 ./upload-scene.sh --scene_dir scene-test --scene_id "12345678-1234-1234-1234-123456789012" --env prod
 
 # Preview changes (safe testing)
-./upload-scene.sh --scene_dir scene-test --dry_run --verbose
+./upload-scene.sh --scene_dir scene-test --scene_name "Test Scene" --dry_run --verbose
 ```
 
 ### Object Upload
@@ -219,7 +221,7 @@ Get-C3DObjects [-SceneId <uuid>] [-Environment <prod|dev>] [-OutputFile <path>] 
 
 **Security Features:**
 - Automatic input validation (UUID format, file sizes, SDK versions)
-- Safe file operations with backup/rollback
+- Safe file operations with comprehensive validation
 - API key validation with helpful error messages
 - 100MB file size limit with clear warnings
 
@@ -299,8 +301,8 @@ For existing workflows:
 cp .env.example .env
 # Edit .env with your API key
 
-# 2. Upload scene
-./upload-scene.sh --scene_dir your-scene --env prod
+# 2. Upload scene (--scene_name required for new scenes)
+./upload-scene.sh --scene_dir your-scene --scene_name "My Project Scene" --env prod
 # Save the returned Scene ID
 
 # 3. Add Scene ID to environment (optional but recommended)
@@ -409,7 +411,8 @@ Upload-C3DObjectManifest  # Upload manifest once for all objects
 ```bash
 # Verify scene directory structure
 ls -la scene-test/
-# Should contain: scene.bin, scene.gltf, screenshot.png, settings.json
+# Should contain: scene.bin, scene.gltf, screenshot.png
+# Note: settings.json is generated automatically during upload
 
 # Verify object directory structure
 ls -la object-test/

@@ -13,7 +13,7 @@
 #    POST /v0/scenes (new scene)
 #    POST /v0/scenes/{sceneId} (update existing)
 #    - Content-Type: multipart/form-data
-#    - Includes: scene.bin, scene.gltf, screenshot.png, settings.json
+#    - Includes: scene.bin, scene.gltf, screenshot.png, settings.json (auto-generated)
 #    - Unity Reference: ExportUtility.cs:367-550 (UploadDecimatedScene)
 #
 # 3. Success Response Formats:
@@ -55,6 +55,7 @@ main() {
   SCENE_DIRECTORY=""
   ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
   SCENE_ID="${C3D_SCENE_ID:-}"
+  SCENE_NAME=""
   VERBOSE=false
   DRY_RUN=false
 
@@ -73,6 +74,10 @@ main() {
         SCENE_ID="$2"
         shift 2
         ;;
+      --scene_name)
+        SCENE_NAME="$2"
+        shift 2
+        ;;
       --verbose)
         VERBOSE=true
         shift
@@ -82,16 +87,19 @@ main() {
         shift
         ;;
       --help|-h)
-        echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
-        echo "  --scene_dir   Path to folder containing: scene.bin, scene.gltf, settings.json, screenshot.png"
+        echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> --scene_name <name> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
+        echo "  --scene_dir   Path to folder containing: scene.bin, scene.gltf, screenshot.png"
+        echo "  --scene_name  Name for the scene (required for new scenes, optional for updates)"
         echo "  --env         Optional. Either 'prod' (default) or 'dev'"
-        echo "  --scene_id    Optional. Appended to API URL if present"
+        echo "  --scene_id    Optional. Scene ID for updating an existing scene"
         echo "  --verbose     Optional. Enables verbose output"
         echo "  --dry_run     Optional. Preview operations without executing them"
         echo
         echo "Required Files:"
-        echo "  - scene.bin, scene.gltf, settings.json"
+        echo "  - scene.bin, scene.gltf"
         echo "  - screenshot.png (required, used as primary scene screenshot)"
+        echo
+        echo "Note: settings.json is generated automatically with the scene name and SDK version."
         echo
         echo "Optional Additional Images:"
         echo "  Any other PNG, JPG, JPEG, or WEBP files in the scene directory will also be uploaded"
@@ -116,10 +124,17 @@ main() {
   local start_time=$(date +%s)
   log_info "Starting scene upload process"
 
-  # Validate required CLI parameter
+  # Validate required CLI parameters
   if [[ -z "$SCENE_DIRECTORY" ]]; then
     log_error "Missing required argument: --scene_dir"
-    echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
+    echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> --scene_name <name> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
+    exit 1
+  fi
+
+  # Require --scene_name for new scenes (when --scene_id is not provided)
+  if [[ -z "$SCENE_ID" ]] && [[ -z "$SCENE_NAME" ]]; then
+    log_error "Missing required argument: --scene_name (required when creating a new scene)"
+    echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> --scene_name <name> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
     exit 1
   fi
 
@@ -153,8 +168,8 @@ main() {
   local GLTF_FILE="$SCENE_DIRECTORY/scene.gltf"
   local JSON_FILE="$SCENE_DIRECTORY/settings.json"
 
-  # Validate required files (bin, gltf, json)
-  for file in "$BIN_FILE" "$GLTF_FILE" "$JSON_FILE"; do
+  # Validate required files (bin, gltf only - settings.json is generated)
+  for file in "$BIN_FILE" "$GLTF_FILE"; do
     validate_file "$file" 100  # 100MB limit
   done
 
@@ -196,58 +211,46 @@ main() {
   fi
   local SDK_VERSION
   SDK_VERSION=$(cat "$SDK_VERSION_FILE")
-  
+
   # Validate SDK version format (semantic versioning: x.y.z)
   validate_semantic_version "$SDK_VERSION" "SDK version"
-  
-  log_info "Read SDK version: $SDK_VERSION"
 
-  # Update settings.json with new sdkVersion using jq
-  local TMP_JSON_FILE="$SCENE_DIRECTORY/settings-updated.json"
-  local BACKUP_JSON_FILE="$JSON_FILE.backup"
-  
-  log_info "Updating settings.json with SDK version: $SDK_VERSION"
-  
+  # Create full SDK version string with cli-bash prefix
+  local FULL_SDK_VERSION="cli-bash-v${SDK_VERSION}"
+  log_info "SDK version: $FULL_SDK_VERSION"
+
+  # Determine scene name for settings.json
+  local SETTINGS_SCENE_NAME="$SCENE_NAME"
+  if [[ -z "$SETTINGS_SCENE_NAME" ]]; then
+    # For updates without --scene_name, use a default
+    SETTINGS_SCENE_NAME="Scene"
+    log_debug "Using default scene name for settings.json: $SETTINGS_SCENE_NAME"
+  fi
+
+  # Generate settings.json internally
+  # Warn if existing settings.json will be overwritten
+  if [[ -f "$JSON_FILE" ]]; then
+    log_warn "Existing settings.json found - it will be overwritten with auto-generated content"
+  fi
+  log_info "Generating settings.json with scene name '$SETTINGS_SCENE_NAME' and SDK version '$FULL_SDK_VERSION'"
+
   if [[ "$DRY_RUN" = true ]]; then
-    log_info "DRY RUN - Would perform these file operations:"
-    echo "  1. Create backup: cp '$JSON_FILE' '$BACKUP_JSON_FILE'"
-    echo "  2. Update JSON: jq --arg sdk '$SDK_VERSION' '.sdkVersion = \$sdk' '$BACKUP_JSON_FILE' > '$TMP_JSON_FILE'"
-    echo "  3. Replace file: mv '$TMP_JSON_FILE' '$JSON_FILE'"
-    echo "  4. Clean backup: rm '$BACKUP_JSON_FILE'"
+    log_info "DRY RUN - Would generate settings.json with:"
+    echo "  {"
+    echo "    \"scale\": 1,"
+    echo "    \"sceneName\": \"$SETTINGS_SCENE_NAME\","
+    echo "    \"sdkVersion\": \"$FULL_SDK_VERSION\""
+    echo "  }"
   else
-    # Create backup of original settings.json
-    if ! cp "$JSON_FILE" "$BACKUP_JSON_FILE"; then
-      log_error "Failed to create backup of settings.json"
+    # Generate settings.json using jq
+    if ! jq -n \
+      --arg sceneName "$SETTINGS_SCENE_NAME" \
+      --arg sdkVersion "$FULL_SDK_VERSION" \
+      '{scale: 1, sceneName: $sceneName, sdkVersion: $sdkVersion}' > "$JSON_FILE"; then
+      log_error "Failed to generate settings.json"
       exit 1
     fi
-    log_debug "Created backup: $BACKUP_JSON_FILE"
-    
-    # Update settings.json with jq
-    if ! jq --arg sdk "$SDK_VERSION" '.sdkVersion = $sdk' "$BACKUP_JSON_FILE" > "$TMP_JSON_FILE"; then
-      log_error "Failed to update settings.json with jq"
-      rm -f "$TMP_JSON_FILE"
-      rm -f "$BACKUP_JSON_FILE"
-      exit 1
-    fi
-    log_debug "Updated JSON written to temporary file"
-    
-    # Replace original file with updated version
-    if ! mv "$TMP_JSON_FILE" "$JSON_FILE"; then
-      log_error "Failed to replace settings.json with updated version"
-      # Attempt rollback
-      log_warn "Attempting to restore backup..."
-      if mv "$BACKUP_JSON_FILE" "$JSON_FILE"; then
-        log_info "Successfully restored backup"
-      else
-        log_error "Failed to restore backup - settings.json may be corrupted"
-      fi
-      exit 1
-    fi
-    log_debug "Successfully replaced settings.json with updated version"
-    
-    # Clean up backup file
-    rm -f "$BACKUP_JSON_FILE"
-    log_debug "Cleaned up backup file"
+    log_debug "Generated settings.json successfully"
   fi
 
   # Pre-upload version check (Unity SDK Reference: EditorCore.cs:453-578)

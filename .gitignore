@@ -1,6 +1,9 @@
 .DS_Store
 *object*.json
 
+# Auto-generated during scene uploads
+**/settings.json
+
 # Environment variables (contains secrets)
 .env
 .env.sample.prod
