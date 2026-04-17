@@ -78,14 +78,7 @@ function Send-C3DHttpRequest {
             $webClient.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
             $webClient.Headers.Add('Content-Type', $ContentType)
 
-            # Add additional headers (User-Agent is a restricted header requiring special handling)
-            foreach ($headerName in $Headers.Keys) {
-                if ($headerName -eq 'User-Agent') {
-                    $webClient.Headers[[System.Net.HttpRequestHeader]::UserAgent] = $Headers[$headerName]
-                } else {
-                    $webClient.Headers.Add($headerName, $Headers[$headerName])
-                }
-            }
+            Set-C3DRequestHeaders -Request $webClient -Headers $Headers
 
             # Perform the upload
             Write-C3DLog -Message "Uploading $($Body.Length) bytes via WebClient" -Level Debug
@@ -144,14 +137,7 @@ function Send-C3DHttpRequest {
             $request.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
             $request.Timeout = $TimeoutSeconds * 1000
 
-            # Add additional headers (User-Agent is a restricted header requiring special handling)
-            foreach ($headerName in $Headers.Keys) {
-                if ($headerName -eq 'User-Agent') {
-                    $request.UserAgent = $Headers[$headerName]
-                } else {
-                    $request.Headers.Add($headerName, $Headers[$headerName])
-                }
-            }
+            Set-C3DRequestHeaders -Request $request -Headers $Headers
 
             # Add body for POST/PUT requests
             if ($Body) {
