@@ -108,6 +108,19 @@ Test-Case "HttpWebRequest: mixed headers both set correctly" {
     if ($req.Headers['X-Custom-Header'] -ne 'custom-value') { throw "X-Custom-Header mismatch" }
 }
 
+# --- Unknown type test ---
+
+Test-Case "Unknown request type: User-Agent skipped without throwing" {
+    # HttpClient is a real .NET type that is neither WebClient nor HttpWebRequest
+    $httpClient = New-Object System.Net.Http.HttpClient
+    try {
+        # Must complete without exception — the unknown-type branch emits a warning and moves on
+        Set-C3DRequestHeaders -Request $httpClient -Headers @{ 'User-Agent' = 'C3DUploadTools-PowerShell/1.0' }
+    } finally {
+        $httpClient.Dispose()
+    }
+}
+
 # --- Summary ---
 
 Write-Host "`nResults" -ForegroundColor Magenta

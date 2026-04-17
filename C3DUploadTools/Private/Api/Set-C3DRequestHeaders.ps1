@@ -30,6 +30,8 @@ function Set-C3DRequestHeaders {
                 $Request.Headers[[System.Net.HttpRequestHeader]::UserAgent] = $Headers[$headerName]
             } elseif ($Request -is [System.Net.HttpWebRequest]) {
                 $Request.UserAgent = $Headers[$headerName]
+            } else {
+                Write-C3DLog -Message "Set-C3DRequestHeaders: unsupported request type '$($Request.GetType().Name)' for User-Agent — header skipped" -Level Warn
             }
         } else {
             $Request.Headers.Add($headerName, $Headers[$headerName])
