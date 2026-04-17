@@ -174,7 +174,7 @@ function Upload-C3DObject {
         [Parameter(HelpMessage = "Optional object ID. Auto-generates a UUID if not provided")]
         [ValidateScript({
             if ([string]::IsNullOrWhiteSpace($_)) {
-                return $true  # Allow empty - will use ObjectFilename
+                return $true  # Allow empty - will auto-generate UUID
             }
             if ($_ -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
                 throw "Invalid UUID format for ObjectId: '$_'. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"

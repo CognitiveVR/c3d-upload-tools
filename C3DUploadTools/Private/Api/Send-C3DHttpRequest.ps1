@@ -76,7 +76,6 @@ function Send-C3DHttpRequest {
         try {
             $webClient = New-Object System.Net.WebClient
             $webClient.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $webClient.Headers[[System.Net.HttpRequestHeader]::UserAgent] = 'C3DUploadTools-PowerShell/1.0'
             $webClient.Headers.Add('Content-Type', $ContentType)
 
             # Add additional headers (User-Agent is a restricted header requiring special handling)
@@ -143,7 +142,6 @@ function Send-C3DHttpRequest {
             $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($Uri)
             $request.Method = $Method.ToString().ToUpper()
             $request.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $request.UserAgent = 'C3DUploadTools-PowerShell/1.0'
             $request.Timeout = $TimeoutSeconds * 1000
 
             # Add additional headers (User-Agent is a restricted header requiring special handling)
