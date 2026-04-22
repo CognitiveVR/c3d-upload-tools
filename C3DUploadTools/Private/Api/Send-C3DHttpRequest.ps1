@@ -193,12 +193,17 @@ function Send-C3DHttpRequest {
 
             if ($response) {
                 $statusCode = [int]$response.StatusCode
-                $responseStream = $response.GetResponseStream()
-                $reader = New-Object System.IO.StreamReader($responseStream)
-                $responseContent = $reader.ReadToEnd()
-                $reader.Close()
-                $responseStream.Close()
-                $response.Close()
+                $statusDescription = $response.StatusDescription
+                $responseContent = $null
+                try {
+                    $responseStream = $response.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($responseStream)
+                    $responseContent = $reader.ReadToEnd()
+                    $reader.Dispose()
+                    $responseStream.Dispose()
+                } finally {
+                    $response.Dispose()
+                }
 
                 Write-C3DLog -Message "WebRequest failed with HTTP $statusCode" -Level Error
 
@@ -206,7 +211,7 @@ function Send-C3DHttpRequest {
                     StatusCode = $statusCode
                     Content = $responseContent
                     Headers = @{}
-                    StatusDescription = $response.StatusDescription
+                    StatusDescription = $statusDescription
                 }
             } else {
                 throw $webException
