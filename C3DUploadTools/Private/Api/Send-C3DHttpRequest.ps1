@@ -190,6 +190,7 @@ function Send-C3DHttpRequest {
 
             if ($response) {
                 $statusCode = [int]$response.StatusCode
+                $statusDescription = $response.StatusDescription
                 $responseContent = $null
                 try {
                     $responseStream = $response.GetResponseStream()
@@ -210,7 +211,7 @@ function Send-C3DHttpRequest {
                     StatusCode = $statusCode
                     Content = $responseContent
                     Headers = @{}
-                    StatusDescription = $webException.Response.StatusDescription
+                    StatusDescription = $statusDescription
                 }
             } else {
                 throw $webException
