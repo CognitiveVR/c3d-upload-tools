@@ -4,8 +4,9 @@ function Set-C3DRequestHeaders {
         Applies a headers hashtable to a WebClient or HttpWebRequest, handling restricted headers correctly.
 
     .DESCRIPTION
-        .NET treats User-Agent as a restricted header that cannot be set via Headers.Add() on Windows.
-        WebClient requires the indexed HttpRequestHeader enum property; HttpWebRequest exposes a .UserAgent property.
+        .NET treats User-Agent as a restricted header that cannot be set via Headers.Add() on any platform.
+        WebClient requires the indexed HttpRequestHeader enum property; HttpWebRequest exposes a .UserAgent typed
+        property — both throw ArgumentException if you call Headers.Add() for User-Agent.
         This function centralises that logic so callers don't need to handle it inline.
 
     .PARAMETER Request
@@ -31,7 +32,11 @@ function Set-C3DRequestHeaders {
             } elseif ($Request -is [System.Net.HttpWebRequest]) {
                 $Request.UserAgent = $Headers[$headerName]
             } else {
-                Write-C3DLog -Message "Set-C3DRequestHeaders: unsupported request type '$($Request.GetType().Name)' for User-Agent — header skipped" -Level Warn
+                throw [System.ArgumentException]::new(
+                    "Set-C3DRequestHeaders: unsupported request type '$($Request.GetType().FullName)'. " +
+                    "Expected System.Net.WebClient or System.Net.HttpWebRequest. " +
+                    "Update this function to handle the new request type."
+                )
             }
         } else {
             $Request.Headers.Add($headerName, $Headers[$headerName])

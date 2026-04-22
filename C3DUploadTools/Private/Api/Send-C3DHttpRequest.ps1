@@ -76,7 +76,7 @@ function Send-C3DHttpRequest {
         try {
             $webClient = New-Object System.Net.WebClient
             $webClient.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $webClient.Headers.Add('Content-Type', $ContentType)
+            $webClient.Headers[[System.Net.HttpRequestHeader]::ContentType] = $ContentType
 
             Set-C3DRequestHeaders -Request $webClient -Headers $Headers
 
@@ -111,6 +111,9 @@ function Send-C3DHttpRequest {
                 $responseStream.Close()
 
                 Write-C3DLog -Message "WebClient failed with HTTP $statusCode" -Level Error
+                if ($responseContent) {
+                    Write-C3DLog -Message "Response body: $($responseContent.Substring(0, [Math]::Min(1000, $responseContent.Length)))" -Level Debug
+                }
 
                 return [PSCustomObject]@{
                     StatusCode = $statusCode
@@ -130,6 +133,9 @@ function Send-C3DHttpRequest {
     } else {
         # Use standard WebRequest for non-multipart requests
         Write-C3DLog -Message "Using System.Net.WebRequest for request" -Level Debug
+
+        $httpResponse = $null
+        $requestStream = $null
 
         try {
             $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($Uri)
@@ -155,7 +161,8 @@ function Send-C3DHttpRequest {
                 Write-C3DLog -Message "Writing $($bodyBytes.Length) bytes to request stream" -Level Debug
                 $requestStream = $request.GetRequestStream()
                 $requestStream.Write($bodyBytes, 0, $bodyBytes.Length)
-                $requestStream.Close()
+                $requestStream.Dispose()
+                $requestStream = $null
             }
 
             # Get response
@@ -164,8 +171,8 @@ function Send-C3DHttpRequest {
             $responseStream = $httpResponse.GetResponseStream()
             $reader = New-Object System.IO.StreamReader($responseStream)
             $responseContent = $reader.ReadToEnd()
-            $reader.Close()
-            $responseStream.Close()
+            $reader.Dispose()
+            $responseStream.Dispose()
 
             $webResponse = [PSCustomObject]@{
                 StatusCode = [int]$httpResponse.StatusCode
@@ -173,8 +180,6 @@ function Send-C3DHttpRequest {
                 Headers = @{}
                 StatusDescription = $httpResponse.StatusDescription
             }
-
-            $httpResponse.Close()
 
             Write-C3DLog -Message "WebRequest completed successfully" -Level Debug
             return $webResponse
@@ -185,24 +190,34 @@ function Send-C3DHttpRequest {
 
             if ($response) {
                 $statusCode = [int]$response.StatusCode
-                $responseStream = $response.GetResponseStream()
-                $reader = New-Object System.IO.StreamReader($responseStream)
-                $responseContent = $reader.ReadToEnd()
-                $reader.Close()
-                $responseStream.Close()
-                $response.Close()
+                $responseContent = $null
+                try {
+                    $responseStream = $response.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($responseStream)
+                    $responseContent = $reader.ReadToEnd()
+                    $reader.Dispose()
+                    $responseStream.Dispose()
+                } finally {
+                    $response.Dispose()
+                }
 
                 Write-C3DLog -Message "WebRequest failed with HTTP $statusCode" -Level Error
+                if ($responseContent) {
+                    Write-C3DLog -Message "Response body: $($responseContent.Substring(0, [Math]::Min(1000, $responseContent.Length)))" -Level Debug
+                }
 
                 return [PSCustomObject]@{
                     StatusCode = $statusCode
                     Content = $responseContent
                     Headers = @{}
-                    StatusDescription = $response.StatusDescription
+                    StatusDescription = $webException.Response.StatusDescription
                 }
             } else {
                 throw $webException
             }
+        } finally {
+            if ($requestStream) { $requestStream.Dispose() }
+            if ($httpResponse) { $httpResponse.Dispose() }
         }
     }
 }

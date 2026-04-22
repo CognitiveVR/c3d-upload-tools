@@ -110,15 +110,39 @@ Test-Case "HttpWebRequest: mixed headers both set correctly" {
 
 # --- Unknown type test ---
 
-Test-Case "Unknown request type: User-Agent skipped without throwing" {
+Test-Case "Unknown request type: throws ArgumentException for User-Agent" {
     # HttpClient is a real .NET type that is neither WebClient nor HttpWebRequest
     $httpClient = New-Object System.Net.Http.HttpClient
+    $threw = $false
     try {
-        # Must complete without exception — the unknown-type branch emits a warning and moves on
         Set-C3DRequestHeaders -Request $httpClient -Headers @{ 'User-Agent' = 'C3DUploadTools-PowerShell/1.0' }
+    } catch [System.ArgumentException] {
+        $threw = $true
+        if ($_.Exception.Message -notmatch 'unsupported request type') {
+            throw "ArgumentException thrown but message unexpected: '$($_.Exception.Message)'"
+        }
     } finally {
         $httpClient.Dispose()
     }
+    if (-not $threw) { throw "Expected ArgumentException for unsupported request type, but no exception was thrown" }
+}
+
+Test-Case "Integration: Invoke-C3DApiRequest headers flow — User-Agent survives into WebClient" {
+    # Simulate exactly what Invoke-C3DApiRequest does before calling Send-C3DHttpRequest:
+    # clone caller-supplied headers and inject User-Agent. Verify Set-C3DRequestHeaders
+    # correctly applies the assembled hashtable to a real WebClient.
+    $callerHeaders = @{}
+    $requestHeaders = $callerHeaders.Clone()
+    $requestHeaders['User-Agent'] = 'C3DUploadTools-PowerShell/1.0'
+
+    $wc = New-Object System.Net.WebClient
+    try {
+        Set-C3DRequestHeaders -Request $wc -Headers $requestHeaders
+        $actual = $wc.Headers[[System.Net.HttpRequestHeader]::UserAgent]
+        if ($actual -ne 'C3DUploadTools-PowerShell/1.0') {
+            throw "Expected User-Agent propagated end-to-end, got '$actual'"
+        }
+    } finally { $wc.Dispose() }
 }
 
 # --- Summary ---
