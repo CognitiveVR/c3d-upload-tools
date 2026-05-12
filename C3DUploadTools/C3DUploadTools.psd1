@@ -19,12 +19,14 @@
     CompatiblePSEditions = @('Desktop', 'Core')
     
     # Functions to export - will be populated by the module
+    # Test-C3DUploads is not exported: still a placeholder that throws
+    # "Not implemented yet" (see Public/Test-C3DUploads.ps1). Re-add to
+    # this list once a real implementation lands.
     FunctionsToExport = @(
         'Upload-C3DScene',
-        'Upload-C3DObject', 
+        'Upload-C3DObject',
         'Upload-C3DObjectManifest',
-        'Get-C3DObjects',
-        'Test-C3DUploads'
+        'Get-C3DObjects'
     )
     
     # Cmdlets and variables to export (none for this module)

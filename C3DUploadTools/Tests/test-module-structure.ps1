@@ -100,10 +100,9 @@ try {
 Write-Host "`n📋 Test 5: Exported Functions Test" -ForegroundColor Cyan
 $expectedFunctions = @(
     'Upload-C3DScene',
-    'Upload-C3DObject', 
+    'Upload-C3DObject',
     'Upload-C3DObjectManifest',
-    'Get-C3DObjects',
-    'Test-C3DUploads'
+    'Get-C3DObjects'
 )
 
 $module = Get-Module C3DUploadTools
