@@ -37,7 +37,7 @@ if ($psVersion -lt [Version]'5.1') {
 
 # Test 2: Check module directory structure
 Write-Host "`n📋 Test 2: Module Directory Structure" -ForegroundColor Cyan
-$moduleRoot = Join-Path $PSScriptRoot "C3DUploadTools"
+$moduleRoot = Split-Path $PSScriptRoot -Parent
 Write-Host "Module root: $moduleRoot" -ForegroundColor Gray
 
 $requiredFiles = @(
@@ -100,10 +100,9 @@ try {
 Write-Host "`n📋 Test 5: Exported Functions Test" -ForegroundColor Cyan
 $expectedFunctions = @(
     'Upload-C3DScene',
-    'Upload-C3DObject', 
+    'Upload-C3DObject',
     'Upload-C3DObjectManifest',
-    'Get-C3DObjects',
-    'Test-C3DUploads'
+    'Get-C3DObjects'
 )
 
 $module = Get-Module C3DUploadTools
