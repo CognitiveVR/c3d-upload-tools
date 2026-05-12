@@ -39,8 +39,8 @@
             Tags = @('Cognitive3D', 'VR', 'Analytics', 'Upload', 'Scene', 'Objects', 'Cross-Platform')
             
             # License and project information
-            LicenseUri = 'https://github.com/cognitive3d/c3d-upload-tools/blob/main/LICENSE'
-            ProjectUri = 'https://github.com/cognitive3d/c3d-upload-tools'
+            LicenseUri = 'https://github.com/CognitiveVR/c3d-upload-tools/blob/main/LICENSE'
+            ProjectUri = 'https://github.com/CognitiveVR/c3d-upload-tools'
             IconUri = 'https://cognitive3d.com/assets/images/cognitive3d-logo.png'
             
             # Release notes

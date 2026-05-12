@@ -469,7 +469,3 @@ c3d-upload-tools/
 - `scene-test/` - Complete scene for testing uploads
 - `object-test/` - Dynamic object (cube) for testing
 - `lantern-test/` - Additional object example
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
