@@ -167,11 +167,25 @@ EOF
 
   log_info "Using environment: $ENVIRONMENT"
 
-  # if object_id is not provided, generate a UUID (matches Unity SDK behavior)
-  # Unity SDK uses GUID for id, separate from mesh name
+  # If object_id is not provided, reuse the stable ID from the manifest for this mesh (idempotent
+  # re-uploads). Only generate a new UUID when no prior entry exists for this mesh name.
   if [[ -z "$OBJECT_ID" ]]; then
-    OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-    log_debug "Object ID not provided, generated UUID: $OBJECT_ID"
+    local MANIFEST_FILE_CHECK="${SCENE_ID}_object_manifest.json"
+    if [[ -f "$MANIFEST_FILE_CHECK" ]]; then
+      local EXISTING_ID
+      EXISTING_ID=$(jq -r --arg mesh "$OBJECT_FILENAME" \
+        '.objects[] | select(.mesh == $mesh) | .id' "$MANIFEST_FILE_CHECK" 2>/dev/null | head -1)
+      if [[ -n "$EXISTING_ID" ]]; then
+        OBJECT_ID="$EXISTING_ID"
+        log_info "Reusing existing object ID from manifest: $OBJECT_ID"
+      else
+        OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+        log_debug "No existing manifest entry for mesh '$OBJECT_FILENAME', generated UUID: $OBJECT_ID"
+      fi
+    else
+      OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+      log_debug "Object ID not provided, generated UUID: $OBJECT_ID"
+    fi
   fi
 
   # Log the parameters

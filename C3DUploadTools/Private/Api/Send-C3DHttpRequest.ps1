@@ -76,13 +76,9 @@ function Send-C3DHttpRequest {
         try {
             $webClient = New-Object System.Net.WebClient
             $webClient.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $webClient.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
-            $webClient.Headers.Add('Content-Type', $ContentType)
+            $webClient.Headers[[System.Net.HttpRequestHeader]::ContentType] = $ContentType
 
-            # Add additional headers
-            foreach ($headerName in $Headers.Keys) {
-                $webClient.Headers.Add($headerName, $Headers[$headerName])
-            }
+            Set-C3DRequestHeaders -Request $webClient -Headers $Headers
 
             # Perform the upload
             Write-C3DLog -Message "Uploading $($Body.Length) bytes via WebClient" -Level Debug
@@ -115,6 +111,9 @@ function Send-C3DHttpRequest {
                 $responseStream.Close()
 
                 Write-C3DLog -Message "WebClient failed with HTTP $statusCode" -Level Error
+                if ($responseContent) {
+                    Write-C3DLog -Message "Response body: $($responseContent.Substring(0, [Math]::Min(1000, $responseContent.Length)))" -Level Debug
+                }
 
                 return [PSCustomObject]@{
                     StatusCode = $statusCode
@@ -135,17 +134,16 @@ function Send-C3DHttpRequest {
         # Use standard WebRequest for non-multipart requests
         Write-C3DLog -Message "Using System.Net.WebRequest for request" -Level Debug
 
+        $httpResponse = $null
+        $requestStream = $null
+
         try {
-            $request = [System.Net.WebRequest]::Create($Uri)
+            $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($Uri)
             $request.Method = $Method.ToString().ToUpper()
             $request.Headers.Add('Authorization', "APIKEY:DEVELOPER $ApiKey")
-            $request.Headers.Add('User-Agent', 'C3DUploadTools-PowerShell/1.0')
             $request.Timeout = $TimeoutSeconds * 1000
 
-            # Add additional headers
-            foreach ($headerName in $Headers.Keys) {
-                $request.Headers.Add($headerName, $Headers[$headerName])
-            }
+            Set-C3DRequestHeaders -Request $request -Headers $Headers
 
             # Add body for POST/PUT requests
             if ($Body) {
@@ -163,7 +161,8 @@ function Send-C3DHttpRequest {
                 Write-C3DLog -Message "Writing $($bodyBytes.Length) bytes to request stream" -Level Debug
                 $requestStream = $request.GetRequestStream()
                 $requestStream.Write($bodyBytes, 0, $bodyBytes.Length)
-                $requestStream.Close()
+                $requestStream.Dispose()
+                $requestStream = $null
             }
 
             # Get response
@@ -172,8 +171,8 @@ function Send-C3DHttpRequest {
             $responseStream = $httpResponse.GetResponseStream()
             $reader = New-Object System.IO.StreamReader($responseStream)
             $responseContent = $reader.ReadToEnd()
-            $reader.Close()
-            $responseStream.Close()
+            $reader.Dispose()
+            $responseStream.Dispose()
 
             $webResponse = [PSCustomObject]@{
                 StatusCode = [int]$httpResponse.StatusCode
@@ -181,8 +180,6 @@ function Send-C3DHttpRequest {
                 Headers = @{}
                 StatusDescription = $httpResponse.StatusDescription
             }
-
-            $httpResponse.Close()
 
             Write-C3DLog -Message "WebRequest completed successfully" -Level Debug
             return $webResponse
@@ -193,24 +190,35 @@ function Send-C3DHttpRequest {
 
             if ($response) {
                 $statusCode = [int]$response.StatusCode
-                $responseStream = $response.GetResponseStream()
-                $reader = New-Object System.IO.StreamReader($responseStream)
-                $responseContent = $reader.ReadToEnd()
-                $reader.Close()
-                $responseStream.Close()
-                $response.Close()
+                $statusDescription = $response.StatusDescription
+                $responseContent = $null
+                try {
+                    $responseStream = $response.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($responseStream)
+                    $responseContent = $reader.ReadToEnd()
+                    $reader.Dispose()
+                    $responseStream.Dispose()
+                } finally {
+                    $response.Dispose()
+                }
 
                 Write-C3DLog -Message "WebRequest failed with HTTP $statusCode" -Level Error
+                if ($responseContent) {
+                    Write-C3DLog -Message "Response body: $($responseContent.Substring(0, [Math]::Min(1000, $responseContent.Length)))" -Level Debug
+                }
 
                 return [PSCustomObject]@{
                     StatusCode = $statusCode
                     Content = $responseContent
                     Headers = @{}
-                    StatusDescription = $response.StatusDescription
+                    StatusDescription = $statusDescription
                 }
             } else {
                 throw $webException
             }
+        } finally {
+            if ($requestStream) { $requestStream.Dispose() }
+            if ($httpResponse) { $httpResponse.Dispose() }
         }
     }
 }
