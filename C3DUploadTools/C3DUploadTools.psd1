@@ -1,7 +1,10 @@
 @{
     # Basic module information
     RootModule = 'C3DUploadTools.psm1'
-    ModuleVersion = '1.0.0'
+    # Keep ModuleVersion in lockstep with sdk-version.txt at the repo root.
+    # Both bash and PowerShell upload paths read sdk-version.txt to build
+    # the SDK telemetry prefix (cli-bash-v<version> / cli-powershell-v<version>).
+    ModuleVersion = '1.1.0'
     GUID = 'f4e6d8c2-1a3b-4e5f-8c7d-2e9f1a6b3c4d'
     
     # Author and company information
