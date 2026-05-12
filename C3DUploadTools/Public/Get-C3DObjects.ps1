@@ -150,7 +150,8 @@ function Get-C3DObjects {
         
         $sceneResponse = Invoke-C3DApiRequest -Uri $sceneUrl -Method GET
         if ($sceneResponse.StatusCode -ne 200) {
-            throw "Failed to get scene info. HTTP $($sceneResponse.StatusCode): $($sceneResponse.Body)"
+            $detail = if ($sceneResponse.Body) { $sceneResponse.Body } else { $sceneResponse.Error }
+            throw "Failed to get scene info. HTTP $($sceneResponse.StatusCode): $detail"
         }
 
         $sceneData = $sceneResponse.Body | ConvertFrom-Json
@@ -169,7 +170,8 @@ function Get-C3DObjects {
         
         $objectsResponse = Invoke-C3DApiRequest -Uri $objectsUrl -Method GET
         if ($objectsResponse.StatusCode -ne 200) {
-            throw "Failed to get objects. HTTP $($objectsResponse.StatusCode): $($objectsResponse.Body)"
+            $detail = if ($objectsResponse.Body) { $objectsResponse.Body } else { $objectsResponse.Error }
+            throw "Failed to get objects. HTTP $($objectsResponse.StatusCode): $detail"
         }
 
         $objectsData = $objectsResponse.Body | ConvertFrom-Json
