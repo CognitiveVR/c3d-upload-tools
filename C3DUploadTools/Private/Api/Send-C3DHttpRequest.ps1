@@ -305,7 +305,13 @@ function ConvertTo-C3DApiResponse {
         Headers = $HttpResponse.Headers
         TimingMs = $TimingMs
         Success = $isSuccess
-        Error = if ($isSuccess) { $null } else { $ErrorMessage -or "HTTP $($HttpResponse.StatusCode): $($HttpResponse.StatusDescription)" }
+        Error = if ($isSuccess) {
+            $null
+        } elseif ($ErrorMessage) {
+            $ErrorMessage
+        } else {
+            "HTTP $($HttpResponse.StatusCode): $($HttpResponse.StatusDescription)"
+        }
         RawResponse = $HttpResponse
     }
 }
