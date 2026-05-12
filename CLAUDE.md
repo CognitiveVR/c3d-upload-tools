@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Generated files**: `<scene_id>_object_manifest.json` files are created automatically after object uploads
 
 ### Key Components
-- `sdk-version.txt`: Contains current SDK version (1.0.0) used for generated settings.json
+- `sdk-version.txt`: Contains current SDK version (1.1.0) used for generated settings.json. Kept in lockstep with `ModuleVersion` in `C3DUploadTools.psd1`.
 - `settings.json`: Scene configuration with scale, sceneName, and sdkVersion fields - **generated automatically** during upload with SDK prefix (`cli-bash-v<version>` or `cli-powershell-v<version>`)
 - **API endpoints**: Support both prod (cognitive3d.com) and dev (c3ddev.com) environments
 
@@ -152,7 +152,10 @@ Upload-C3DScene -SceneDirectory <path> -SceneName <name> [-Environment prod|dev]
 Upload-C3DObject -ObjectFilename <name> -ObjectDirectory <path> [-SceneId <uuid>] [-Environment prod|dev] [-DryRun]  # ✅ COMPLETE
 Upload-C3DObjectManifest [-SceneId <uuid>] [-Environment prod|dev] [-DryRun]    # ✅ COMPLETE
 Get-C3DObjects [-SceneId <uuid>] [-Environment prod|dev] [-OutputFile <path>] [-FormatAsManifest]    # ✅ COMPLETE
-Test-C3DUploads [-SceneId <uuid>] [-Environment prod|dev]    # ✅ PLACEHOLDER
+
+# Test-C3DUploads source exists at Public/Test-C3DUploads.ps1 but is intentionally
+# unexported (still a placeholder that throws). Add to FunctionsToExport in
+# C3DUploadTools.psd1 once a real implementation lands.
 
 # Environment variable support - SceneId parameter is optional when C3D_SCENE_ID is set
 ```
