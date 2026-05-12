@@ -97,12 +97,14 @@ check_dependencies() {
 }
 
 # Validate API key environment variable
+# Silent on success — failure-only logging keeps script output clean for piping
+# (e.g. `./list-objects.sh ... | jq` shouldn't see diagnostic lines).
 validate_api_key() {
   if [[ -z "${C3D_DEVELOPER_API_KEY:-}" ]]; then
     log_error "C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key"
     exit 1
   fi
-  log_info "C3D_DEVELOPER_API_KEY has been set."
+  log_debug "C3D_DEVELOPER_API_KEY is set."
 }
 
 # Get current scene version info from API
