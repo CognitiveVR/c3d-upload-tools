@@ -203,6 +203,7 @@ function Invoke-C3DApiRequest {
 
         Write-Progress -Activity $ProgressTitle -Completed
         Write-C3DLog -Message "Request failed after ${timingMs}ms: $($_.Exception.Message)" -Level Error
+        Write-C3DLog -Message "Exception detail: $($_.Exception.ToString())" -Level Debug
 
         # Create generic error response
         $errorResponse = [PSCustomObject]@{

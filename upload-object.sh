@@ -167,11 +167,34 @@ EOF
 
   log_info "Using environment: $ENVIRONMENT"
 
-  # if object_id is not provided, generate a UUID (matches Unity SDK behavior)
-  # Unity SDK uses GUID for id, separate from mesh name
+  # If object_id is not provided, reuse the stable ID from the manifest for this mesh (idempotent
+  # re-uploads). Only generate a new UUID when no prior entry exists for this mesh name.
   if [[ -z "$OBJECT_ID" ]]; then
-    OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-    log_debug "Object ID not provided, generated UUID: $OBJECT_ID"
+    local MANIFEST_FILE_CHECK="${SCENE_ID}_object_manifest.json"
+    if [[ -f "$MANIFEST_FILE_CHECK" ]]; then
+      local EXISTING_ID
+      EXISTING_ID=$(jq -r --arg mesh "$OBJECT_FILENAME" \
+        '.objects[] | select(.mesh == $mesh) | .id' "$MANIFEST_FILE_CHECK" 2>/dev/null | head -1)
+      # Validate before reuse: jq -r emits the literal string "null" for JSON null,
+      # and stale or hand-authored manifests may have non-UUID values. Reusing such
+      # values would write "/objects/<scene>/null" to the server and corrupt state.
+      # Fall through to uuidgen unless we have a real UUID.
+      if [[ -n "$EXISTING_ID" ]] && [[ "$EXISTING_ID" != "null" ]] \
+          && [[ "$EXISTING_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+        OBJECT_ID="$EXISTING_ID"
+        log_info "Reusing existing object ID from manifest: $OBJECT_ID"
+      else
+        OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+        if [[ -n "$EXISTING_ID" ]] && [[ "$EXISTING_ID" != "null" ]]; then
+          log_warn "Manifest entry for mesh '$OBJECT_FILENAME' has non-UUID id '$EXISTING_ID'; generating new UUID: $OBJECT_ID"
+        else
+          log_debug "No reusable manifest entry for mesh '$OBJECT_FILENAME', generated UUID: $OBJECT_ID"
+        fi
+      fi
+    else
+      OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+      log_debug "Object ID not provided, generated UUID: $OBJECT_ID"
+    fi
   fi
 
   # Log the parameters
