@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# list_scene_objects.sh - List objects for a given scene from the Cognitive3D API
+# list-objects.sh - List dynamic objects for a given scene from the Cognitive3D API
 
 set -e
 
@@ -13,29 +13,14 @@ load_env_file
 
 # --- Default values ---
 VERBOSE=false
-DEBUG=false
 SCENE_ID=""
 ENV=""
 
-# --- Helper Functions ---
-log() {
-  if [ "$VERBOSE" = true ]; then
-    echo "[INFO] $1"
-  fi
-}
-
-debug() {
-  if [ "$DEBUG" = true ]; then
-    echo "[DEBUG] $1"
-  fi
-}
-
 usage() {
-  echo "Usage: $0 [--scene_id <scene_id>] [--env <prod|dev>] [--verbose] [--debug]"
+  echo "Usage: $0 [--scene_id <scene_id>] [--env <prod|dev>] [--verbose]"
   echo "  --scene_id   Scene ID (or set C3D_SCENE_ID environment variable)"
   echo "  --env        Either 'prod' or 'dev' (or set C3D_ENV environment variable)"
   echo "  --verbose    Enable verbose logging"
-  echo "  --debug      Enable debug logging"
   echo
   echo "Environment Variables:"
   echo "  C3D_DEVELOPER_API_KEY   Your Cognitive3D developer API key"
@@ -46,15 +31,7 @@ usage() {
 }
 
 # --- Check Dependencies ---
-if ! command -v jq >/dev/null 2>&1; then
-  echo "Error: 'jq' is not installed. Please install it before running this script."
-  exit 1
-fi
-
-if ! command -v curl >/dev/null 2>&1; then
-  echo "Error: 'curl' is not installed. Please install it before running this script."
-  exit 1
-fi
+check_dependencies
 
 # --- Parse Arguments ---
 while [[ $# -gt 0 ]]; do
@@ -72,12 +49,8 @@ while [[ $# -gt 0 ]]; do
       VERBOSE=true
       shift
       ;;
-    --debug)
-      DEBUG=true
-      shift
-      ;;
     *)
-      echo "Unknown option: $1"
+      log_error "Unknown option: $1"
       usage
       ;;
   esac
@@ -87,7 +60,7 @@ done
 if [ -z "$SCENE_ID" ]; then
   SCENE_ID="${C3D_SCENE_ID:-}"
   if [ -n "$SCENE_ID" ]; then
-    log "Using C3D_SCENE_ID from environment: $SCENE_ID"
+    log_debug "Using C3D_SCENE_ID from environment: $SCENE_ID"
   fi
 fi
 
@@ -96,9 +69,9 @@ if [ -z "$ENV" ]; then
   ENV="${C3D_ENV:-${C3D_DEFAULT_ENVIRONMENT:-}}"
   if [ -n "$ENV" ]; then
     if [ -n "${C3D_ENV:-}" ]; then
-      log "Using C3D_ENV from environment: $ENV"
+      log_debug "Using C3D_ENV from environment: $ENV"
     else
-      log "Using C3D_DEFAULT_ENVIRONMENT from environment: $ENV"
+      log_debug "Using C3D_DEFAULT_ENVIRONMENT from environment: $ENV"
     fi
   fi
 fi
@@ -108,79 +81,67 @@ if [ -z "$SCENE_ID" ] || [ -z "$ENV" ]; then
   usage
 fi
 
-# --- Determine Base URL ---
-if [ "$ENV" == "prod" ]; then
-  BASE_URL="https://data.cognitive3d.com"
-elif [ "$ENV" == "dev" ]; then
-  BASE_URL="https://data.c3ddev.com"
-else
-  echo "Invalid environment: $ENV. Must be 'prod' or 'dev'."
-  exit 1
-fi
+validate_uuid_format "$SCENE_ID" "scene_id"
+validate_environment "$ENV"
+validate_api_key
 
-# --- Developer API Key (expected to be set in ENV) ---
-if [ -z "$C3D_DEVELOPER_API_KEY" ]; then
-  echo "Environment variable C3D_DEVELOPER_API_KEY is not set."
-  exit 1
-fi
+# --- Determine Base URL ---
+SCENES_BASE_URL=$(get_api_base_url "$ENV" "scenes")
+VERSIONS_BASE_URL=$(get_api_base_url "$ENV" "versions")
 
 # --- Get Scene Details ---
-SCENE_URL="$BASE_URL/v0/scenes/$SCENE_ID"
-log "Requesting scene details from $SCENE_URL"
-SCENE_RESPONSE=$(curl --silent --show-error --location \
+SCENE_URL="$SCENES_BASE_URL/$SCENE_ID"
+log_debug "Requesting scene details from $SCENE_URL"
+# --show-error keeps curl quiet on success but surfaces transport-level failures
+# (DNS, TLS, connection refused) — without it, `set -e` exits silently with no diagnostic.
+SCENE_RESPONSE=$(curl --silent --show-error -w "\n%{http_code}" --location \
   --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
-  "$SCENE_URL" -w "\nHTTP_STATUS:%{http_code}")
+  "$SCENE_URL")
 
-SCENE_BODY=$(echo "$SCENE_RESPONSE" | sed -e 's/HTTP_STATUS\:.*//g')
-SCENE_STATUS=$(echo "$SCENE_RESPONSE" | tr -d '\n' | sed -e 's/.*HTTP_STATUS://')
+parse_http_response "$SCENE_RESPONSE"
 
-if [ "$SCENE_STATUS" -ne 200 ]; then
-  echo "Error: Failed to get scene info. HTTP $SCENE_STATUS"
-  echo "$SCENE_BODY"
-  exit 1
+if [ "$HTTP_STATUS" -ne 200 ]; then
+  handle_http_error "$HTTP_STATUS" "$HTTP_BODY" "Get scene info"
 fi
 
 # --- Extract latest version id ---
-VERSION_ID=$(echo "$SCENE_BODY" | jq '.versions | max_by(.versionNumber) | .id')
+VERSION_ID=$(echo "$HTTP_BODY" | jq -r '.versions | max_by(.versionNumber) | .id')
 
 if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" == "null" ]; then
-  echo "Error: Could not extract version ID from scene response."
+  log_error "Could not extract version ID from scene response."
   exit 1
 fi
 
-log "Resolved latest sceneVersionId = $VERSION_ID"
+log_debug "Resolved latest sceneVersionId = $VERSION_ID"
 
 # --- Full URL for objects ---
-URL="$BASE_URL/v0/versions/$VERSION_ID/objects"
-log "Requesting objects from $URL"
+URL="$VERSIONS_BASE_URL/$VERSION_ID/objects"
+log_debug "Requesting objects from $URL"
 
 # --- CURL Request ---
-RESPONSE=$(curl --silent --show-error --location \
+# --show-error keeps curl quiet on success but surfaces transport-level failures.
+RESPONSE=$(curl --silent --show-error -w "\n%{http_code}" --location \
   --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
-  "$URL" -w "\nHTTP_STATUS:%{http_code}")
+  "$URL")
 
-# --- Parse Response ---
-BODY=$(echo "$RESPONSE" | sed -e 's/HTTP_STATUS\:.*//g')
-STATUS=$(echo "$RESPONSE" | tr -d '\n' | sed -e 's/.*HTTP_STATUS://')
+parse_http_response "$RESPONSE"
 
-if [ "$STATUS" -ne 200 ]; then
-  echo "Error: Received HTTP $STATUS"
-  echo "$BODY"
-  exit 1
+if [ "$HTTP_STATUS" -ne 200 ]; then
+  handle_http_error "$HTTP_STATUS" "$HTTP_BODY" "List objects"
 fi
 
 # --- Output JSON ---
 echo "Scene Objects:"
-echo "$BODY" | jq '.'
+echo "$HTTP_BODY" | jq '.'
 
 # --- Write Raw Response to File ---
 OUTPUT_FILE="${SCENE_ID}_object_list.json"
-echo "$BODY" | jq '.' > "$OUTPUT_FILE"
-log "Wrote raw output to $OUTPUT_FILE"
+echo "$HTTP_BODY" | jq '.' > "$OUTPUT_FILE"
+log_debug "Wrote raw output to $OUTPUT_FILE"
 
 # --- Write Formatted Manifest File ---
 MANIFEST_FILE="${SCENE_ID}_object_manifest.json"
-echo "$BODY" | jq '{objects: [.[] | {
+echo "$HTTP_BODY" | jq '{objects: [.[] | {
   id: .sdkId,
   mesh: .meshName,
   name: .name,
@@ -188,4 +149,4 @@ echo "$BODY" | jq '{objects: [.[] | {
   initialPosition: (.initialPosition // [0.0, 0.0, 0.0]),
   initialRotation: (.initialRotation // [0.0, 0.0, 0.0, 1.0])
 }]}' > "$MANIFEST_FILE"
-log "Wrote formatted manifest to $MANIFEST_FILE"
+log_debug "Wrote formatted manifest to $MANIFEST_FILE"

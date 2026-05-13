@@ -150,10 +150,11 @@ function Get-C3DObjects {
         
         $sceneResponse = Invoke-C3DApiRequest -Uri $sceneUrl -Method GET
         if ($sceneResponse.StatusCode -ne 200) {
-            throw "Failed to get scene info. HTTP $($sceneResponse.StatusCode): $($sceneResponse.Content)"
+            $detail = if ($sceneResponse.Body) { $sceneResponse.Body } else { $sceneResponse.Error }
+            throw "Failed to get scene info. HTTP $($sceneResponse.StatusCode): $detail"
         }
-        
-        $sceneData = $sceneResponse.Content | ConvertFrom-Json
+
+        $sceneData = $sceneResponse.Body | ConvertFrom-Json
         $latestVersion = $sceneData.versions | Sort-Object versionNumber | Select-Object -Last 1
         
         if (-not $latestVersion) {
@@ -169,10 +170,11 @@ function Get-C3DObjects {
         
         $objectsResponse = Invoke-C3DApiRequest -Uri $objectsUrl -Method GET
         if ($objectsResponse.StatusCode -ne 200) {
-            throw "Failed to get objects. HTTP $($objectsResponse.StatusCode): $($objectsResponse.Content)"
+            $detail = if ($objectsResponse.Body) { $objectsResponse.Body } else { $objectsResponse.Error }
+            throw "Failed to get objects. HTTP $($objectsResponse.StatusCode): $detail"
         }
-        
-        $objectsData = $objectsResponse.Content | ConvertFrom-Json
+
+        $objectsData = $objectsResponse.Body | ConvertFrom-Json
         
         # Display results
         Write-Host "Scene Objects:" -ForegroundColor Cyan

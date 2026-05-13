@@ -222,27 +222,45 @@ main() {
   # Determine scene name for settings.json
   local SETTINGS_SCENE_NAME="$SCENE_NAME"
   if [[ -z "$SETTINGS_SCENE_NAME" ]]; then
-    # For updates without --scene_name, use a default
-    SETTINGS_SCENE_NAME="Scene"
-    log_debug "Using default scene name for settings.json: $SETTINGS_SCENE_NAME"
+    # For updates without --scene_name, preserve the existing sceneName rather than clobbering it
+    if [[ -f "$JSON_FILE" ]]; then
+      local EXISTING_NAME
+      EXISTING_NAME=$(jq -r '.sceneName // empty' "$JSON_FILE" 2>/dev/null)
+      if [[ -n "$EXISTING_NAME" ]]; then
+        SETTINGS_SCENE_NAME="$EXISTING_NAME"
+        log_debug "Preserving existing scene name from settings.json: $SETTINGS_SCENE_NAME"
+      else
+        SETTINGS_SCENE_NAME="Scene"
+        log_debug "Could not read existing scene name, using default: $SETTINGS_SCENE_NAME"
+      fi
+    else
+      SETTINGS_SCENE_NAME="Scene"
+      log_debug "Using default scene name for settings.json: $SETTINGS_SCENE_NAME"
+    fi
   fi
 
-  # Generate settings.json internally
-  # Warn if existing settings.json will be overwritten
-  if [[ -f "$JSON_FILE" ]]; then
-    log_warn "Existing settings.json found - it will be overwritten with auto-generated content"
-  fi
-  log_info "Generating settings.json with scene name '$SETTINGS_SCENE_NAME' and SDK version '$FULL_SDK_VERSION'"
-
+  # Generate/update settings.json
+  # On update (existing file), preserve all fields and only patch sdkVersion + sceneName.
+  # On new scene (no existing file), generate a fresh minimal file.
   if [[ "$DRY_RUN" = true ]]; then
-    log_info "DRY RUN - Would generate settings.json with:"
-    echo "  {"
-    echo "    \"scale\": 1,"
-    echo "    \"sceneName\": \"$SETTINGS_SCENE_NAME\","
-    echo "    \"sdkVersion\": \"$FULL_SDK_VERSION\""
-    echo "  }"
+    log_info "DRY RUN - Would generate/update settings.json with:"
+    echo "  sceneName: $SETTINGS_SCENE_NAME"
+    echo "  sdkVersion: $FULL_SDK_VERSION"
+  elif [[ -f "$JSON_FILE" ]]; then
+    log_info "Updating existing settings.json (preserving existing fields)"
+    local UPDATED_JSON
+    if UPDATED_JSON=$(jq \
+      --arg sceneName "$SETTINGS_SCENE_NAME" \
+      --arg sdkVersion "$FULL_SDK_VERSION" \
+      '.sdkVersion = $sdkVersion | .sceneName = $sceneName' "$JSON_FILE"); then
+      echo "$UPDATED_JSON" > "$JSON_FILE"
+      log_debug "Updated settings.json successfully"
+    else
+      log_error "Failed to update settings.json"
+      exit 1
+    fi
   else
-    # Generate settings.json using jq
+    log_info "Generating new settings.json with scene name '$SETTINGS_SCENE_NAME' and SDK version '$FULL_SDK_VERSION'"
     if ! jq -n \
       --arg sceneName "$SETTINGS_SCENE_NAME" \
       --arg sdkVersion "$FULL_SDK_VERSION" \
