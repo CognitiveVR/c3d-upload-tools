@@ -18,14 +18,23 @@ source ./test-scripts/test-utils.sh
 # load_env_file refuses to overwrite already-set variables — every test
 # needs to run in a fresh bash subshell so prior assignments don't leak.
 # Helper: run load_env_file against a fixture and print the value of one variable.
+#
+# Failure modes use distinctive sentinels so a future regression in
+# load_env_file can't silently masquerade as the expected empty-string value
+# in the empty-value test cases:
+#   - load_env_file fails:                         prints __LOAD_FAILED__
+#   - load_env_file succeeds but variable unset:   prints __UNSET__
+#   - load_env_file succeeds and variable set:     prints the value
 run_loader() {
   local fixture="$1"
   local var_name="$2"
   bash -c "
-    set -e
     source ./upload-utils.sh
-    load_env_file '$fixture' >/dev/null 2>&1
-    printf '%s' \"\${$var_name}\"
+    if ! load_env_file '$fixture' >/dev/null 2>&1; then
+      printf '__LOAD_FAILED__'
+      exit 0
+    fi
+    printf '%s' \"\${$var_name-__UNSET__}\"
   "
 }
 
