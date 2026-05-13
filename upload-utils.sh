@@ -51,7 +51,18 @@ load_env_file() {
       # Trim whitespace
       key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      
+
+      # Strip surrounding double or single quotes to match the PowerShell
+      # Import-C3DEnvironment behavior. Without this, a value like
+      # `C3D_DEVELOPER_API_KEY="abc123"` exports the literal `"abc123"`
+      # (with quotes) and the resulting Authorization header reads
+      # `APIKEY:DEVELOPER "abc123"` — the server returns 401 with the
+      # misleading "invalid key" message even though the key is right.
+      # See SDK-500.
+      if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      fi
+
       # Skip if key is empty
       [[ -z "$key" ]] && continue
       
