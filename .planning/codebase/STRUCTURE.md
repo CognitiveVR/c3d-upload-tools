@@ -1,6 +1,6 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-05-12
+**Snapshot date:** 2026-05-12. Line numbers and file references reflect codebase state at snapshot time and will drift as code changes. Future `/gsd-map-codebase` refreshes will regenerate this file; see `CONCERNS.md` for the audit trail of post-snapshot resolutions.
 
 ## Directory Layout
 

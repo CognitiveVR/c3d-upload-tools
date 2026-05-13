@@ -219,12 +219,13 @@
 - Risk: Quiet misload of API key with embedded special characters.
 - Priority: Medium.
 
-**No tests for bash `load_env_file`:**
+**No tests for bash `load_env_file` — and the divergence is a real bug, not just a test gap:** 🎫 **Reframed as [SDK-500](https://linear.app/cognitive3d/issue/SDK-500/) (High priority).**
 
 - What's not tested: Behavior with quoted values (it does NOT strip quotes — see `upload-utils.sh:48-53` — whereas the PowerShell `Import-C3DEnvironment` DOES strip them at line 31-33). This is a real bash↔PowerShell divergence: a `.env` containing `C3D_DEVELOPER_API_KEY="abc123"` will export the **quoted** literal in bash but the **unquoted** value in PowerShell.
 - Files: `upload-utils.sh:31-77`, `C3DUploadTools/Private/Core/Import-C3DEnvironment.ps1:29-33`.
 - Risk: High — silent auth failures on the bash side if user copy-pastes a quoted value into `.env`.
 - Priority: High.
+- **Update 2026-05-12:** Reframed during second-opinion review of PR #15. This isn't just "no tests" — it's a live silent-failure bug shipped today: the bash side sends `Authorization: APIKEY:DEVELOPER "abc123"` (literal quotes) and gets 401, while PowerShell works. The 401 error path tells the user "wrong / expired key", which is misleading. SDK-500 (3 points) ships the fix (strip surrounding ASCII quotes in `load_env_file` to match PowerShell) plus a quoted-value test matrix.
 
 **No tests for `list-objects.sh` divergent code paths:** ⚠️ **Largely moot after PR #14 (`832e55c`), 2026-05-12.**
 
@@ -252,6 +253,8 @@ These items surfaced during PR review of #10-#14 (post-snapshot) and are tracked
 🎫 **psm1/psd1 export contract relies on intersection** — [SDK-497](https://linear.app/cognitive3d/issue/SDK-497/). `C3DUploadTools.psm1` exports every `.ps1` in `Public/` then relies on `FunctionsToExport` in the manifest to filter back out unwanted ones (e.g., `Test-C3DUploads`). Brittle: importing the psm1 directly bypasses the filter. Future placeholder files in `Public/` auto-export unless excluded explicitly in psd1. SDK-497 (2 points) covers either moving placeholders to `Private/` or making the psm1 export list explicit.
 
 🎫 **`test-module-structure.ps1` Test 6 false-failure** — [SDK-498](https://linear.app/cognitive3d/issue/SDK-498/). Test 6 uses `$_.Exception.Message -contains "Not implemented yet"` to detect expected failures, but `-contains` is collection-membership, not substring-match — so every test run prints a red ❌ even though the script reports "All Tests Completed Successfully!" at the end. SDK-498 (1 point) fixes the operator + updates the assertion to anticipate the actual current behavior.
+
+🎫 **Bash `.env` quote-stripping bug (silent auth failure)** — [SDK-500](https://linear.app/cognitive3d/issue/SDK-500/). `load_env_file` keeps surrounding quotes on values; PowerShell's `Import-C3DEnvironment` strips them. A user copy-pasting `C3D_DEVELOPER_API_KEY="abc123"` into `.env` works on PowerShell but gets a 401 ("wrong / expired key") on bash — completely misleading because the key is right, only the quotes are wrong. Plausibly the highest-impact silent-failure bug currently shipped. SDK-500 (3 points, High priority) ships the bash-side fix plus a quoted-value test matrix. (See also the "No tests for bash `load_env_file`" entry in the main Test Coverage Gaps section above — the same item, reframed as a real bug.)
 
 ---
 
