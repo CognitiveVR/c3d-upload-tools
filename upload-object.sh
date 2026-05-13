@@ -175,12 +175,21 @@ EOF
       local EXISTING_ID
       EXISTING_ID=$(jq -r --arg mesh "$OBJECT_FILENAME" \
         '.objects[] | select(.mesh == $mesh) | .id' "$MANIFEST_FILE_CHECK" 2>/dev/null | head -1)
-      if [[ -n "$EXISTING_ID" ]]; then
+      # Validate before reuse: jq -r emits the literal string "null" for JSON null,
+      # and stale or hand-authored manifests may have non-UUID values. Reusing such
+      # values would write "/objects/<scene>/null" to the server and corrupt state.
+      # Fall through to uuidgen unless we have a real UUID.
+      if [[ -n "$EXISTING_ID" ]] && [[ "$EXISTING_ID" != "null" ]] \
+          && [[ "$EXISTING_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
         OBJECT_ID="$EXISTING_ID"
         log_info "Reusing existing object ID from manifest: $OBJECT_ID"
       else
         OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-        log_debug "No existing manifest entry for mesh '$OBJECT_FILENAME', generated UUID: $OBJECT_ID"
+        if [[ -n "$EXISTING_ID" ]] && [[ "$EXISTING_ID" != "null" ]]; then
+          log_warn "Manifest entry for mesh '$OBJECT_FILENAME' has non-UUID id '$EXISTING_ID'; generating new UUID: $OBJECT_ID"
+        else
+          log_debug "No reusable manifest entry for mesh '$OBJECT_FILENAME', generated UUID: $OBJECT_ID"
+        fi
       fi
     else
       OBJECT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')

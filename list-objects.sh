@@ -92,7 +92,9 @@ VERSIONS_BASE_URL=$(get_api_base_url "$ENV" "versions")
 # --- Get Scene Details ---
 SCENE_URL="$SCENES_BASE_URL/$SCENE_ID"
 log_debug "Requesting scene details from $SCENE_URL"
-SCENE_RESPONSE=$(curl -s -w "\n%{http_code}" --location \
+# --show-error keeps curl quiet on success but surfaces transport-level failures
+# (DNS, TLS, connection refused) — without it, `set -e` exits silently with no diagnostic.
+SCENE_RESPONSE=$(curl --silent --show-error -w "\n%{http_code}" --location \
   --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
   "$SCENE_URL")
 
@@ -117,7 +119,8 @@ URL="$VERSIONS_BASE_URL/$VERSION_ID/objects"
 log_debug "Requesting objects from $URL"
 
 # --- CURL Request ---
-RESPONSE=$(curl -s -w "\n%{http_code}" --location \
+# --show-error keeps curl quiet on success but surfaces transport-level failures.
+RESPONSE=$(curl --silent --show-error -w "\n%{http_code}" --location \
   --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
   "$URL")
 
