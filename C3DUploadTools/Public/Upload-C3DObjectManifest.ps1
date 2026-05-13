@@ -156,7 +156,8 @@ function Upload-C3DObjectManifest {
                 }
             }
         } else {
-            throw "Upload failed with HTTP $($response.StatusCode): $($response.Body)"
+            $detail = if ($response.Body) { $response.Body } else { $response.Error }
+            throw "Upload failed with HTTP $($response.StatusCode): $detail"
         }
         
         # Log execution time
