@@ -110,7 +110,7 @@ $env:C3D_DEVELOPER_API_KEY = "your_api_key"
 
 ### Scene Upload
 
-Upload 3D scene files (GLTF, textures) to create or update a scene.
+Upload 3D scene files (glTF Binary or glTF Separate, plus textures) to create or update a scene.
 
 **Bash:**
 ```bash
@@ -123,7 +123,10 @@ Upload-C3DScene -SceneDirectory <directory> -SceneName <name> [-Environment prod
 ```
 
 **Required Files in Scene Directory:**
-- `scene.bin`, `scene.gltf`, `screenshot.png`
+- The scene model, in one form: a single `.glb` (any filename), or `scene.bin` + `scene.gltf`
+- `screenshot.png`
+
+A `.glb` beside `scene.gltf`/`scene.bin`, or more than one `.glb`, is rejected before upload (the API rejects the same shapes). The gateway converts a `.glb` to glTF Separate on ingest and keeps the original.
 
 **Note:** `settings.json` is generated automatically with the scene name and SDK version (`cli-bash-v<version>` or `cli-powershell-v<version>`).
 
@@ -154,7 +157,7 @@ Upload-C3DObject -ObjectFilename <name> -ObjectDirectory <directory> [-SceneId <
 ```
 
 **Required Files in Object Directory:**
-- `<filename>.gltf`, `<filename>.bin`
+- The object model, in one form: `<filename>.glb`, or `<filename>.gltf` + `<filename>.bin`
 - `cvr_object_thumbnail.png` (optional, recommended)
 
 **Object Manifest:**
@@ -411,12 +414,12 @@ Upload-C3DObjectManifest  # Upload manifest once for all objects
 ```bash
 # Verify scene directory structure
 ls -la scene-test/
-# Should contain: scene.bin, scene.gltf, screenshot.png
+# Should contain: one .glb (or scene.bin + scene.gltf), screenshot.png
 # Note: settings.json is generated automatically during upload
 
 # Verify object directory structure
 ls -la object-test/
-# Should contain: <filename>.gltf, <filename>.bin, optional textures
+# Should contain: <filename>.glb (or <filename>.gltf + <filename>.bin), optional textures
 ```
 
 ### Windows-Specific Issues

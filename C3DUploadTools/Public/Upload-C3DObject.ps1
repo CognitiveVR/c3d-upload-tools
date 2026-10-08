@@ -13,13 +13,13 @@ function Upload-C3DObject {
         Must be valid UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
     .PARAMETER ObjectFilename
-        Object filename without extension. Used to locate .gltf and .bin files.
-        Example: "cube" will look for cube.gltf and cube.bin
+        Object filename without extension. Used to locate the model files.
+        Example: "cube" will look for cube.glb, or cube.gltf and cube.bin
 
     .PARAMETER ObjectDirectory
         Path to directory containing the object files:
-        - {ObjectFilename}.gltf (object geometry/materials)
-        - {ObjectFilename}.bin (object binary data)  
+        - the object model, in one form: {ObjectFilename}.glb, or
+          {ObjectFilename}.gltf (object geometry/materials) + {ObjectFilename}.bin (object binary data)
         - cvr_object_thumbnail.png (object preview image)
         - *.png (texture files, automatically included)
 
@@ -44,7 +44,7 @@ function Upload-C3DObject {
         Upload-C3DObject -SceneId "12345678-1234-1234-1234-123456789012" -ObjectFilename "cube" -ObjectDirectory "./my-objects"
 
         Uploads a cube object to production environment. The function will:
-        - Look for cube.gltf and cube.bin in ./my-objects/
+        - Look for cube.glb, or cube.gltf and cube.bin, in ./my-objects/
         - Include cvr_object_thumbnail.png for dashboard preview
         - Auto-detect and include any .png texture files
         - Generate and upload object manifest automatically
@@ -101,8 +101,7 @@ function Upload-C3DObject {
         - C3D_DEVELOPER_API_KEY environment variable must be set
         - Target scene must exist (create with Upload-C3DScene first)
         - Object directory must contain required files:
-          * {ObjectFilename}.gltf (3D object geometry and materials)
-          * {ObjectFilename}.bin (binary data for the object)
+          * the object model: {ObjectFilename}.glb, or {ObjectFilename}.gltf + {ObjectFilename}.bin
           * cvr_object_thumbnail.png (preview image for dashboard)
         - All texture .png files in directory are automatically included
         - Files must be under 100MB each
@@ -158,7 +157,7 @@ function Upload-C3DObject {
         })]
         [string]$SceneId = $env:C3D_SCENE_ID,
         
-        [Parameter(Mandatory, Position = 1, HelpMessage = "Object filename without extension (e.g., 'cube' for cube.gltf and cube.bin)")]
+        [Parameter(Mandatory, Position = 1, HelpMessage = "Object filename without extension (e.g., 'cube' for cube.glb, or cube.gltf and cube.bin)")]
         [ValidateNotNullOrEmpty()]
         [string]$ObjectFilename,
         
@@ -252,20 +251,21 @@ function Upload-C3DObject {
         Write-C3DLog -Message "Object filename: $ObjectFilename" -Level Debug
         Write-C3DLog -Message "Object ID: $ObjectId" -Level Debug
         
-        # Define required files
-        $gltfFile = Join-Path -Path $ObjectDirectory -ChildPath "$ObjectFilename.gltf"
-        $binFile = Join-Path -Path $ObjectDirectory -ChildPath "$ObjectFilename.bin"
+        # Pick the object model ({ObjectFilename}.glb, or {ObjectFilename}.gltf + .bin)
+        $model = Resolve-C3DModelFiles -Directory $ObjectDirectory -BaseName $ObjectFilename
+        Write-C3DLog -Message "Object model ($($model.Format)): $($model.Files.Keys -join ', ')" -Level Info
         $thumbnailFile = Join-Path -Path $ObjectDirectory -ChildPath "cvr_object_thumbnail.png"
         
         # Validate required files
         Write-C3DLog -Message "Validating object files..." -Level Info
         
-        Test-C3DFile -Path $gltfFile -Name "$ObjectFilename.gltf" -RequiredExtensions @('.gltf') -MaxSizeBytes 100MB -Throw
-        Test-C3DFile -Path $binFile -Name "$ObjectFilename.bin" -RequiredExtensions @('.bin') -MaxSizeBytes 100MB -Throw
+        foreach ($modelName in $model.Files.Keys) {
+            Test-C3DFile -Path $model.Files[$modelName] -Name $modelName -MaxSizeBytes 100MB -Throw
+        }
         Test-C3DFile -Path $thumbnailFile -Name "cvr_object_thumbnail.png" -RequiredExtensions @('.png') -MaxSizeBytes 100MB -Throw
         
         # Log file sizes in debug mode
-        foreach ($filePath in @($gltfFile, $binFile, $thumbnailFile)) {
+        foreach ($filePath in @($model.Files.Values) + @($thumbnailFile)) {
             $fileSize = Get-C3DFileSize -Path $filePath
             Write-C3DLog -Message "$(Split-Path $filePath -Leaf): $($fileSize.FormattedSize)" -Level Debug
         }
@@ -299,8 +299,9 @@ function Upload-C3DObject {
         # Prepare form data
         $formData = @{
             "cvr_object_thumbnail.png" = $thumbnailFile
-            "$ObjectFilename.bin" = $binFile
-            "$ObjectFilename.gltf" = $gltfFile
+        }
+        foreach ($modelName in $model.Files.Keys) {
+            $formData[$modelName] = $model.Files[$modelName]
         }
         
         # Add texture files to form data

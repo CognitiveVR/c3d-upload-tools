@@ -13,7 +13,7 @@
 #    POST /v0/scenes (new scene)
 #    POST /v0/scenes/{sceneId} (update existing)
 #    - Content-Type: multipart/form-data
-#    - Includes: scene.bin, scene.gltf, screenshot.png, settings.json (auto-generated)
+#    - Includes: the model (one .glb, or scene.bin + scene.gltf), screenshot.png, settings.json (auto-generated)
 #    - Unity Reference: ExportUtility.cs:367-550 (UploadDecimatedScene)
 #
 # 3. Success Response Formats:
@@ -88,7 +88,7 @@ main() {
         ;;
       --help|-h)
         echo "Usage: $SCRIPT_NAME --scene_dir <scene_directory> --scene_name <name> [--env <prod|dev>] [--scene_id <scene_id>] [--verbose] [--dry_run]"
-        echo "  --scene_dir   Path to folder containing: scene.bin, scene.gltf, screenshot.png"
+        echo "  --scene_dir   Path to folder containing the model (one .glb, or scene.bin + scene.gltf) and screenshot.png"
         echo "  --scene_name  Name for the scene (required for new scenes, optional for updates)"
         echo "  --env         Optional. Either 'prod' (default) or 'dev'"
         echo "  --scene_id    Optional. Scene ID for updating an existing scene"
@@ -96,7 +96,7 @@ main() {
         echo "  --dry_run     Optional. Preview operations without executing them"
         echo
         echo "Required Files:"
-        echo "  - scene.bin, scene.gltf"
+        echo "  - The scene model, in one form: a single .glb (any filename), or scene.bin + scene.gltf"
         echo "  - screenshot.png (required, used as primary scene screenshot)"
         echo
         echo "Note: settings.json is generated automatically with the scene name and SDK version."
@@ -164,12 +164,12 @@ main() {
   log_info "Using API base URL: $BASE_URL"
 
   # Prepare file paths
-  local BIN_FILE="$SCENE_DIRECTORY/scene.bin"
-  local GLTF_FILE="$SCENE_DIRECTORY/scene.gltf"
   local JSON_FILE="$SCENE_DIRECTORY/settings.json"
 
-  # Validate required files (bin, gltf only - settings.json is generated)
-  for file in "$BIN_FILE" "$GLTF_FILE"; do
+  # Pick the scene model (one .glb, or scene.bin + scene.gltf); settings.json is generated
+  resolve_model_files "$SCENE_DIRECTORY" scene any || exit 1
+  log_info "Scene model ($MODEL_FORMAT): $MODEL_SUMMARY"
+  for file in "${MODEL_FILES[@]}"; do
     validate_file "$file" 100  # 100MB limit
   done
 
@@ -289,17 +289,19 @@ main() {
     log_info "DRY RUN - Would execute this curl command:"
     echo "curl --silent --write-out \"\\n%{http_code}\" --location '$BASE_URL' \\"
     echo "  --header 'Authorization: APIKEY:DEVELOPER [REDACTED]' \\"
-    echo "  --form 'scene.bin=@$BIN_FILE' \\"
-    echo "  --form 'scene.gltf=@$GLTF_FILE' \\"
+    local i
+    for ((i = 1; i < ${#MODEL_FORMS[@]}; i += 2)); do
+      echo "  --form '${MODEL_FORMS[$i]}' \\"
+    done
     echo "  --form 'screenshot.png=@$SCREENSHOT_FILE' \\"
-    # Print additional image forms
-    for form in "${IMAGE_FORMS[@]}"; do
-      echo "  $form \\"
+    # Print additional image forms (pairs of --form <name>=@<path>)
+    for ((i = 1; i < ${#IMAGE_FORMS[@]}; i += 2)); do
+      echo "  --form '${IMAGE_FORMS[$i]}' \\"
     done
     echo "  --form 'settings.json=@$JSON_FILE'"
     echo ""
     echo "Files that would be uploaded:"
-    for file in "$BIN_FILE" "$GLTF_FILE" "$SCREENSHOT_FILE" "$JSON_FILE"; do
+    for file in "${MODEL_FILES[@]}" "$SCREENSHOT_FILE" "$JSON_FILE"; do
       if [[ -f "$file" ]]; then
         local file_size
         if command -v stat >/dev/null 2>&1; then
@@ -335,13 +337,12 @@ main() {
   else
     log_info "Uploading scene files to API..."
     log_debug "Upload URL: $BASE_URL"
-    log_debug "Files to upload: scene.bin, scene.gltf, images (png/jpg/jpeg/webp), settings.json"
+    log_debug "Files to upload: $MODEL_SUMMARY, images (png/jpg/jpeg/webp), settings.json"
 
     # Build curl command array
     local CURL_CMD=(curl --silent --write-out "\n%{http_code}" --location "$BASE_URL" \
       --header "Authorization: APIKEY:DEVELOPER ${C3D_DEVELOPER_API_KEY}" \
-      --form "scene.bin=@$BIN_FILE" \
-      --form "scene.gltf=@$GLTF_FILE" \
+      "${MODEL_FORMS[@]}" \
       --form "screenshot.png=@$SCREENSHOT_FILE")
 
     # Add additional image forms (if any)

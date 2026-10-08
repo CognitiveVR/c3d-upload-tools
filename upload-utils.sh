@@ -305,6 +305,67 @@ validate_file() {
   fi
 }
 
+# Resolve the model files for a scene or dynamic object upload.
+# Usage: resolve_model_files <directory> <base_name> [any|named]
+#   any    exactly one *.glb in the directory (any name), or <base>.gltf + <base>.bin  (scenes)
+#   named  <base>.glb, or <base>.gltf + <base>.bin                                     (objects)
+# Sets: MODEL_FORMAT ("glb" or "gltf"), MODEL_FILES (paths), MODEL_FORMS (curl --form
+# arguments) and MODEL_SUMMARY (the file names). Returns 1 after log_error when the
+# directory holds no model, both forms, or more than one .glb — cvr-se-upload rejects
+# the same shapes with a 400, so they are caught before anything is sent.
+resolve_model_files() {
+  local dir="$1" base="$2" mode="${3:-named}"
+  local gltf_file="$dir/$base.gltf" bin_file="$dir/$base.bin"
+  local glb_files=() separate=() f
+
+  if [[ "$mode" == "any" ]]; then
+    for f in "$dir"/*.[gG][lL][bB]; do [[ -f "$f" ]] && glb_files+=("$f"); done
+  else
+    for f in "$dir/$base".[gG][lL][bB]; do [[ -f "$f" ]] && glb_files+=("$f"); done
+  fi
+  [[ -f "$gltf_file" ]] && separate+=("$base.gltf")
+  [[ -f "$bin_file" ]] && separate+=("$base.bin")
+
+  local glb_count=${#glb_files[@]}
+  if (( glb_count > 1 )); then
+    local names=""
+    for f in "${glb_files[@]}"; do names+="${names:+, }$(basename "$f")"; done
+    log_error "Found $glb_count .glb files in $dir ($names). Keep exactly one .glb as the model."
+    return 1
+  fi
+  if (( glb_count == 1 )) && (( ${#separate[@]} > 0 )); then
+    local separate_names
+    separate_names=$(IFS=', '; echo "${separate[*]}")
+    log_error "Found $(basename "${glb_files[0]}") alongside ${separate_names} in $dir. Upload either one .glb or $base.gltf + $base.bin, not both."
+    return 1
+  fi
+  if (( glb_count == 1 )); then
+    MODEL_FORMAT="glb"
+    MODEL_FILES=("${glb_files[0]}")
+    MODEL_SUMMARY="$(basename "${glb_files[0]}")"
+    MODEL_FORMS=(--form "$MODEL_SUMMARY=@${glb_files[0]}")
+    return 0
+  fi
+  if (( ${#separate[@]} == 0 )); then
+    local glb_label="$base.glb"
+    [[ "$mode" == "any" ]] && glb_label="one .glb"
+    log_error "No model found in $dir: expected $glb_label or $base.gltf + $base.bin"
+    return 1
+  fi
+  if [[ ! -f "$gltf_file" ]]; then
+    log_error "Required file missing: $gltf_file (needed with $base.bin)"
+    return 1
+  fi
+  if [[ ! -f "$bin_file" ]]; then
+    log_error "Required file missing: $bin_file (needed with $base.gltf)"
+    return 1
+  fi
+  MODEL_FORMAT="gltf"
+  MODEL_FILES=("$bin_file" "$gltf_file")
+  MODEL_SUMMARY="$base.bin, $base.gltf"
+  MODEL_FORMS=(--form "$base.bin=@$bin_file" --form "$base.gltf=@$gltf_file")
+}
+
 # Validate directory existence
 validate_directory() {
   local dir_path="$1"

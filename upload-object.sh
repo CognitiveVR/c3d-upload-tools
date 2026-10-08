@@ -91,8 +91,9 @@ Optional:
   --dry_run                  Preview operations without executing
 
 Required Files in Object Directory:
-  - <filename>.gltf          GLTF scene definition
-  - <filename>.bin           Binary scene data
+  - <filename>.glb           The object model as glTF Binary, OR
+  - <filename>.gltf          glTF object definition
+    <filename>.bin           Binary data (with the .gltf)
   - cvr_object_thumbnail.png Object thumbnail (required)
   - *.png, *.jpg, *.jpeg, *.webp  Additional textures (optional)
 
@@ -223,14 +224,15 @@ EOF
   fi
   echo ""
 
-  # Construct file paths
-  local GLTF_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.gltf"
-  local BIN_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.bin"
+  # Pick the object model (<filename>.glb, or <filename>.gltf + <filename>.bin)
+  resolve_model_files "$OBJECT_DIRECTORY" "$OBJECT_FILENAME" named || exit 1
+  log_info "Object model ($MODEL_FORMAT): $MODEL_SUMMARY"
   local THUMBNAIL_FILE="$OBJECT_DIRECTORY/cvr_object_thumbnail.png"
 
   # Verify required files exist
-  validate_file "$GLTF_FILE"
-  validate_file "$BIN_FILE"
+  for file in "${MODEL_FILES[@]}"; do
+    validate_file "$file"
+  done
   validate_file "$THUMBNAIL_FILE"
 
   # Collect texture files (png, jpg, jpeg, webp - excluding thumbnail)
@@ -265,8 +267,7 @@ EOF
   local CURL_CMD=(curl --silent --write-out "\n%{http_code}" --location --globoff "$UPLOAD_URL" \
     --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
     --form "cvr_object_thumbnail.png=@$THUMBNAIL_FILE" \
-    --form "${OBJECT_FILENAME}.bin=@$BIN_FILE" \
-    --form "${OBJECT_FILENAME}.gltf=@$GLTF_FILE")
+    "${MODEL_FORMS[@]}")
 
   # Add texture .png files to curl command
   if [[ ${#TEXTURE_FORMS[@]} -gt 0 ]]; then
@@ -277,7 +278,9 @@ EOF
   if [[ "$DRY_RUN" = true ]]; then
     log_info "DRY RUN - Would execute this curl command:"
     # Print command with redacted API key for security
-    printf '%q ' "${CURL_CMD[@]}"
+    local DISPLAY_CMD=("${CURL_CMD[@]}")
+    DISPLAY_CMD=("${DISPLAY_CMD[@]/$C3D_DEVELOPER_API_KEY/[REDACTED]}")
+    printf '%q ' "${DISPLAY_CMD[@]}"
     echo
     log_info "DRY RUN completed"  
     log_info "Re-run without --dry_run to perform actual upload"
@@ -286,7 +289,7 @@ EOF
 
   log_info "Uploading object files to API..."
   log_debug "Upload URL: $UPLOAD_URL"
-  log_debug "Files to upload: ${OBJECT_FILENAME}.bin, ${OBJECT_FILENAME}.gltf, cvr_object_thumbnail.png, textures (png/jpg/jpeg/webp)"
+  log_debug "Files to upload: $MODEL_SUMMARY, cvr_object_thumbnail.png, textures (png/jpg/jpeg/webp)"
 
   local upload_start_time=$(date +%s)
   local RESPONSE
