@@ -4,7 +4,7 @@
     # Keep ModuleVersion in lockstep with sdk-version.txt at the repo root.
     # Both bash and PowerShell upload paths read sdk-version.txt to build
     # the SDK telemetry prefix (cli-bash-v<version> / cli-powershell-v<version>).
-    ModuleVersion = '1.1.0'
+    ModuleVersion = '1.2.0'
     GUID = 'f4e6d8c2-1a3b-4e5f-8c7d-2e9f1a6b3c4d'
     
     # Author and company information
@@ -50,6 +50,12 @@
             
             # Release notes
             ReleaseNotes = @'
+1.2.0
+- Upload-C3DScene and Upload-C3DObject accept the model as a single .glb
+  (scenes: any filename; objects: <ObjectFilename>.glb) in place of the
+  .gltf + .bin pair; mixing the forms or holding two .glb files is an error
+  (Resolve-C3DModelFiles)
+
 1.1.0
 - Fix User-Agent restricted-header crash on Windows (Send-C3DHttpRequest)
 - New Set-C3DRequestHeaders helper centralizes restricted-header handling

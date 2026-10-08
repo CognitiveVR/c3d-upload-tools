@@ -6,14 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Testing
 - `./test-all.sh <scene_id> <env>` - Run comprehensive tests for scene and object uploads (requires scene_id from previous upload)
+- `bash test-scripts/test-model-files.sh` and `pwsh -File C3DUploadTools/Tests/test-model-files.ps1` - Offline unit tests for the model-file rule (`resolve_model_files` / `Resolve-C3DModelFiles`: one `.glb`, or the `.gltf` + `.bin` pair, never both), the reserved converter-output names (`is_reserved_converter_name` / `Test-C3DReservedConverterName`, `<base>_<n>.<ext>` beside a `.glb`) and the literal-path handling of bracketed file names in the PowerShell validators
+- A `.glb` model is sent as `--form 'file=@"<path>"'` (fixed field name, quoted path) because curl splits an unquoted form argument at the first `=` and the path at `,`/`;`; the gateway reads the filename, not the field name. The glTF Separate forms keep their filename-as-field-name convention. PowerShell file checks use `-LiteralPath` so `[`/`]` in a `.glb` name are not wildcards
 
 ### Scene Operations
-- `./upload-scene.sh --scene_dir <dir> --scene_name <name> [--env prod|dev] [--scene_id <id>] [--verbose] [--dry_run]` - Upload scene files with enhanced security and validation (--scene_name required for new scenes)
+- `./upload-scene.sh --scene_dir <dir> --scene_name <name> [--env prod|dev] [--scene_id <id>] [--verbose] [--dry_run]` - Upload scene files with enhanced security and validation (--scene_name required for new scenes). The scene model is one `.glb` of any name, or `scene.gltf` + `scene.bin`
 - `./upload-scene.sh --help` - Show usage information
 
 ### Object Operations
 
-- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects (supports PNG, JPG, JPEG, WEBP textures)
+- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects (supports PNG, JPG, JPEG, WEBP textures). The model is `<name>.glb`, or `<name>.gltf` + `<name>.bin`
 - `./upload-object-manifest.sh [--scene_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload object manifest after object upload
 - `./list-objects.sh [--scene_id <id>] --env <env> --verbose` - List objects for a scene
 
@@ -26,11 +28,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### File Structure
 - **Shell scripts**: Main upload functionality in bash scripts with standardized logging, error handling, and API interaction patterns
-- **Test directories**: `scene-test/`, `object-test/`, `lantern-test/` contain sample assets for testing uploads
+- **Test directories**: `scene-test/`, `object-test/`, `lantern-test/` contain sample assets for testing uploads; `scene-test-glb/` and `object-test-glb/` hold the same kind of assets as single `.glb` files (made with `gltf-pipeline`)
 - **Generated files**: `<scene_id>_object_manifest.json` files are created automatically after object uploads
 
 ### Key Components
-- `sdk-version.txt`: Contains current SDK version (1.1.0) used for generated settings.json. Kept in lockstep with `ModuleVersion` in `C3DUploadTools.psd1`.
+- `sdk-version.txt`: Contains current SDK version (1.2.0) used for generated settings.json. Kept in lockstep with `ModuleVersion` in `C3DUploadTools.psd1`.
 - `settings.json`: Scene configuration with scale, sceneName, and sdkVersion fields - **generated automatically** during upload with SDK prefix (`cli-bash-v<version>` or `cli-powershell-v<version>`)
 - **API endpoints**: Support both prod (cognitive3d.com) and dev (c3ddev.com) environments
 
@@ -45,7 +47,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The object manifest follows Unity SDK conventions. Each object entry has:
 - `id`: A unique UUID identifying this object instance (auto-generated if not provided)
-- `mesh`: The name of the 3D model file (e.g., "cube" for cube.gltf/cube.bin)
+- `mesh`: The name of the 3D model file (e.g., "cube" for cube.glb or cube.gltf/cube.bin)
 - `name`: Display name for the object (defaults to mesh name)
 - `scaleCustom`: Scale factors [x, y, z]
 - `initialPosition`: Starting position [x, y, z]

@@ -44,7 +44,7 @@ function New-C3DMultipartFormData {
     # Validate all files exist first
     foreach ($fieldName in $FormData.Keys) {
         $filePath = $FormData[$fieldName]
-        if (-not (Test-Path $filePath -PathType Leaf)) {
+        if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
             throw "File not found for field '$fieldName': $filePath"
         }
     }
@@ -53,7 +53,7 @@ function New-C3DMultipartFormData {
     $totalSize = 0
     foreach ($fieldName in $FormData.Keys) {
         $filePath = $FormData[$fieldName]
-        $fileInfo = Get-Item $filePath
+        $fileInfo = Get-Item -LiteralPath $filePath
         $totalSize += $fileInfo.Length
         Write-C3DLog -Message "$fieldName`: $([math]::Round($fileInfo.Length / 1024, 2)) KB" -Level Debug
     }
@@ -136,7 +136,7 @@ function New-C3DSingleFileFormData {
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
-        [ValidateScript({Test-Path $_ -PathType Leaf})]
+        [ValidateScript({Test-Path -LiteralPath $_ -PathType Leaf})]
         [string]$FilePath,
 
         [Parameter(Mandatory)]
