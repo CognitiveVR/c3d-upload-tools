@@ -243,6 +243,10 @@ function Upload-C3DScene {
                 if ($imageFile.Name -eq 'screenshot.png') {
                     continue
                 }
+                # Beside a .glb, scene_<n>.<ext> is the name of an image the gateway extracts from it
+                if ($model.Format -eq 'glb' -and (Test-C3DReservedConverterName -FileName $imageFile.Name -BaseName 'scene')) {
+                    throw "Found $($imageFile.Name) beside $($model.Files.Keys -join ', '): that name is reserved for an image extracted from the .glb (scene_<n>.<ext>). Rename or remove it."
+                }
                 # Validate file size (100MB limit)
                 if ($imageFile.Length -gt 100MB) {
                     $sizeMB = [math]::Round($imageFile.Length / 1MB, 2)

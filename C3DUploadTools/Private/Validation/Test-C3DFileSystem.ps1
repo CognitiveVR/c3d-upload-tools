@@ -47,7 +47,7 @@ function Test-C3DDirectory {
     Write-C3DLog -Message "Validating $Name`: $Path" -Level Debug
     
     # Check if path exists
-    if (-not (Test-Path -Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         $errorMessage = "$Name does not exist: $Path"
         Write-C3DLog -Message $errorMessage -Level Error
         
@@ -58,7 +58,7 @@ function Test-C3DDirectory {
     }
     
     # Check if it's a directory
-    if (-not (Test-Path -Path $Path -PathType Container)) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
         $errorMessage = "$Name is not a directory: $Path"
         Write-C3DLog -Message $errorMessage -Level Error
         
@@ -70,7 +70,7 @@ function Test-C3DDirectory {
     
     # Get directory info for additional checks
     try {
-        $dirInfo = Get-Item -Path $Path -ErrorAction Stop
+        $dirInfo = Get-Item -LiteralPath $Path -ErrorAction Stop
         Write-C3DLog -Message "$Name exists: $($dirInfo.FullName)" -Level Debug
     } catch {
         $errorMessage = "Cannot access $Name`: $($_.Exception.Message)"
@@ -88,7 +88,7 @@ function Test-C3DDirectory {
         
         foreach ($fileName in $RequiredFiles) {
             $filePath = Join-Path -Path $Path -ChildPath $fileName
-            if (-not (Test-Path -Path $filePath -PathType Leaf)) {
+            if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
                 $missingFiles += $fileName
             } else {
                 Write-C3DLog -Message "Found required file: $fileName" -Level Debug
@@ -166,7 +166,7 @@ function Test-C3DFile {
     Write-C3DLog -Message "Validating $Name`: $Path" -Level Debug
     
     # Check if file exists
-    if (-not (Test-Path -Path $Path -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         $errorMessage = "$Name does not exist: $Path"
         Write-C3DLog -Message $errorMessage -Level Error
         
@@ -178,7 +178,7 @@ function Test-C3DFile {
     
     # Get file info
     try {
-        $fileInfo = Get-Item -Path $Path -ErrorAction Stop
+        $fileInfo = Get-Item -LiteralPath $Path -ErrorAction Stop
         Write-C3DLog -Message "$Name exists: $($fileInfo.FullName)" -Level Debug
     } catch {
         $errorMessage = "Cannot access $Name`: $($_.Exception.Message)"
@@ -255,11 +255,11 @@ function Get-C3DFileSize {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateScript({Test-Path $_ -PathType Leaf})]
+        [ValidateScript({Test-Path -LiteralPath $_ -PathType Leaf})]
         [string]$Path
     )
     
-    $fileInfo = Get-Item -Path $Path
+    $fileInfo = Get-Item -LiteralPath $Path
     $bytes = $fileInfo.Length
     $kb = [math]::Round($bytes / 1KB, 2)
     $mb = [math]::Round($bytes / 1MB, 2)
@@ -309,14 +309,14 @@ function Backup-C3DFile {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateScript({Test-Path $_ -PathType Leaf})]
+        [ValidateScript({Test-Path -LiteralPath $_ -PathType Leaf})]
         [string]$Path,
         
         [Parameter()]
         [string]$BackupDirectory
     )
     
-    $fileInfo = Get-Item -Path $Path
+    $fileInfo = Get-Item -LiteralPath $Path
     $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     
     if ($BackupDirectory) {

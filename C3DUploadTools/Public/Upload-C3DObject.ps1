@@ -275,8 +275,13 @@ function Upload-C3DObject {
         $textureFiles = @()
         $pngFiles = Get-ChildItem -Path $ObjectDirectory -Filter "*.png" -File
         
+        $reservedBase = Get-C3DGlbObjectBaseName -ObjectId $ObjectId
         foreach ($pngFile in $pngFiles) {
             if ($pngFile.FullName -ne $thumbnailFile) {
+                # Beside a .glb, <base>_<n>.<ext> is the name of an image the gateway extracts from it
+                if ($model.Format -eq 'glb' -and (Test-C3DReservedConverterName -FileName $pngFile.Name -BaseName $reservedBase)) {
+                    throw "Found $($pngFile.Name) beside $($model.Files.Keys -join ', '): that name is reserved for an image extracted from the .glb (${reservedBase}_<n>.<ext>). Rename or remove it."
+                }
                 $textureFiles += $pngFile.FullName
                 Write-C3DLog -Message "Found texture: $($pngFile.Name)" -Level Debug
             }

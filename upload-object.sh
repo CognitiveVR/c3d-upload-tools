@@ -237,12 +237,19 @@ EOF
 
   # Collect texture files (png, jpg, jpeg, webp - excluding thumbnail)
   local TEXTURE_FORMS=()
+  local RESERVED_BASE
+  RESERVED_BASE=$(glb_object_base_name "$OBJECT_ID")
   for TEXTURE_FILE in "$OBJECT_DIRECTORY"/*.png "$OBJECT_DIRECTORY"/*.jpg "$OBJECT_DIRECTORY"/*.jpeg "$OBJECT_DIRECTORY"/*.webp; do
     # Skip if no matching files (bash glob expands literally if no match)
     [[ -f "$TEXTURE_FILE" ]] || continue
 
     if [[ "$TEXTURE_FILE" != "$THUMBNAIL_FILE" ]]; then
       local TEXTURE_NAME=$(basename "$TEXTURE_FILE")
+      # Beside a .glb, <base>_<n>.<ext> is the name of an image the gateway extracts from it
+      if [[ "$MODEL_FORMAT" == "glb" ]] && is_reserved_converter_name "$TEXTURE_NAME" "$RESERVED_BASE"; then
+        log_error "Found $TEXTURE_NAME beside $MODEL_SUMMARY: that name is reserved for an image extracted from the .glb (${RESERVED_BASE}_<n>.<ext>). Rename or remove it."
+        exit 1
+      fi
       TEXTURE_FORMS+=(--form "$TEXTURE_NAME=@$TEXTURE_FILE")
       log_debug "Adding texture: $TEXTURE_NAME"
     fi
@@ -278,8 +285,14 @@ EOF
   if [[ "$DRY_RUN" = true ]]; then
     log_info "DRY RUN - Would execute this curl command:"
     # Print command with redacted API key for security
-    local DISPLAY_CMD=("${CURL_CMD[@]}")
-    DISPLAY_CMD=("${DISPLAY_CMD[@]/$C3D_DEVELOPER_API_KEY/[REDACTED]}")
+    local DISPLAY_CMD=() arg
+    for arg in "${CURL_CMD[@]}"; do
+      if [[ "$arg" == "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" ]]; then
+        DISPLAY_CMD+=("Authorization: APIKEY:DEVELOPER [REDACTED]")
+      else
+        DISPLAY_CMD+=("$arg")
+      fi
+    done
     printf '%q ' "${DISPLAY_CMD[@]}"
     echo
     log_info "DRY RUN completed"  

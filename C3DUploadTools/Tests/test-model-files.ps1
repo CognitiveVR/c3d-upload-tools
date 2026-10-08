@@ -43,7 +43,7 @@ function New-Fixture {
     param([string]$Name, [string[]]$Files)
     $dir = Join-Path $fixtureRoot $Name
     New-Item -ItemType Directory -Path $dir | Out-Null
-    foreach ($f in $Files) { Set-Content -Path (Join-Path $dir $f) -Value 'x' -NoNewline }
+    foreach ($f in $Files) { Set-Content -LiteralPath (Join-Path $dir $f) -Value 'x' -NoNewline }
     return $dir
 }
 
@@ -115,6 +115,29 @@ try {
 
     $d = New-Fixture 'obj-none' @('cvr_object_thumbnail.png')
     Assert-Rejects 'object: no model at all is rejected' $d 'cube' -MessageLike '*cube.glb*cube.gltf*'
+
+    # ---- wildcard characters in a .glb name must survive the file validators (-LiteralPath)
+    $d = New-Fixture 'scene-brackets' @('Room [final].glb', 'screenshot.png')
+    Assert-Resolves 'scene: a .glb name with brackets resolves' $d 'scene' -AnyGlb -Format 'glb' -FileNames @('Room [final].glb')
+    Test-Function 'Test-C3DFile and Test-C3DDirectory accept a bracketed file name' {
+        $p = Join-Path $d 'Room [final].glb'
+        if (-not (Test-C3DFile -Path $p -Name 'model')) { throw 'Test-C3DFile returned false' }
+        if (-not (Test-C3DDirectory -Path $d -Name 'scene dir' -RequiredFiles @('Room [final].glb', 'screenshot.png'))) { throw 'Test-C3DDirectory returned false' }
+        $size = Get-C3DFileSize -Path $p
+        if ($size.Bytes -ne 1) { throw "Get-C3DFileSize returned $($size.Bytes)" }
+    }
+
+    # ---- reserved converter-output names
+    Test-Function 'Test-C3DReservedConverterName matches <base>_<n>.<ext> in the base''s own case' {
+        if (-not (Test-C3DReservedConverterName -FileName 'scene_0.png' -BaseName 'scene')) { throw 'scene_0.png should be reserved' }
+        if (Test-C3DReservedConverterName -FileName 'Scene_0.png' -BaseName 'scene') { throw 'Scene_0.png should not be reserved' }
+        if (Test-C3DReservedConverterName -FileName 'scene_a.png' -BaseName 'scene') { throw 'scene_a.png should not be reserved' }
+        if (-not (Test-C3DReservedConverterName -FileName '8f966d6a-a9d5-4010-9620-e1cfe823998c_3.png' -BaseName '8f966d6a-a9d5-4010-9620-e1cfe823998c')) { throw 'uuid base should be reserved' }
+    }
+    Test-Function 'Get-C3DGlbObjectBaseName sanitises like the gateway' {
+        if ((Get-C3DGlbObjectBaseName -ObjectId 'empty rack') -ne 'empty_rack') { throw 'empty rack' }
+        if ((Get-C3DGlbObjectBaseName -ObjectId 'a-b_c.d') -ne 'a-b_c_d') { throw 'a-b_c.d' }
+    }
 } finally {
     Remove-Item -Path $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }

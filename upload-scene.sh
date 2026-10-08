@@ -191,6 +191,12 @@ main() {
       continue
     fi
 
+    # Beside a .glb, scene_<n>.<ext> is the name of an image the gateway extracts from it
+    if [[ "$MODEL_FORMAT" == "glb" ]] && is_reserved_converter_name "$IMAGE_NAME" scene; then
+      log_error "Found $IMAGE_NAME beside $MODEL_SUMMARY: that name is reserved for an image extracted from the .glb (scene_<n>.<ext>). Rename or remove it."
+      exit 1
+    fi
+
     validate_file "$IMAGE_FILE" 100  # 100MB limit
     IMAGE_FORMS+=(--form "$IMAGE_NAME=@$IMAGE_FILE")
     log_debug "Adding additional image: $IMAGE_NAME"

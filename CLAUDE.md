@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Testing
 - `./test-all.sh <scene_id> <env>` - Run comprehensive tests for scene and object uploads (requires scene_id from previous upload)
-- `bash test-scripts/test-model-files.sh` and `pwsh -File C3DUploadTools/Tests/test-model-files.ps1` - Offline unit tests for the model-file rule (`resolve_model_files` / `Resolve-C3DModelFiles`): one `.glb`, or the `.gltf` + `.bin` pair, never both
+- `bash test-scripts/test-model-files.sh` and `pwsh -File C3DUploadTools/Tests/test-model-files.ps1` - Offline unit tests for the model-file rule (`resolve_model_files` / `Resolve-C3DModelFiles`: one `.glb`, or the `.gltf` + `.bin` pair, never both), the reserved converter-output names (`is_reserved_converter_name` / `Test-C3DReservedConverterName`, `<base>_<n>.<ext>` beside a `.glb`) and the literal-path handling of bracketed file names in the PowerShell validators
+- A `.glb` model is sent as `--form 'file=@"<path>"'` (fixed field name, quoted path) because curl splits an unquoted form argument at the first `=` and the path at `,`/`;`; the gateway reads the filename, not the field name. The glTF Separate forms keep their filename-as-field-name convention. PowerShell file checks use `-LiteralPath` so `[`/`]` in a `.glb` name are not wildcards
 
 ### Scene Operations
 - `./upload-scene.sh --scene_dir <dir> --scene_name <name> [--env prod|dev] [--scene_id <id>] [--verbose] [--dry_run]` - Upload scene files with enhanced security and validation (--scene_name required for new scenes). The scene model is one `.glb` of any name, or `scene.gltf` + `scene.bin`

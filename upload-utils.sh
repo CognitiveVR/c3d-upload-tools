@@ -334,8 +334,8 @@ resolve_model_files() {
     return 1
   fi
   if (( glb_count == 1 )) && (( ${#separate[@]} > 0 )); then
-    local separate_names
-    separate_names=$(IFS=', '; echo "${separate[*]}")
+    local separate_names=""
+    for f in "${separate[@]}"; do separate_names+="${separate_names:+, }$f"; done
     log_error "Found $(basename "${glb_files[0]}") alongside ${separate_names} in $dir. Upload either one .glb or $base.gltf + $base.bin, not both."
     return 1
   fi
@@ -343,7 +343,13 @@ resolve_model_files() {
     MODEL_FORMAT="glb"
     MODEL_FILES=("${glb_files[0]}")
     MODEL_SUMMARY="$(basename "${glb_files[0]}")"
-    MODEL_FORMS=(--form "$MODEL_SUMMARY=@${glb_files[0]}")
+    # Fixed field name and a quoted path: curl would otherwise split the form
+    # argument at the first '=' and the path at ',' or ';' (the gateway reads
+    # the filename, not the field name). Quotes and backslashes in the path
+    # are escaped for curl's quoting.
+    local quoted_path="${glb_files[0]//\\/\\\\}"
+    quoted_path="${quoted_path//\"/\\\"}"
+    MODEL_FORMS=(--form "file=@\"$quoted_path\"")
     return 0
   fi
   if (( ${#separate[@]} == 0 )); then
@@ -364,6 +370,26 @@ resolve_model_files() {
   MODEL_FILES=("$bin_file" "$gltf_file")
   MODEL_SUMMARY="$base.bin, $base.gltf"
   MODEL_FORMS=(--form "$base.bin=@$bin_file" --form "$base.gltf=@$gltf_file")
+}
+
+# The gateway's base name for a dynamic object's converted .bin and images: the
+# objectId with every character outside [A-Za-z0-9_-] replaced by '_', at most 64
+# characters (glbObjectBaseName in cvr-se-upload). Scenes use the base "scene".
+glb_object_base_name() {
+  local base
+  base=$(printf '%s' "$1" | sed 's/[^A-Za-z0-9_-]/_/g' | cut -c1-64)
+  printf '%s' "${base:-object}"
+}
+
+# is_reserved_converter_name <filename> <base>
+# True when <filename> is <base>_<n>.<ext> (matched in the base's own case): the
+# name the gateway gives an image it extracts from a converted .glb, which it
+# refuses to receive beside the .glb (HTTP 400).
+is_reserved_converter_name() {
+  local name="$1" base="$2"
+  [[ "$name" == "${base}_"* ]] || return 1
+  local rest="${name#"${base}_"}"
+  [[ "$rest" =~ ^[0-9]+\.[^.]+$ ]]
 }
 
 # Validate directory existence
