@@ -75,7 +75,9 @@ function Upload-C3DScene {
         Demonstrates a complete upload workflow with error checking.
 
     .OUTPUTS
-        Scene upload results with timing metrics and next steps guidance
+        PSCustomObject with Success, DryRun, Created, SceneId, SceneName, Environment and
+        DurationSeconds. SceneId is the new scene's ID after a create, the given ID after an
+        update, and $null on a dry run of a new scene.
 
     .NOTES
         Prerequisites:
@@ -189,10 +191,10 @@ function Upload-C3DScene {
         Write-C3DLog -Message "Validating prerequisites..." -Level Info
 
         # Test API key
-        Test-C3DApiKey -Throw
+        $null = Test-C3DApiKey -Throw
 
         # Test environment
-        Test-C3DEnvironment -Environment $Environment -Throw
+        $null = Test-C3DEnvironment -Environment $Environment -Throw
         Write-C3DLog -Message "Using environment: $Environment" -Level Info
         
         # Validate and convert scene ID if provided
@@ -205,8 +207,11 @@ function Upload-C3DScene {
         $SceneDirectory = (Get-Item -Path $SceneDirectory).FullName
         Write-C3DLog -Message "Scene directory: $SceneDirectory" -Level Debug
         
+        $isNewScene = -not $SceneId
+        $resultSceneId = if ($isNewScene) { $null } else { $SceneId }
+
         # Validate SceneName is provided for new scenes
-        if (-not $SceneId -and [string]::IsNullOrWhiteSpace($SceneName)) {
+        if ($isNewScene -and [string]::IsNullOrWhiteSpace($SceneName)) {
             throw "SceneName is required when creating a new scene (no SceneId provided)"
         }
 
@@ -217,7 +222,7 @@ function Upload-C3DScene {
         $filePaths = @{}
         
         # Validate scene directory and required files
-        Test-C3DDirectory -Path $SceneDirectory -Name "scene directory" -RequiredFiles $requiredFiles -Throw
+        $null = Test-C3DDirectory -Path $SceneDirectory -Name "scene directory" -RequiredFiles $requiredFiles -Throw
         
         # Build file paths and validate each file
         Write-C3DLog -Message "Validating scene files..." -Level Info
@@ -226,7 +231,7 @@ function Upload-C3DScene {
             $filePaths[$fileName] = $filePath
             
             # Validate file with 100MB limit
-            Test-C3DFile -Path $filePath -Name $fileName -MaxSizeBytes 100MB -Throw
+            $null = Test-C3DFile -Path $filePath -Name $fileName -MaxSizeBytes 100MB -Throw
             
             # Log file size in debug mode
             $fileSize = Get-C3DFileSize -Path $filePath
@@ -389,14 +394,14 @@ function Upload-C3DScene {
             
             if ($response.Success) {
                 Write-C3DLog -Message "Scene upload successful!" -Level Info
-                
-                # Parse and display response
-                if ($response.Body) {
-                    try {
-                        $responseData = $response.Body | ConvertFrom-Json
-                        Write-C3DLog -Message "Response received: $($responseData | ConvertTo-Json -Compress)" -Level Debug
-                    } catch {
-                        Write-C3DLog -Message "Response body: $($response.Body)" -Level Debug
+                Write-C3DLog -Message "Response body: $($response.Body)" -Level Debug
+
+                if ($isNewScene) {
+                    $resultSceneId = Get-C3DSceneIdFromResponse -Body $response.Body
+                    if ($resultSceneId) {
+                        Write-C3DLog -Message "Scene ID: $resultSceneId" -Level Info
+                    } else {
+                        Write-C3DLog -Message "Scene created but no scene ID was found in the response" -Level Warn
                     }
                 }
             } else {
@@ -412,11 +417,21 @@ function Upload-C3DScene {
             Write-C3DLog -Message "Script completed in $([math]::Round($totalDuration, 2)) seconds" -Level Info
             Write-C3DLog -Message "Next Steps:" -Level Info
             Write-C3DLog -Message "1. You can now upload dynamic objects using Upload-C3DObject" -Level Info
-            Write-C3DLog -Message "2. You'll need the scene ID from the upload response" -Level Info
+            Write-C3DLog -Message "2. Use the scene ID above, also returned as the SceneId property of this command's result" -Level Info
             Write-C3DLog -Message "3. Example: Upload-C3DObject -SceneId <scene_id> -ObjectFilename <name> -ObjectDirectory <dir>" -Level Info
             Write-C3DLog -Message "4. Run Upload-C3DObjectManifest after uploading objects to display them in dashboard" -Level Info
         }
-        
+
+        [PSCustomObject]@{
+            Success         = $true
+            DryRun          = [bool]$DryRun
+            Created         = $isNewScene
+            SceneId         = $resultSceneId
+            SceneName       = $SceneName
+            Environment     = $Environment
+            DurationSeconds = [math]::Round($totalDuration, 2)
+        }
+
     } catch [System.Net.WebException] {
         $errorRecord = New-C3DErrorRecord -Message "Network error during scene upload: $($_.Exception.Message)" -ErrorId "SceneUploadNetworkError" -Category ([System.Management.Automation.ErrorCategory]::ConnectionError) -TargetObject $_.Exception.Response -InnerException $_.Exception -RecommendedAction "Check network connectivity and API endpoint availability"
 

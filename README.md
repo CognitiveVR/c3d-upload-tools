@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD013 -->
 # Cognitive3D Upload Tools
 
 Upload 3D scenes and dynamic objects to the Cognitive3D platform with ease. Cross-platform tools supporting both Bash (macOS/Linux) and PowerShell (Windows) with streamlined environment variable workflows.
@@ -245,6 +246,7 @@ cd C3DUploadTools/Tests
 ./test-utilities-internal.ps1        # Internal function testing
 ./test-scene-upload.ps1              # Scene workflow testing
 ./test-object-upload.ps1              # Object workflow testing
+./test-cmdlet-output.ps1             # Cmdlet return values (offline)
 ./Test-EnvWorkflow.ps1               # Complete end-to-end testing
 ```
 
@@ -361,10 +363,12 @@ Upload-C3DObject -ObjectFilename "chair" -ObjectDirectory "./furniture"
 Upload-C3DObject -ObjectFilename "table" -ObjectDirectory "./furniture"
 Upload-C3DObjectManifest  # Displays both objects in dashboard
 
-# Advanced error handling
+# Each cmdlet returns one result object, so a new scene ID can feed the next step
 try {
-    $result = Upload-C3DScene -SceneDirectory "./scene" -Environment dev
-    Write-Host "Scene uploaded: $($result.SceneId)"
+    $scene = Upload-C3DScene -SceneDirectory "./scene" -SceneName "My Scene" -Environment dev
+    Write-Host "Scene uploaded: $($scene.SceneId)"
+    $object = Upload-C3DObject -SceneId $scene.SceneId -ObjectFilename "chair" -ObjectDirectory "./furniture" -Environment dev
+    Write-Host "Object uploaded: $($object.ObjectId)"
 } catch {
     Write-Error "Upload failed: $($_.Exception.Message)"
 }

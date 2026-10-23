@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD013 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -143,6 +144,7 @@ PowerShell module provides full Windows compatibility with enterprise-grade feat
 - `pwsh -File C3DUploadTools/Tests/test-utilities-internal.ps1` - Internal function testing
 - `pwsh -File C3DUploadTools/Tests/test-scene-upload.ps1` - Scene upload workflow testing
 - `pwsh -File C3DUploadTools/Tests/test-object-upload.ps1` - Object upload workflow testing
+- `pwsh -File C3DUploadTools/Tests/test-cmdlet-output.ps1` - Offline check that each public cmdlet returns exactly one result object (`Upload-C3DScene` → `SceneId`, `Upload-C3DObject` → `ObjectId`); a `Test-C3D*` call left uncaptured adds a stray `$true` to the output
 
 #### Module Usage (All Functions Complete ✅)
 ```powershell
