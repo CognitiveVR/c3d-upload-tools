@@ -36,11 +36,11 @@ function Upload-C3DScene {
         that would be made without actually performing uploads.
 
     .EXAMPLE
-        Upload-C3DScene -SceneDirectory "./my-scene"
+        Upload-C3DScene -SceneDirectory "./my-scene" -SceneName "My Scene"
 
         Uploads a new scene to the production environment. The function will:
-        - Validate all 4 required files exist in ./my-scene/
-        - Update settings.json with current SDK version
+        - Validate the scene model and screenshot.png in ./my-scene/
+        - Generate settings.json with the scene name and SDK version
         - Upload files to Cognitive3D production API
         - Return the new scene ID for future operations
 
@@ -53,7 +53,7 @@ function Upload-C3DScene {
         - Testing changes in the dev environment before production
 
     .EXAMPLE
-        Upload-C3DScene -SceneDirectory "./my-scene" -DryRun -Verbose
+        Upload-C3DScene -SceneDirectory "./my-scene" -SceneName "My Scene" -DryRun -Verbose
 
         Preview the upload without making changes. Shows:
         - File validation results and sizes
@@ -65,7 +65,7 @@ function Upload-C3DScene {
 
     .EXAMPLE
         # Complete workflow example
-        $sceneResult = Upload-C3DScene -SceneDirectory "C:\MyVRApp\Scenes\MainLevel"
+        $sceneResult = Upload-C3DScene -SceneDirectory "C:\MyVRApp\Scenes\MainLevel" -SceneName "Main Level"
         if ($sceneResult.Success) {
             Write-Host "Scene uploaded successfully! Scene ID: $($sceneResult.SceneId)"
             # Now upload dynamic objects to this scene
@@ -401,7 +401,7 @@ function Upload-C3DScene {
                     if ($resultSceneId) {
                         Write-C3DLog -Message "Scene ID: $resultSceneId" -Level Info
                     } else {
-                        Write-C3DLog -Message "Scene created but no scene ID was found in the response" -Level Warn
+                        Write-Warning "Scene created, but no scene ID was found in the response body: '$($response.Body)'. Find the scene in the dashboard before retrying, or a second scene will be created."
                     }
                 }
             } else {
