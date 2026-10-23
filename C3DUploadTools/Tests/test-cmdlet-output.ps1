@@ -166,10 +166,9 @@ try {
                 }
             }
             $all = Upload-C3DObject -SceneId $sceneId -ObjectFilename lantern -ObjectDirectory $objectDir -Environment dev 6>&1
-            $results = @($all | Where-Object { $_ -is [System.Management.Automation.PSCustomObject] })
             $hostText = ($all | Where-Object { $_ -is [System.Management.Automation.InformationRecord] }) -join "`n"
-            if ($results.Count -ne 1) { throw "expected one result object, got $($results.Count)" }
-            if ($results[0].ManifestUploaded) { throw "ManifestUploaded should be false when the manifest upload fails" }
+            $r = Assert-SingleResult @($all | Where-Object { $_ -isnot [System.Management.Automation.InformationRecord] }) 'Upload-C3DObject'
+            if ($r.ManifestUploaded) { throw "ManifestUploaded should be false when the manifest upload fails" }
             if ($hostText -match 'automatically uploaded') { throw "console claims the manifest was uploaded" }
         }
 
@@ -190,8 +189,9 @@ try {
         }
     } finally {
         Pop-Location
-        Remove-Item -Path $workDir -Recurse -Force
+        # Re-import before cleanup so a failed Remove-Item cannot leave the mock installed
         Import-Module ./C3DUploadTools -Force -WarningAction SilentlyContinue
+        Remove-Item -Path $workDir -Recurse -Force -ErrorAction Continue
     }
 } finally {
     $env:C3D_DEVELOPER_API_KEY = $originalKey
