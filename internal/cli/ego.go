@@ -106,10 +106,7 @@ func runEgoUpload(cmd *cobra.Command, rt *runtime) error {
 	}
 
 	if dryRun {
-		version := "<latest>"
-		if versionGiven {
-			version = strconv.Itoa(wanted)
-		}
+		version := versionText(wanted, versionGiven)
 		if wait {
 			rt.log.Info("--%s would then poll %s?version=%s for up to %s seconds", waitFlag, ego.ListPath(sceneID), version, seconds(egoWaitTimeout))
 		}

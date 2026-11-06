@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -21,8 +20,6 @@ const (
 	objectIDFlag       = "object-id"
 	manifestFlag       = "manifest"
 	uploadManifestFlag = "upload-manifest"
-
-	runTimeVersion = "(resolved at run time)"
 )
 
 func newObjectCmd(rt *runtime) *cobra.Command {
@@ -178,13 +175,6 @@ func latestVersionNumber(ctx context.Context, rt *runtime, sceneID string) (int,
 		return 0, &codedError{code: exitNotFound, kind: "no_versions", message: fmt.Sprintf("scene %s has no versions", sceneID)}
 	}
 	return latest.Number, nil
-}
-
-func versionText(wanted int, given bool) string {
-	if given {
-		return strconv.Itoa(wanted)
-	}
-	return runTimeVersion
 }
 
 func describeIDSource(source object.IDSource, manifestFile string) string {

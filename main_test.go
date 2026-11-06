@@ -312,7 +312,7 @@ func TestEgoUploadDryRunAcrossTheProcessBoundary(t *testing.T) {
 	egoDir := copyFixture(t, "ego-head")
 	dir, env := authEnvironment(t, fake, "")
 	res := runCLIWith(t, dir, env, "ego", "upload", "--slot", "head", "--ego-dir", egoDir, "--scene-id", "s-1", "--dry-run")
-	if res.exitCode != 0 || !strings.Contains(res.stdout, "POST /scenes/s-1/egos/head?version=<latest>") || !strings.Contains(res.stdout, "file  head.gltf  ") {
+	if res.exitCode != 0 || !strings.Contains(res.stdout, "POST /scenes/s-1/egos/head?version=<resolved at run time>") || !strings.Contains(res.stdout, "file  head.gltf  ") {
 		t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
 	}
 	if n := len(fake.Requests()); n != 0 {

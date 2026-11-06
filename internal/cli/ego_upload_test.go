@@ -229,7 +229,7 @@ func TestEgoUploadDryRunMakesNoRequestsAndNeedsNoKey(t *testing.T) {
 		t.Errorf("%d requests, want 0", n)
 	}
 	for _, want := range []string{
-		"POST /scenes/" + egoSceneID + "/egos/head?version=<latest>\n",
+		"POST /scenes/" + egoSceneID + "/egos/head?version=<resolved at run time>\n",
 		"Authorization: APIKEY:DEVELOPER (not set)\n",
 		"file  head.gltf  ", "file  head.bin  ", "file  head_albedo.png  ", "file  ego.json  ",
 	} {

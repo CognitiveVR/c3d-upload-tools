@@ -68,11 +68,7 @@ func runObjectManifestUpload(cmd *cobra.Command, rt *runtime) error {
 		return usageErrorf("%s is not a valid manifest: %v", file, err)
 	}
 	if dryRun {
-		version := "<latest>"
-		if versionGiven {
-			version = versionText(wanted, true)
-		}
-		return printManifestDryRun(rt, sceneID, version, file, len(m.Objects))
+		return printManifestDryRun(rt, sceneID, versionText(wanted, versionGiven), file, len(m.Objects))
 	}
 
 	ctx := cmd.Context()

@@ -392,7 +392,7 @@ func TestObjectUploadDryRunMakesNoRequestsNeedsNoKeyAndWritesNothing(t *testing.
 		t.Errorf("%d requests, want 0", n)
 	}
 	for _, want := range []string{
-		"POST /objects/" + objectSceneID + "/cube?version=",
+		"POST /objects/" + objectSceneID + "/cube?version=<resolved at run time>",
 		"Authorization: APIKEY:DEVELOPER (not set)",
 		"file  cube.gltf  ", "file  cube.bin  ", "file  cvr_object_thumbnail.png  ",
 		"Object ID: dry-1 (from --object-id)",

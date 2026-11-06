@@ -182,7 +182,7 @@ func TestObjectManifestUploadDryRunNeedsNoKeyAndSendsNothing(t *testing.T) {
 	if got.code != 0 || requestCount(fake) != 0 {
 		t.Fatalf("exit %d, %d requests, stderr %q", got.code, requestCount(fake), got.stderr)
 	}
-	for _, want := range []string{"POST /objects/" + objectSceneID + "?version=<latest>", "Authorization: APIKEY:DEVELOPER (not set)", "Objects: 2", "Manifest: custom.json"} {
+	for _, want := range []string{"POST /objects/" + objectSceneID + "?version=<resolved at run time>", "Authorization: APIKEY:DEVELOPER (not set)", "Objects: 2", "Manifest: custom.json"} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("stdout lacks %q: %q", want, got.stdout)
 		}

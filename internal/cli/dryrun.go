@@ -4,12 +4,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/pflag"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
 )
+
+// dryRunVersion stands in for a version number a dry run cannot know because
+// only the gateway can say which version is the latest.
+const dryRunVersion = "<resolved at run time>"
+
+// versionText is the version a dry run shows: wanted when given, else
+// dryRunVersion.
+func versionText(wanted int, given bool) string {
+	if given {
+		return strconv.Itoa(wanted)
+	}
+	return dryRunVersion
+}
 
 type dryRunPart struct {
 	Field    string `json:"field"`
