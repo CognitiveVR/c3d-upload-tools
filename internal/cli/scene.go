@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ego"
-	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
 	"github.com/cognitivevr/c3d-upload-tools/v2/internal/object"
 	"github.com/cognitivevr/c3d-upload-tools/v2/internal/scene"
 	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
@@ -219,12 +218,7 @@ func notVisibleMessage(e *scene.VersionNotVisibleError) string {
 	if e.Cause == nil {
 		return fmt.Sprintf("The upload finished, but version %d of scene %s is not visible yet. %s", e.Expected, e.SceneID, check)
 	}
-	cause := e.Cause.Error()
-	var gerr *gateway.Error
-	if errors.As(e.Cause, &gerr) {
-		cause = gerr.UserMessage()
-	}
-	return fmt.Sprintf("The upload finished, but version %d of scene %s could not be read back: %s\n%s", e.Expected, e.SceneID, cause, check)
+	return fmt.Sprintf("The upload finished, but version %d of scene %s could not be read back: %s\n%s", e.Expected, e.SceneID, userMessage(e.Cause), check)
 }
 
 func sceneShowCommand(sceneID string) string {

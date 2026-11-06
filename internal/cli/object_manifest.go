@@ -38,6 +38,8 @@ func newObjectManifestCmd(rt *runtime) *cobra.Command {
 	return cmd
 }
 
+// manifestUploadResult has ObjectsWithoutFiles nil, encoded as null, when the
+// follow-up listing failed and the objects were not verified.
 type manifestUploadResult struct {
 	SceneID             string   `json:"sceneId"`
 	VersionNumber       int      `json:"versionNumber"`
@@ -89,15 +91,21 @@ func runObjectManifestUpload(cmd *cobra.Command, rt *runtime) error {
 	}
 	rt.log.Info("Manifest uploaded: %d objects to version %d", len(m.Objects), chosen.Number)
 
+	result := manifestUploadResult{SceneID: sceneID, VersionNumber: chosen.Number, ObjectCount: len(m.Objects)}
 	raw, err := object.List(ctx, client, chosen.ID)
 	if err != nil {
-		return fmt.Errorf("the manifest was uploaded, but listing the objects of version %d failed: %w", chosen.Number, err)
+		rt.log.Warn("The manifest was uploaded, but listing the objects of version %d failed: %s", chosen.Number, userMessage(err))
+		if rt.settings.Format == formatJSON {
+			return json.NewEncoder(rt.streams.Stdout).Encode(result)
+		}
+		rt.log.Info("Objects without files: not verified")
+		return nil
 	}
 	missing, err := object.WithoutFiles(raw)
 	if err != nil {
 		return err
 	}
-	result := manifestUploadResult{SceneID: sceneID, VersionNumber: chosen.Number, ObjectCount: len(m.Objects), ObjectsWithoutFiles: []string{}}
+	result.ObjectsWithoutFiles = []string{}
 	for _, o := range missing {
 		rt.log.Warn("object %q (mesh %s) has no files in version %d; upload it again for this version", o.SDKID, o.MeshName, chosen.Number)
 		result.ObjectsWithoutFiles = append(result.ObjectsWithoutFiles, o.SDKID)

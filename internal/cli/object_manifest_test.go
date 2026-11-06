@@ -129,6 +129,36 @@ func TestObjectManifestUploadTextModeLogsOnStderrOnly(t *testing.T) {
 	}
 }
 
+func TestObjectManifestUploadSucceedsWhenTheFollowUpListFails(t *testing.T) {
+	for _, format := range []string{"json", "text"} {
+		t.Run(format, func(t *testing.T) {
+			fake := startFake(t)
+			objectScene(fake)
+			writeManifestFile(t, objectManifestPath(), "cube")
+			fake.FailRoute("GET /v0/versions/{versionId}/objects", http.StatusForbidden, "", nil)
+			got := runCommand(t, "object", "manifest", "upload", "--scene-id", objectSceneID, "--format", format)
+			if got.code != 0 {
+				t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+			}
+			warning := "The manifest was uploaded, but listing the objects of version 2 failed: Access forbidden."
+			if !strings.Contains(got.stderr, warning) {
+				t.Errorf("stderr = %q, want %q", got.stderr, warning)
+			}
+			if format == "text" {
+				if got.stdout != "" || !strings.Contains(got.stderr, "not verified") {
+					t.Errorf("stdout %q, stderr %q, want nothing on stdout and the objects not verified", got.stdout, got.stderr)
+				}
+				return
+			}
+			result := decodeObject(t, got.stdout)
+			value, present := result["objectsWithoutFiles"]
+			if !present || value != nil || result["objectCount"] != 1.0 || result["versionNumber"] != 2.0 {
+				t.Errorf("result = %v, want objectsWithoutFiles null", result)
+			}
+		})
+	}
+}
+
 func TestObjectManifestUploadEmptyBody400ShowsTheManifestHint(t *testing.T) {
 	fake := startFake(t)
 	writeManifestFile(t, objectManifestPath(), "cube")

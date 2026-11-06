@@ -114,6 +114,16 @@ func report(rt *runtime, streams IO, args []string, err error) int {
 	return code
 }
 
+// userMessage is the text report would show for err: the gateway's user
+// message for a *gateway.Error, else err's own text.
+func userMessage(err error) string {
+	var gerr *gateway.Error
+	if errors.As(err, &gerr) {
+		return gerr.UserMessage()
+	}
+	return err.Error()
+}
+
 // formatFromArgs is the last --format value in args before a "--", or empty.
 func formatFromArgs(args []string) string {
 	format := ""
