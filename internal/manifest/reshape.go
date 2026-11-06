@@ -70,7 +70,7 @@ func (o listObject) entry() (Entry, error) {
 		ExternalID:   o.ExternalID,
 		FileType:     o.DynamicFileType,
 	}
-	if o.Name != nil {
+	if o.Name != nil && *o.Name != "" {
 		e.Name = *o.Name
 	}
 	var err error

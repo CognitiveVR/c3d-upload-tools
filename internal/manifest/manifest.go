@@ -1,6 +1,6 @@
 // Package manifest reads, edits, validates and writes the local object
 // manifest file. Fields other than the ones on Manifest and Entry are dropped
-// on load, because the gateway accepts only these.
+// on load.
 package manifest
 
 import (
@@ -27,9 +27,9 @@ type Entry struct {
 	ID              string    `json:"id"`
 	Mesh            string    `json:"mesh"`
 	Name            string    `json:"name"`
-	ScaleCustom     []float64 `json:"scaleCustom"`
-	InitialPosition []float64 `json:"initialPosition"`
-	InitialRotation []float64 `json:"initialRotation"`
+	ScaleCustom     []float64 `json:"scaleCustom,omitempty"`
+	InitialPosition []float64 `json:"initialPosition,omitempty"`
+	InitialRotation []float64 `json:"initialRotation,omitempty"`
 	IsController    *bool     `json:"isController,omitempty"`
 	Scale           *float64  `json:"scale,omitempty"`
 	InitialScale    []float64 `json:"initialScale,omitempty"`

@@ -115,6 +115,9 @@ func TestRoundTripBashManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved := readFile(t, out)
+	if want := strings.ReplaceAll(bashManifest, ".0", ""); string(saved) != want {
+		t.Errorf("round trip is not byte-stable apart from number format:\n got %s\nwant %s", saved, want)
+	}
 	if got, want := decodeAny(t, saved), decodeAny(t, []byte(bashManifest)); !reflect.DeepEqual(got, want) {
 		t.Errorf("round trip changed content:\n got %s\nwant %s", saved, bashManifest)
 	}
@@ -180,15 +183,37 @@ func TestIsControllerSerializesAsBoolean(t *testing.T) {
 }
 
 func TestSaveOmitsUnsetOptionalFields(t *testing.T) {
+	e := DefaultEntry("cube", "cube")
+	e.ScaleCustom = nil
+	e.InitialPosition = nil
+	e.InitialRotation = nil
 	path := filepath.Join(t.TempDir(), "m.json")
-	if err := validManifest().Save(path); err != nil {
+	if err := (&Manifest{Objects: []Entry{e}}).Save(path); err != nil {
 		t.Fatal(err)
 	}
 	saved := readFile(t, path)
-	for _, k := range []string{"isController", "scale", "initialScale", "externalId", "fileType"} {
+	for _, k := range []string{"scaleCustom", "initialPosition", "initialRotation", "isController", "scale", "initialScale", "externalId", "fileType"} {
 		if bytes.Contains(saved, []byte(`"`+k+`":`)) {
 			t.Errorf("unset key %q written:\n%s", k, saved)
 		}
+	}
+	if bytes.Contains(saved, []byte("null")) {
+		t.Errorf("saved file contains null:\n%s", saved)
+	}
+}
+
+func TestSaveOmitsTransformsMissingFromLoadedFile(t *testing.T) {
+	src := writeFile(t, "m.json", `{"objects":[{"id":"a","mesh":"a","name":"a"}]}`)
+	m, err := Load(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "out.json")
+	if err := m.Save(out); err != nil {
+		t.Fatal(err)
+	}
+	if saved := readFile(t, out); bytes.Contains(saved, []byte("null")) {
+		t.Errorf("saved file contains null:\n%s", saved)
 	}
 }
 
@@ -336,7 +361,7 @@ func TestDefaultEntry(t *testing.T) {
 }
 
 func TestDefaultPath(t *testing.T) {
-	const id = "3a7e015d-41bf-4657-b9c8-3099de52cd95"
+	const id = "00000000-0000-4000-8000-000000000001"
 	if got, want := DefaultPath(id), id+"_object_manifest.json"; got != want {
 		t.Errorf("DefaultPath = %q, want %q", got, want)
 	}
@@ -361,8 +386,17 @@ func TestUpsertExistingIDChangesOnlyMesh(t *testing.T) {
 	if len(m.Objects) != 2 {
 		t.Fatalf("got %d objects, want 2", len(m.Objects))
 	}
-	want := existing
-	want.Mesh = "LanternV2"
+	want := Entry{
+		ID: "Lantern-PNG", Mesh: "LanternV2", Name: "Front lantern",
+		ScaleCustom:     []float64{2, 2, 2},
+		InitialPosition: []float64{1, 2, 3},
+		InitialRotation: []float64{0, 0.7, 0, 0.7},
+		IsController:    boolPtr(false),
+		Scale:           floatPtr(3),
+		InitialScale:    []float64{1.5, 1.5, 1.5},
+		ExternalID:      stringPtr("ext-42"),
+		FileType:        stringPtr("gltf"),
+	}
 	if !reflect.DeepEqual(m.Objects[1], want) {
 		t.Errorf("updated entry = %+v, want %+v", m.Objects[1], want)
 	}
@@ -418,7 +452,7 @@ func TestIDForMesh(t *testing.T) {
 }
 
 func TestValidateID(t *testing.T) {
-	for _, id := range []string{"a", "Lantern-PNG", "3a7e015d-41bf-4657-b9c8-3099de52cd95", "with space ~!", strings.Repeat("x", 255)} {
+	for _, id := range []string{"a", "Lantern-PNG", "00000000-0000-4000-8000-000000000001", "with space ~!", strings.Repeat("x", 255)} {
 		if err := ValidateID(id); err != nil {
 			t.Errorf("ValidateID(%q) = %v, want nil", id, err)
 		}

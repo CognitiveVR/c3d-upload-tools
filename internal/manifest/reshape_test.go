@@ -52,6 +52,18 @@ func TestFromObjectListOptionalFields(t *testing.T) {
 	}
 }
 
+func TestFromObjectListEmptyNameFallsBackToMeshName(t *testing.T) {
+	m, err := FromObjectList([]byte(`[{"sdkId":"a","name":"","meshName":"mesh-a"},{"sdkId":"b","meshName":"mesh-b"}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"mesh-a", "mesh-b"} {
+		if got := m.Objects[i].Name; got != want {
+			t.Errorf("objects[%d].Name = %q, want %q", i, got, want)
+		}
+	}
+}
+
 func TestFromObjectListEmpty(t *testing.T) {
 	m, err := FromObjectList([]byte(" []\n"))
 	if err != nil {
