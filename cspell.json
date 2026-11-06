@@ -7,8 +7,15 @@
     // words - list of words to be always considered correct
     "words": [
         "APIKEY",
+        "cobra",
+        "dependabot",
         "globoff",
         "gltf",
+        "gofmt",
+        "golangci",
+        "goreleaser",
+        "govulncheck",
+        "pflag",
         "visualstudio"
     ],
     // flagWords - list of words to be always considered incorrect
