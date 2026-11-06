@@ -37,7 +37,7 @@ internal/ego/         ego file plan, client calls, wait for optimized
 internal/ui/          stderr logger (text and JSON), progress, terminal detection, printable-text escaping
 internal/version/     build info and the sdkVersion string
 internal/fakegateway/ in-process httptest gateway for tests
-testdata/             small fixtures: scene-glb, scene-gltf, object-gltf, ego-head, ego-controller-glb
+testdata/             small fixtures: scene-glb, scene-gltf, object-gltf, object-glb, ego-head, ego-controller-glb; the smoke test uses only these
 scripts/              sign-macos.sh, smoke.sh (live smoke test against dev or prod, needs a key for that environment)
 docs/                 migration-2.0.md, release-checklist.md
 ```
@@ -61,7 +61,7 @@ The release pipeline is `.goreleaser.yml` plus `.github/workflows/`. The plan an
 
 - Tests run against `internal/fakegateway`, an in-process `httptest` server that implements the gateway contract. Never call the live gateway and never read a real key in a test.
 - Run with `-race`; CI runs Linux, macOS and Windows, so use `filepath` and `t.TempDir()` and avoid POSIX-only assumptions.
-- Fixtures are small files under `testdata/` or synthesized in the test. The large sample directories at the repo root belong to the legacy tools.
+- Fixtures are small files under `testdata/` or synthesized in the test. The large sample model directories at the repo root (`SciFiHelmet`, `scene-test`, `object-test` and the others listed in `.gitignore`) are ignored; they are local copies for the legacy scripts' end-to-end tests only.
 - `internal/cli/readme_examples_test.go` parses every `cognitive3d-cli-upload` line in the README fenced blocks against the real command tree. Change a flag and the README fails until it is updated.
 - Update `README.md`, `docs/migration-2.0.md` and `CHANGELOG.md` when behavior or flags change.
 
@@ -70,6 +70,6 @@ The release pipeline is `.goreleaser.yml` plus `.github/workflows/`. The plan an
 The bash scripts (`upload-scene.sh`, `upload-object.sh`, `upload-object-manifest.sh`, `list-objects.sh`, `upload-utils.sh`) and the PowerShell module (`C3DUploadTools/`) print a deprecation banner and are removed in 3.0. Fix only critical bugs in them.
 
 - `bash test-scripts/test-model-files.sh`: offline tests of the model-file rule
-- `bash test-scripts/test-all.sh <scene_id> <env>`: end-to-end script tests against a real gateway
+- `bash test-scripts/test-all.sh <scene_id> <env>`: end-to-end script tests against a real gateway; needs the ignored sample model directories present locally
 - `pwsh -File C3DUploadTools/Tests/test-module-structure.ps1`: PowerShell module structure check
 - `pwsh -File C3DUploadTools/Tests/test-model-files.ps1`: PowerShell model-file rule tests

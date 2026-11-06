@@ -19,3 +19,14 @@
 /dist/
 /cognitive3d-cli-upload
 coverage.out
+
+# Sample models for the legacy scripts' end-to-end tests: keep local copies, never commit them
+/test-scene-vancouver/
+/SciFiHelmet/
+/lantern-test/
+/lantern-test-jpg/
+/scene-test/
+/scene-test-glb/
+/icosphere-test/
+/object-test/
+/object-test-glb/
