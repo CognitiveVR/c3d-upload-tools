@@ -310,6 +310,17 @@ func TestPlanImageURIPresent(t *testing.T) {
 	}
 }
 
+func TestPlanImageURIJPEGIsAnUnlistedFile(t *testing.T) {
+	dir := copyFixture(t, "ego-head")
+	writeFile(t, dir, "tex.jpeg", "x")
+	writeFile(t, dir, "head.gltf", gltfWithImage("tex.jpeg"))
+	err := mustFail(t, dir, "head", "tex.jpeg", "an egocentric model directory holds only")
+	var ce *CheckError
+	if errors.As(err, &ce) {
+		t.Fatalf("want the unlisted-file error, got a model check failure: %v", ce.Errors)
+	}
+}
+
 func TestPlanNeedsAModel(t *testing.T) {
 	dir := copyFixture(t, "ego-head")
 	remove(t, dir, "head.gltf", "head.bin")
