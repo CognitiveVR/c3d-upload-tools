@@ -171,13 +171,37 @@ func TestEgoUploadWaitCutOffByTimeoutSaysTheModelWasUploaded(t *testing.T) {
 	if got.code != 1 {
 		t.Fatalf("exit %d, want 1 (stderr %q)", got.code, got.stderr)
 	}
-	want := "The model was uploaded; waiting for optimization was cut off (context deadline exceeded). Check with: " +
+	want := "The model was uploaded; checking optimization failed (context deadline exceeded). Check with: " +
 		binaryName + " ego list --scene-id " + egoSceneID
 	if !strings.Contains(got.stderr, want) {
 		t.Errorf("stderr = %q, want it to contain %q", got.stderr, want)
 	}
 	if want := "Slot: head\n"; !strings.HasPrefix(got.stdout, want) {
 		t.Errorf("stdout = %q, want the upload result", got.stdout)
+	}
+}
+
+func TestEgoUploadWaitPollFailureSaysTheModelWasUploadedAndKeepsTheKind(t *testing.T) {
+	fake := startFake(t)
+	egoScene(fake)
+	fastWait(t, time.Minute)
+	fake.FailRoute("GET /v0/scenes/{sceneId}/egos", http.StatusInternalServerError, "", http.Header{"Retry-After": {"0"}})
+	got := egoUpload(t, "head", "--wait", "--format", "json")
+	if got.code != 1 {
+		t.Fatalf("exit %d, want 1 (stderr %q)", got.code, got.stderr)
+	}
+	if result := decodeOne(t, got.stdout); result["slot"] != "head" {
+		t.Errorf("result = %v, want the upload result", result)
+	}
+	var record map[string]any
+	lines := strings.Split(strings.TrimSpace(got.stderr), "\n")
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &record); err != nil {
+		t.Fatalf("last stderr line is not JSON: %v: %q", err, got.stderr)
+	}
+	prefix := "The model was uploaded; checking optimization failed (The Cognitive3D gateway returned a server error (status 500). Please try again later). Check with: " +
+		binaryName + " ego list --scene-id " + egoSceneID
+	if message, _ := record["message"].(string); message != prefix || record["error"] != "server_error" {
+		t.Errorf("record = %v, want message %q and error server_error", record, prefix)
 	}
 }
 

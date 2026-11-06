@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -140,12 +141,7 @@ func runEgoUpload(cmd *cobra.Command, rt *runtime) error {
 			if printErr := printEgoUploadResult(rt, result); printErr != nil {
 				return printErr
 			}
-			if cause := ctx.Err(); cause != nil {
-				return &codedError{code: exitFailure, kind: gateway.Interrupted.String(), message: fmt.Sprintf(
-					"The model was uploaded; waiting for optimization was cut off (%v). Check with: %s ego list --scene-id %s",
-					cause, binaryName, sceneID)}
-			}
-			return err
+			return optimizationCheckFailed(ctx, err, sceneID)
 		}
 		result.Optimized = &optimized
 		if !optimized {
@@ -153,6 +149,23 @@ func runEgoUpload(cmd *cobra.Command, rt *runtime) error {
 		}
 	}
 	return printEgoUploadResult(rt, result)
+}
+
+// optimizationCheckFailed reports a failed --wait after a successful upload:
+// exit 1, the kind of the gateway error, or interrupted once ctx is done.
+func optimizationCheckFailed(ctx context.Context, err error, sceneID string) error {
+	coded := &codedError{code: exitFailure, kind: "error"}
+	var gerr *gateway.Error
+	switch {
+	case ctx.Err() != nil:
+		err = ctx.Err()
+		coded.kind = gateway.Interrupted.String()
+	case errors.As(err, &gerr):
+		coded.kind, coded.statusCode = gerr.Kind.String(), gerr.StatusCode
+	}
+	coded.message = fmt.Sprintf("The model was uploaded; checking optimization failed (%s). Check with: %s ego list --scene-id %s",
+		strings.TrimSuffix(userMessage(err), "."), binaryName, sceneID)
+	return coded
 }
 
 func seconds(d time.Duration) string {
