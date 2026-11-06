@@ -94,7 +94,7 @@ jobs:
           node-version: 22
 
       - name: Run markdownlint
-        run: npx --yes markdownlint-cli@0.49.1 --config .markdownlint.json '**/*.md' --ignore node_modules --ignore .superpowers --ignore .planning --ignore .claude
+        run: npx --yes markdownlint-cli@0.49.1 --config .markdownlint.json '**/*.md'
 
   cspell:
     name: Spell check

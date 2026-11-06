@@ -3,11 +3,12 @@
     // Version of the setting file.  Always 0.2
     "version": "0.2",
     // language - current active spelling language
-    "language": "en-ca",
+    "language": "en,en-GB",
     // words - list of words to be always considered correct
     "words": [
         "APIKEY",
         "cobra",
+        "ddev",
         "dependabot",
         "globoff",
         "gltf",
@@ -15,8 +16,17 @@
         "golangci",
         "goreleaser",
         "govulncheck",
+        "Nopper",
+        "Pavlovic",
         "pflag",
         "visualstudio"
+    ],
+    "ignorePaths": [
+        "node_modules/**",
+        ".superpowers/**",
+        ".planning/**",
+        ".claude/**",
+        ".companion-state/**"
     ],
     // flagWords - list of words to be always considered incorrect
     // This is useful for offensive words and common spelling errors.
