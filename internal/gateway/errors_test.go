@@ -98,6 +98,36 @@ func TestHTMLDetectedByContentType(t *testing.T) {
 	}
 }
 
+func TestMessageAndHintSplitTheUserMessage(t *testing.T) {
+	tests := []struct {
+		name          string
+		err           *Error
+		message, hint string
+		joiner        string
+	}{
+		{"expired", newStatusError("GET", "/apiKeys/verify", 401, []byte("Key expired"), "", false),
+			"Your developer API key has expired.", keyRotationSteps, "\n\n"},
+		{"unauthorized", newStatusError("GET", "/apiKeys/verify", 401, nil, "", false),
+			"Authentication failed. Please check your developer API key.", keyVerificationSteps, "\n\n"},
+		{"scene not accessible", newStatusError("GET", "/scenes/s1", 401, nil, "", true),
+			"Scene s1 was not found in the project this key belongs to.", "Check the id with: cognitive3d-cli-upload scene list", " "},
+		{"lost after sending", newTransportError("POST", "/scenes/s1", "data.c3ddev.com", context.DeadlineExceeded, true, true),
+			"The connection was lost while waiting for the gateway's answer. The upload may still have completed.",
+			"Check with: cognitive3d-cli-upload scene list before retrying, because a retry would create another version.", " "},
+		{"forbidden", newStatusError("GET", "/scenes/s1", 403, nil, "", true),
+			"Access forbidden. Your API key may not have permission for this operation.", "", ""},
+	}
+	for _, tt := range tests {
+		message, hint := tt.err.MessageAndHint()
+		if message != tt.message || hint != tt.hint {
+			t.Errorf("%s: message %q hint %q", tt.name, message, hint)
+		}
+		if want := tt.message + tt.joiner + tt.hint; tt.err.UserMessage() != want {
+			t.Errorf("%s: UserMessage %q, want %q", tt.name, tt.err.UserMessage(), want)
+		}
+	}
+}
+
 func TestClientErrorBodyCollapsedAndTruncated(t *testing.T) {
 	body := "first\n\n   second\t" + strings.Repeat("x", 400)
 	e := newStatusError("POST", "/objects/s1/cube", 422, []byte(body), "text/plain", false)

@@ -157,7 +157,7 @@ Flags also accept the old underscore spellings, so `--scene_dir` and `--dry_run`
 
 stdout carries only the result of the command. Logs, warnings and errors go to stderr as `[YYYY-MM-DD HH:MM:SS] [LEVEL] message`, so output can be piped safely. `--verbose` adds debug lines and `--quiet` hides informational ones.
 
-With `--format json`, a command prints exactly one JSON object or array on stdout, and stderr carries one JSON record per line, for example `{"error":"<code>","message":"...","hint":"...","status_code":401}`.
+With `--format json`, a command prints exactly one JSON object or array on stdout, and stderr carries one JSON record per line. An error record looks like `{"level":"error","message":"...","error":"<code>","hint":"...","status_code":401}`; `hint` holds the steps to fix it or the command to check with, and is left out when there is none.
 
 | Code | Meaning |
 | --- | --- |

@@ -233,6 +233,19 @@ func TestAuthVerifyJSONReportsGatewayErrorAsRecordOnStderr(t *testing.T) {
 	if record["error"] != "key_expired" || record["status_code"] != float64(401) {
 		t.Errorf("record = %v, want error key_expired and status_code 401", record)
 	}
+	hint, _ := record["hint"].(string)
+	if record["message"] != "Your developer API key has expired." || !strings.Contains(hint, "Generate a new developer API key") {
+		t.Errorf("record = %v, want the rotation steps in hint, not in message", record)
+	}
+}
+
+func TestAuthVerifyTextKeepsTheHintAfterTheMessage(t *testing.T) {
+	fake := startFake(t)
+	t.Setenv("C3D_DEVELOPER_API_KEY", fake.ExpiredKey())
+	got := runCommand(t, "auth", "verify")
+	if !strings.Contains(got.stderr, "[ERROR] Your developer API key has expired.\n\nTo fix this issue:\n") {
+		t.Errorf("stderr = %q", got.stderr)
+	}
 }
 
 func TestTimeoutBoundsTheCommand(t *testing.T) {

@@ -154,21 +154,47 @@ func classify(path string, status int, body string, preflighted bool) ErrorKind 
 	return ClientError
 }
 
-// UserMessage is the text shown to the user for this error.
+// UserMessage is the text shown to the user for this error: the message,
+// then the hint, a multi-line hint after a blank line.
 func (e *Error) UserMessage() string {
+	message, hint := e.MessageAndHint()
+	switch {
+	case hint == "":
+		return message
+	case strings.Contains(hint, "\n"):
+		return message + "\n\n" + hint
+	}
+	return message + " " + hint
+}
+
+// MessageAndHint splits the user-facing text into what went wrong and what
+// to do about it; hint is empty when there is no advice.
+func (e *Error) MessageAndHint() (message, hint string) {
 	switch e.Kind {
 	case KeyExpired:
-		return "Your developer API key has expired.\n\n" + keyRotationSteps
+		return "Your developer API key has expired.", keyRotationSteps
 	case SceneNotAccessible:
+		hint = "Check the id with: " + binaryName + " scene list"
 		if id := sceneIDFromPath(e.path); id != "" {
-			return "Scene " + id + " was not found in the project this key belongs to. Check the id with: " + binaryName + " scene list"
+			return "Scene " + id + " was not found in the project this key belongs to.", hint
 		}
-		return "The scene was not found in the project this key belongs to. Check the id with: " + binaryName + " scene list"
+		return "The scene was not found in the project this key belongs to.", hint
 	case Unauthorized:
 		if body := e.displayBody(); body != "" {
-			return "Authentication failed: " + body + "\n\n" + keyVerificationSteps
+			return "Authentication failed: " + body, keyVerificationSteps
 		}
-		return "Authentication failed. Please check your developer API key.\n\n" + keyVerificationSteps
+		return "Authentication failed. Please check your developer API key.", keyVerificationSteps
+	case Network, Interrupted:
+		if check, retry := checkCommand(e.method, e.path); e.BodySent && check != "" {
+			return "The connection was lost while waiting for the gateway's answer. The upload may still have completed.",
+				"Check with: " + check + " before retrying, because " + retry
+		}
+	}
+	return e.message(), ""
+}
+
+func (e *Error) message() string {
+	switch e.Kind {
 	case Forbidden:
 		return "Access forbidden. Your API key may not have permission for this operation."
 	case NotFound:
@@ -185,12 +211,6 @@ func (e *Error) UserMessage() string {
 		}
 		return fmt.Sprintf("The Cognitive3D gateway returned a server error (status %d). Please try again later.", e.StatusCode)
 	case Network, Interrupted:
-		if e.BodySent {
-			if check, retry := checkCommand(e.method, e.path); check != "" {
-				return "The connection was lost while waiting for the gateway's answer. The upload may still have completed. Check with: " +
-					check + " before retrying, because " + retry
-			}
-		}
 		return fmt.Sprintf("Could not reach %s: %v", e.host, e.cause)
 	case LocalFile:
 		if e.cause != nil {

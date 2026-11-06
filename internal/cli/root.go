@@ -75,13 +75,16 @@ func run(ctx context.Context, root *cobra.Command, rt *runtime, args []string, s
 
 // report presents err on stderr and returns the exit code.
 func report(rt *runtime, streams IO, err error) int {
-	code, kind, status, message := exitFailure, "error", 0, err.Error()
+	code, kind, status, message, hint := exitFailure, "error", 0, err.Error(), ""
 	var gerr *gateway.Error
 	var coded *codedError
 	var usage *usageError
 	switch {
 	case errors.As(err, &gerr):
 		code, kind, status, message = gateway.ExitCode(err), gerr.Kind.String(), gerr.StatusCode, gerr.UserMessage()
+		if rt != nil && rt.settings.Format == formatJSON {
+			message, hint = gerr.MessageAndHint()
+		}
 	case errors.As(err, &coded):
 		code, kind, status, message = coded.code, coded.kind, coded.statusCode, coded.message
 	case errors.As(err, &usage):
@@ -91,7 +94,7 @@ func report(rt *runtime, streams IO, err error) int {
 	case rt == nil || rt.log == nil:
 		_, _ = fmt.Fprintf(streams.Stderr, "%s: %s\n", binaryName, message)
 	case rt.settings.Format == formatJSON:
-		rt.log.ErrorRecord(kind, message, "", status)
+		rt.log.ErrorRecord(kind, message, hint, status)
 	default:
 		rt.log.Error("%s", message)
 	}
