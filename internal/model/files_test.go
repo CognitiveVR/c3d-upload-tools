@@ -42,7 +42,7 @@ func TestResolveAccepts(t *testing.T) {
 		{"any gltf and bin", AnyMode, "", []string{"head.gltf", "head.bin"}, GLTFSeparate, []string{"head.gltf", "head.bin"}},
 		{"any gltf without bin", AnyMode, "", []string{"head.gltf"}, GLTFSeparate, []string{"head.gltf"}},
 		{"any gltf with several bins sorted", AnyMode, "", []string{"head.gltf", "b.bin", "a.bin"}, GLTFSeparate, []string{"head.gltf", "a.bin", "b.bin"}},
-		{"hidden files and junk ignored", SceneMode, "scene", []string{"scene.glb", ".hidden.glb", ".DS_Store", "Thumbs.db", "._scene.bin"}, GLB, []string{"scene.glb"}},
+		{"hidden files and junk ignored", SceneMode, "scene", []string{"scene.glb", ".hidden.glb", ".DS_Store", "Thumbs.db", "desktop.ini", "Desktop.INI", "._scene.bin"}, GLB, []string{"scene.glb"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestTextures(t *testing.T) {
 		"screenshot.png", "settings.json", "cvr_object_thumbnail.png",
 		"b.PNG", "a.jpg", "c.jpeg", "d.WEBP",
 		"model.ktx2", "notes.txt",
-		".DS_Store", "Thumbs.db", ".hidden.png",
+		".DS_Store", "Thumbs.db", "desktop.ini", ".hidden.png",
 	)
 	if err := os.Mkdir(filepath.Join(dir, "sub.png"), 0o755); err != nil {
 		t.Fatal(err)

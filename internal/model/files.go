@@ -53,12 +53,18 @@ func listFiles(dir string) ([]string, error) {
 	var names []string
 	for _, e := range entries {
 		name := e.Name()
-		if !e.Type().IsRegular() || strings.HasPrefix(name, ".") || strings.EqualFold(name, "Thumbs.db") {
+		if !e.Type().IsRegular() || IsSystemFile(name) {
 			continue
 		}
 		names = append(names, name)
 	}
 	return names, nil
+}
+
+// IsSystemFile reports whether name is a hidden file or one the operating
+// system leaves in folders (Thumbs.db, desktop.ini); plans skip them silently.
+func IsSystemFile(name string) bool {
+	return strings.HasPrefix(name, ".") || strings.EqualFold(name, "Thumbs.db") || strings.EqualFold(name, "desktop.ini")
 }
 
 func splitExt(name string) (stem, ext string) {

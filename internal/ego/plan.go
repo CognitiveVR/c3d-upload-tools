@@ -102,7 +102,7 @@ func Plan(dir, slot string) (*UploadPlan, error) {
 	var manifest *localfile.File
 	for _, e := range entries {
 		name := e.Name()
-		if strings.HasPrefix(name, ".") || strings.EqualFold(name, "Thumbs.db") || slices.Contains(modelNames, name) {
+		if model.IsSystemFile(name) || slices.Contains(modelNames, name) {
 			continue
 		}
 		if e.IsDir() {

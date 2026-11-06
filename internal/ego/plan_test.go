@@ -206,6 +206,22 @@ func TestPlanRejectsOtherFiles(t *testing.T) {
 	}
 }
 
+func TestPlanSkipsSystemFiles(t *testing.T) {
+	dir := copyFixture(t, "ego-head")
+	for _, name := range []string{"desktop.ini", "Thumbs.db", ".DS_Store"} {
+		writeFile(t, dir, name, "x")
+	}
+	p, err := Plan(dir, "head")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range partNames(p) {
+		if name == "desktop.ini" || name == "Thumbs.db" || name == ".DS_Store" {
+			t.Errorf("parts include %s", name)
+		}
+	}
+}
+
 func TestPlanRejectsMiscasedManifestName(t *testing.T) {
 	dir := copyFixture(t, "ego-head")
 	remove(t, dir, "ego.json")
