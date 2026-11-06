@@ -176,6 +176,32 @@ func TestSceneUploadNewVersionReportsItAndWarnsAboutDependents(t *testing.T) {
 	}
 }
 
+func TestSceneUploadNamesASceneIDTakenFromConfiguration(t *testing.T) {
+	notice := "Uploading a new version of scene " + testSceneUUID +
+		" (scene id from configuration; pass --scene-name without C3D_SCENE_ID to create a new scene)"
+	fake := startFake(t)
+	fake.AddScene(fakegateway.Scene{ID: testSceneUUID, SDKFacingID: testSceneUUID, SceneName: "Existing",
+		Versions: []fakegateway.Version{{ID: 11, VersionNumber: 1}}})
+	t.Setenv("C3D_SCENE_ID", testSceneUUID)
+
+	got := runCommand(t, "scene", "upload", "--scene-dir", sceneDir(t, "scene-glb"), "--scene-name", "New", "--dry-run")
+	if got.code != 0 || !strings.Contains(got.stderr, "[INFO] "+notice) {
+		t.Errorf("dry run: exit %d, stderr %q, want the notice", got.code, got.stderr)
+	}
+	got = runCommand(t, "scene", "upload", "--scene-dir", sceneDir(t, "scene-glb"), "--scene-name", "New")
+	if got.code != 0 || !strings.Contains(got.stderr, "[INFO] "+notice) {
+		t.Errorf("upload: exit %d, stderr %q, want the notice", got.code, got.stderr)
+	}
+	if sent := postsTo(fake); len(sent) != 1 || sent[0].Path != "/v0/scenes/"+testSceneUUID {
+		t.Fatalf("POSTs = %+v", sent)
+	}
+
+	got = runCommand(t, "scene", "upload", "--scene-dir", sceneDir(t, "scene-glb"), "--scene-id", testSceneUUID, "--dry-run")
+	if got.code != 0 || strings.Contains(got.stderr, "scene id from configuration") {
+		t.Errorf("--scene-id: exit %d, stderr %q, want no notice", got.code, got.stderr)
+	}
+}
+
 func TestSceneUploadConcurrentVersionsExitsOneWithCandidates(t *testing.T) {
 	for _, format := range []string{formatText, formatJSON} {
 		t.Run(format, func(t *testing.T) {

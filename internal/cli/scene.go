@@ -92,6 +92,10 @@ func runSceneUpload(cmd *cobra.Command, rt *runtime) error {
 	if sceneID == "" && knownName == "" {
 		return &usageError{message: scene.ErrNoSceneName.Error()}
 	}
+	if sceneID != "" && !flags.Changed(sceneIDFlag) {
+		rt.log.Info("Uploading a new version of scene %s (scene id from configuration; pass --%s without C3D_SCENE_ID to create a new scene)",
+			sceneID, sceneNameFlag)
+	}
 
 	if dryRun {
 		dryName := name

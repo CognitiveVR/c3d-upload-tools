@@ -65,6 +65,8 @@ Upload a scene. The directory holds one `.glb` (or `scene.gltf` plus `scene.bin`
 cognitive3d-cli-upload scene upload --scene-dir ./my-scene --scene-name "My Scene"
 ```
 
+A scene id set in `C3D_SCENE_ID`, `.env` or the config file also counts, so `scene upload` then adds a new version to that scene and says so on stderr. Unset it to create a new scene.
+
 Upload a dynamic object. The directory holds `<name>.glb` (or `<name>.gltf` plus `<name>.bin`), its textures and `cvr_object_thumbnail.png`. The object is merged into `<scene id>_object_manifest.json` in the current directory:
 
 ```bash
