@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -65,9 +64,6 @@ func IsTerminal(f *os.File) bool {
 	info, err := f.Stat()
 	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		return false
-	}
-	if runtime.GOOS == "windows" {
-		return true
 	}
 	null, err := os.Open(os.DevNull)
 	if err != nil {

@@ -98,12 +98,12 @@ func TestFormatBytes(t *testing.T) {
 }
 
 func TestCountingReaderPassesPayloadAndOnlyDrawsStatus(t *testing.T) {
-	payload := strings.Repeat("SECRETPAYLOAD", 1000)
+	payload := strings.Repeat("12% done\r\n34% left 56\n", 500)
 	var term bytes.Buffer
 	p, c := newTestProgress(&term, int64(len(payload)), "f")
 	r := CountingReader(strings.NewReader(payload), p)
 	var out bytes.Buffer
-	buf := make([]byte, 4096)
+	buf := make([]byte, 2200)
 	for {
 		n, err := r.Read(buf)
 		out.Write(buf[:n])
@@ -118,20 +118,34 @@ func TestCountingReaderPassesPayloadAndOnlyDrawsStatus(t *testing.T) {
 	if out.String() != payload {
 		t.Fatal("payload altered")
 	}
-	if strings.Contains(term.String(), "SECRETPAYLOAD") {
-		t.Fatal("payload leaked to terminal")
+	want := "\rf: 20% 2.2 KB of 11 KB" +
+		"\rf: 40% 4.4 KB of 11 KB" +
+		"\rf: 60% 6.6 KB of 11 KB" +
+		"\rf: 80% 8.8 KB of 11 KB" +
+		"\rf: 100% 11 KB of 11 KB"
+	if term.String() != want {
+		t.Fatalf("terminal output %q, want %q", term.String(), want)
 	}
-	re := regexp.MustCompile(`^\r.*% `)
-	for _, seg := range strings.Split(term.String(), "\r") {
-		if seg == "" {
-			continue
-		}
-		if !re.MatchString("\r" + seg) {
+	re := regexp.MustCompile(`^f: \d+% [0-9.]+ [KMG]?B of [0-9.]+ [KMG]?B$`)
+	for _, seg := range strings.Split(strings.TrimPrefix(term.String(), "\r"), "\r") {
+		if !re.MatchString(seg) {
 			t.Errorf("segment %q is not a status line", seg)
 		}
 	}
-	if !strings.HasSuffix(term.String(), "100% 13 KB of 13 KB") {
-		t.Errorf("final status %q", term.String())
+}
+
+func TestProgressDoneAfterThrottledAdd(t *testing.T) {
+	var buf bytes.Buffer
+	p, c := newTestProgress(&buf, 1000, "x")
+	p.Add(100)
+	c.t = c.t.Add(10 * time.Millisecond)
+	p.Add(900)
+	if strings.Contains(buf.String(), "100%") {
+		t.Fatalf("throttled Add drew: %q", buf.String())
+	}
+	p.Done()
+	if !strings.HasSuffix(buf.String(), "\rx: 100% 1.0 KB of 1.0 KB\n") {
+		t.Fatalf("got %q", buf.String())
 	}
 }
 
