@@ -1,5 +1,6 @@
 # Signing secrets are used only for v* tags and for dispatches from main; any other
 # dispatch builds an unsigned snapshot because sign-macos.sh skips when APPLE_TEAM_ID is unset.
+# A run that would publish without signing fails before anything is built.
 name: Release
 
 on:
@@ -24,6 +25,12 @@ jobs:
     env:
       SIGN: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     steps:
+      - name: Refuse to publish unsigned binaries
+        if: env.SIGN != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
+        run: |
+          echo "::error::This run would publish unsigned binaries. A real release needs a v* tag on main; dispatch from any other branch with dry_run for a snapshot."
+          exit 1
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
