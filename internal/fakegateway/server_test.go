@@ -198,6 +198,20 @@ func TestOnRouteRunsBeforeEachRequestToThatRoute(t *testing.T) {
 	}
 }
 
+func TestAddVersionIsVisibleAtOnce(t *testing.T) {
+	s := New(t)
+	s.AddScene(Scene{ID: "s1", Versions: []Version{{ID: 1, VersionNumber: 1}}})
+	s.AddVersion("s1", Version{ID: 2, VersionNumber: 2})
+	_, body := call(t, s, "GET", "/scenes/s1", header(s.Key()), nil)
+	var got Scene
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Versions) != 2 || got.Versions[1].VersionNumber != 2 {
+		t.Fatalf("versions = %+v", got.Versions)
+	}
+}
+
 func TestRouteHelpersRejectAnUnknownPattern(t *testing.T) {
 	s := New(t)
 	defer func() {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -93,8 +94,8 @@ func TestWaitForVersionPollsUntilTheVersionAppears(t *testing.T) {
 			gets++
 		}
 	}
-	if gets != 3 {
-		t.Errorf("GET requests = %d, want the first lookup and two polls", gets)
+	if gets != 4 {
+		t.Errorf("GET requests = %d, want the first lookup, two polls and the confirming poll", gets)
 	}
 }
 
@@ -111,6 +112,64 @@ func TestWaitForVersionReportsConcurrentVersions(t *testing.T) {
 	}
 	if latest != 3 {
 		t.Errorf("latest = %d, want 3", latest)
+	}
+}
+
+func TestWaitForVersionConfirmingPollCatchesAVersionThatAppearsNext(t *testing.T) {
+	fastPolling(t)
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: testSceneID, Versions: []fakegateway.Version{{ID: 1, VersionNumber: 1}, {ID: 2, VersionNumber: 2}}})
+	var mu sync.Mutex
+	polls := 0
+	fake.OnRoute("GET /v0/scenes/{sceneId}", func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if polls++; polls == 2 {
+			fake.AddVersion(testSceneID, fakegateway.Version{ID: 3, VersionNumber: 3})
+		}
+	})
+	_, latest, err := WaitForVersion(context.Background(), newClient(t, fake), testSceneID, 2, time.Second)
+	var concurrent *ConcurrentVersionsError
+	if !errors.As(err, &concurrent) || !slices.Equal(concurrent.Candidates, []int{2, 3}) {
+		t.Fatalf("err = %v, want candidates [2 3]", err)
+	}
+	if latest != 3 {
+		t.Errorf("latest = %d, want 3", latest)
+	}
+}
+
+func TestWaitForVersionReturnsTheVersionWhenTheConfirmingPollFails(t *testing.T) {
+	fastPolling(t)
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: testSceneID, Versions: []fakegateway.Version{{ID: 1, VersionNumber: 1}, {ID: 2, VersionNumber: 2}}})
+	var mu sync.Mutex
+	polls := 0
+	fake.OnRoute("GET /v0/scenes/{sceneId}", func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if polls++; polls == 1 {
+			fake.FailRoute("GET /v0/scenes/{sceneId}", http.StatusForbidden, "", nil)
+		}
+	})
+	v, _, err := WaitForVersion(context.Background(), newClient(t, fake), testSceneID, 2, time.Second)
+	if err != nil || v.Number != 2 {
+		t.Fatalf("got %+v err %v, want version 2", v, err)
+	}
+}
+
+func TestWaitForVersionRetryAfterCannotOutlastTheBudget(t *testing.T) {
+	fastPolling(t)
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: testSceneID, Versions: []fakegateway.Version{{ID: 1, VersionNumber: 1}}})
+	fake.FailRoute("GET /v0/scenes/{sceneId}", http.StatusServiceUnavailable, "", http.Header{"Retry-After": {"60"}})
+	start := time.Now()
+	_, _, err := WaitForVersion(context.Background(), newClient(t, fake), testSceneID, 2, 100*time.Millisecond)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("waited %v for a 100ms budget", elapsed)
+	}
+	var notVisible *VersionNotVisibleError
+	if !errors.As(err, &notVisible) || notVisible.Expected != 2 || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want VersionNotVisibleError for 2 without a bare deadline", err)
 	}
 }
 

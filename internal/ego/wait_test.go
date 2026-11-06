@@ -76,3 +76,17 @@ func TestWaitOptimizedNeverPollsFasterThanAMillisecond(t *testing.T) {
 		t.Errorf("%d polls in 20 milliseconds with a zero interval, want at most 21", n)
 	}
 }
+
+func TestWaitOptimizedRetryAfterCannotOutlastTheTimeout(t *testing.T) {
+	fake, client := egoFake(t)
+	uploadHead(t, client, 1)
+	fake.FailRoute("GET /v0/scenes/{sceneId}/egos", http.StatusServiceUnavailable, "", http.Header{"Retry-After": {"60"}})
+	start := time.Now()
+	optimized, err := WaitOptimized(context.Background(), client, egoSceneID, "head", 1, time.Millisecond, 100*time.Millisecond, nil)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("waited %v for a 100ms timeout", elapsed)
+	}
+	if optimized || err != nil {
+		t.Fatalf("WaitOptimized = %v, %v; want false, nil", optimized, err)
+	}
+}

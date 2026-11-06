@@ -242,6 +242,18 @@ func (s *Server) AddScene(scene Scene) {
 	s.scenes = append(s.scenes, scene)
 }
 
+// AddVersion adds v to the known scene sceneID, visible at once, as if
+// another client had uploaded it.
+func (s *Server) AddVersion(sceneID string, v Version) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	scene := s.findSceneLocked(sceneID)
+	if scene == nil {
+		panic("fakegateway: no scene " + sceneID)
+	}
+	scene.Versions = append(scene.Versions, v)
+}
+
 // SetNextUpload decides what the next POST /scenes/{sceneId} for sceneID
 // adds: versions, left out of the first hiddenPolls GET /scenes/{sceneId}
 // answers after that POST. Without it a POST adds the next version number,

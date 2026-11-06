@@ -139,36 +139,67 @@ func (e *VersionNotVisibleError) Error() string {
 func (e *VersionNotVisibleError) Unwrap() error { return e.Cause }
 
 // WaitForVersion polls the scene until a version numbered expected or higher
-// appears, for at most timeout. Exactly one such version is returned; more
-// than one is a *ConcurrentVersionsError; none is a *VersionNotVisibleError.
-// latestSeen is the highest version number of the last successful poll. A
-// lookup failing with 429, a 5xx or a network error counts as "not visible
-// yet"; any other lookup failure ends the wait at once.
+// appears, for at most timeout, which also bounds every request and retry.
+// When one such version appears it polls once more after one interval: a
+// second fresh version then is a *ConcurrentVersionsError, otherwise the one
+// version is returned. More than one at first sight is a
+// *ConcurrentVersionsError; none before the timeout is a
+// *VersionNotVisibleError. latestSeen is the highest version number of the
+// last successful poll. A lookup failing with 429, a 5xx or a network error
+// counts as "not visible yet"; any other lookup failure ends the wait at once,
+// unless a version was already found.
 func WaitForVersion(ctx context.Context, client *gateway.Client, sceneID string, expected int, timeout time.Duration) (Version, int, error) {
 	deadline := time.Now().Add(timeout)
+	pollCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 	latestSeen := 0
 	var lastErr error
-	for {
-		info, err := Describe(ctx, client, sceneID)
-		lastErr = err
-		if err != nil && !transientLookupError(err) {
-			return Version{}, latestSeen, &VersionNotVisibleError{SceneID: sceneID, Expected: expected, LatestSeen: latestSeen, Cause: err}
+	var found *Version
+	notVisible := func(cause error) (Version, int, error) {
+		return Version{}, latestSeen, &VersionNotVisibleError{SceneID: sceneID, Expected: expected, LatestSeen: latestSeen, Cause: cause}
+	}
+	stopped := func() (Version, int, error) {
+		if err := ctx.Err(); err != nil {
+			return notVisible(err)
 		}
-		if err == nil {
-			if v, done, err := pickVersion(info, sceneID, expected, &latestSeen); done {
-				return v, latestSeen, err
+		if found != nil {
+			return *found, latestSeen, nil
+		}
+		return notVisible(lastErr)
+	}
+	for {
+		info, err := Describe(pollCtx, client, sceneID)
+		switch {
+		case err != nil && pollCtx.Err() != nil:
+			return stopped()
+		case err != nil && found != nil:
+			return *found, latestSeen, nil
+		case err != nil && !transientLookupError(err):
+			return notVisible(err)
+		case err != nil:
+			lastErr = err
+		default:
+			lastErr = nil
+			v, done, err := pickVersion(info, sceneID, expected, &latestSeen)
+			switch {
+			case done && err != nil:
+				return Version{}, latestSeen, err
+			case found != nil:
+				return *found, latestSeen, nil
+			case done:
+				found = &v
 			}
 		}
 
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return Version{}, latestSeen, &VersionNotVisibleError{SceneID: sceneID, Expected: expected, LatestSeen: latestSeen, Cause: lastErr}
+			return stopped()
 		}
 		timer := time.NewTimer(min(pollInterval, remaining))
 		select {
-		case <-ctx.Done():
+		case <-pollCtx.Done():
 			timer.Stop()
-			return Version{}, latestSeen, &VersionNotVisibleError{SceneID: sceneID, Expected: expected, LatestSeen: latestSeen, Cause: ctx.Err()}
+			return stopped()
 		case <-timer.C:
 		}
 	}

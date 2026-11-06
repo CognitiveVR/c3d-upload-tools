@@ -12,37 +12,39 @@ import (
 const minimumPollInterval = time.Millisecond
 
 // WaitOptimized lists the version's slots every interval (at least a
-// millisecond) until slot is marked optimized, and polls one last time when
-// timeout elapses. Running out of time returns false and no error, because
-// the gateway never marks small models optimized. log may be nil.
+// millisecond) until slot is marked optimized or timeout elapses; timeout
+// also bounds every poll and its retries. Running out of time returns false
+// and no error, because the gateway never marks small models optimized. log
+// may be nil.
 func WaitOptimized(ctx context.Context, client *gateway.Client, sceneID, slot string, versionNumber int, interval, timeout time.Duration, log *ui.Logger) (bool, error) {
 	if log == nil {
 		log = ui.New(io.Discard, ui.Options{})
 	}
 	interval = max(interval, minimumPollInterval)
 	deadline := time.Now().Add(timeout)
+	pollCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 	for {
-		remaining := time.Until(deadline)
-		timer := time.NewTimer(max(min(interval, remaining), 0))
+		timer := time.NewTimer(max(min(interval, time.Until(deadline)), 0))
 		select {
-		case <-ctx.Done():
+		case <-pollCtx.Done():
 			timer.Stop()
 			return false, ctx.Err()
 		case <-timer.C:
 		}
-		if err := ctx.Err(); err != nil {
-			return false, err
+		if pollCtx.Err() != nil {
+			return false, ctx.Err()
 		}
-		listing, err := List(ctx, client, sceneID, versionNumber)
+		listing, err := List(pollCtx, client, sceneID, versionNumber)
 		if err != nil {
+			if pollCtx.Err() != nil {
+				return false, ctx.Err()
+			}
 			return false, err
 		}
 		if s, ok := listing.Find(slot); ok && s.Optimized {
 			return true, nil
 		}
 		log.Debug("slot %s of scene %s version %d is not optimized yet", slot, sceneID, versionNumber)
-		if remaining <= interval {
-			return false, nil
-		}
 	}
 }
