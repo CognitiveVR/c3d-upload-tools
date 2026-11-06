@@ -76,7 +76,31 @@ func TestProgressZeroTotalOmitsPercent(t *testing.T) {
 func TestProgressNilTerminal(t *testing.T) {
 	p := NewProgress(nil, 100, "x")
 	p.Add(50)
+	p.SetTotal(200)
 	p.Done()
+}
+
+func TestProgressSetTotal(t *testing.T) {
+	var buf bytes.Buffer
+	p, c := newTestProgress(&buf, 1_000_000, "x")
+	p.Add(10)
+	drawn := buf.Len()
+	p.SetTotal(2_000_000)
+	if buf.Len() != drawn {
+		t.Fatalf("SetTotal redrew: %q", buf.String())
+	}
+	c.t = c.t.Add(100 * time.Millisecond)
+	p.Add(500_000)
+	if !strings.HasSuffix(buf.String(), "\rx: 25% 500 KB of 2.0 MB") {
+		t.Fatalf("got %q", buf.String())
+	}
+	buf.Reset()
+	p.Done()
+	if buf.String() != "\rx: 100% 2.0 MB of 2.0 MB\n" {
+		t.Fatalf("got %q", buf.String())
+	}
+	var none *Progress
+	none.SetTotal(5)
 }
 
 func TestFormatBytes(t *testing.T) {

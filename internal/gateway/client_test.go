@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net"
@@ -144,6 +145,11 @@ func TestMultipartPartsAndProgress(t *testing.T) {
 	}
 	if !strings.Contains(terminal.String(), "Uploading") {
 		t.Errorf("progress not drawn: %q", terminal.String())
+	}
+	wire := recordedLength(t, fake.Requests()[0], sceneParts())
+	progress.Done()
+	if want := fmt.Sprintf("\rUploading: 100%% %d B of %d B\n", wire, wire); !strings.HasSuffix(terminal.String(), want) {
+		t.Errorf("final line %q, want suffix %q", terminal.String(), want)
 	}
 }
 

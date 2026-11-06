@@ -28,6 +28,17 @@ func NewProgress(terminal io.Writer, total int64, label string) *Progress {
 	return &Progress{terminal: terminal, total: total, label: label, now: time.Now}
 }
 
+// SetTotal replaces the total the next line is drawn against; it does not
+// redraw.
+func (p *Progress) SetTotal(total int64) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.total = total
+}
+
 // Add records n more bytes transferred and redraws at most every 100
 // milliseconds.
 func (p *Progress) Add(n int64) {

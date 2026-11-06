@@ -49,7 +49,8 @@ func writerOutput(t *testing.T, parts []Part, contents [][]byte, boundary string
 }
 
 // randomParts returns count parts of 0 to 64 KiB each, even indexes backed by
-// files in a temporary directory and odd indexes held in memory.
+// files in a temporary directory and odd indexes held in memory. With more
+// than two parts, the two middle parts (one of each kind) are empty.
 func randomParts(t *testing.T, seed uint64, count int) ([]Part, [][]byte) {
 	t.Helper()
 	var key [32]byte
@@ -62,7 +63,7 @@ func randomParts(t *testing.T, seed uint64, count int) ([]Part, [][]byte) {
 	contents := make([][]byte, count)
 	for i := range count {
 		content := make([]byte, rng.IntN(64<<10+1))
-		if count > 2 && i == count/2 {
+		if count > 2 && (i == count/2-1 || i == count/2) {
 			content = nil
 		}
 		_, _ = source.Read(content)

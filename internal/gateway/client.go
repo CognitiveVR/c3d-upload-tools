@@ -30,7 +30,8 @@ const (
 )
 
 // Part is one multipart part. Open is called once per request and may return
-// an in-memory reader.
+// an in-memory reader. The reader may be closed while a Read on it is in
+// flight, so it must tolerate that, as *os.File and in-memory readers do.
 type Part struct {
 	Field       string
 	Filename    string
@@ -162,7 +163,8 @@ func (c *Client) PostJSON(ctx context.Context, path string, query url.Values, bo
 // PostMultipart has no response-header timeout: the gateway answers only
 // after it has processed every part. A part that cannot be opened or read, or
 // whose size differs from Part.Size, fails with Kind LocalFile whatever the
-// transport reports. progress counts every body byte, headers included.
+// transport reports. progress counts every body byte, headers included, and
+// its total is set to the body length.
 func (c *Client) PostMultipart(ctx context.Context, path string, query url.Values, parts []Part, progress *ui.Progress) (*Response, error) {
 	body, contentType, contentLength, err := NewMultipartBody(parts, multipart.NewWriter(io.Discard).Boundary())
 	if err != nil {
@@ -170,6 +172,7 @@ func (c *Client) PostMultipart(ctx context.Context, path string, query url.Value
 	}
 	var reader io.ReadCloser = body
 	if progress != nil {
+		progress.SetTotal(contentLength)
 		reader = struct {
 			io.Reader
 			io.Closer
