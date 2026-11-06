@@ -59,6 +59,7 @@ changelog:
       - '^docs:'
       - '^test:'
       - '^chore:'
+      - '^ci:'
       - Merge pull request
       - Merge remote-tracking branch
       - Merge branch
