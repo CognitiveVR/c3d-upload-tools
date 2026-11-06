@@ -1,300 +1,75 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for working in this repository. The product is the Go CLI `cognitive3d-cli-upload`; the bash scripts and PowerShell module are deprecated legacy tools.
 
-## Go CLI (2.0)
-
-The bash and PowerShell sections below describe the 1.x tools. The Go CLI `cognitive3d-cli-upload` replaces both in 2.0; only the `version` command exists so far.
+## Build, test and lint
 
 - `make build`: build the binary for the current platform
-- `make test`: run the tests with the race detector
-- `make lint`: run golangci-lint
+- `make test`: `go test -race -shuffle=on` over all packages
+- `make lint`: golangci-lint (pinned version in the Makefile)
+- `gofmt -l .` must print nothing and `go vet ./...` must be clean before a commit
+- `make install-hooks`: point git at `.githooks` for the pre-commit hook
+- Go 1.25 in `go.mod`, with no `toolchain` line. Dependencies are limited to `github.com/spf13/cobra` and `gopkg.in/yaml.v3`; tests use the standard `testing` package only
 
-Package map (entries marked planned are not present yet):
+Markdown is checked in CI with the exact commands below; run them after editing any `*.md`:
+
+```bash
+npx --yes markdownlint-cli@0.49.1 --config .markdownlint.json '**/*.md'
+npx --yes cspell@10.4.0 --config cspell.json --no-progress '**/*.md'
+```
+
+New product or flag names go into the `words` list of `cspell.json`.
+
+## Package map
 
 ```text
-main.go               wires cli.Execute(); maps errors to exit codes
-internal/cli/         cobra commands; one file per noun (root, auth, scene, object, ego, version)
+main.go               wires cli.Execute() to a signal-aware context; maps the result to the process exit code
+internal/cli/         cobra commands, one file per noun (root, auth, scene, object, ego, version); runtime and preflight
+internal/config/      settings resolution: flag, environment, .env, ~/.cognitive3d/upload.yaml
+internal/dotenv/      bash-compatible .env parser
+internal/gateway/     HTTP client, error mapping and exit codes, GET retry, multipart streaming
+internal/localfile/   regular-file checks (no symlinks) and multipart parts from disk
+internal/model/       model-file rule (glb vs gltf+bin), texture allow-list, glTF/GLB checks, size thresholds, SafeSegment
+internal/scene/       scene directory plan, settings.json, upload, version attribution
+internal/object/      object directory plan, upload, list
+internal/manifest/    manifest types, validation, merge, list-to-manifest reshape
+internal/ego/         ego file plan, client calls, wait for optimized
+internal/ui/          stderr logger (text and JSON), progress, terminal detection, printable-text escaping
 internal/version/     build info and the sdkVersion string
-internal/config/      planned: settings, precedence resolution, environments, YAML file
-internal/dotenv/      planned: bash-compatible .env parser
-internal/gateway/     planned: client, request builders, error mapping, retry for GET, multipart streaming
-internal/model/       planned: model-file rule (glb vs gltf+bin), reserved converter names, glTF/GLB checks
-internal/scene/       planned: scene directory plan, settings.json, upload orchestration, version lookup
-internal/object/      object directory plan, upload, object id resolution, manifest upload
-internal/manifest/    planned: manifest types, validation, list-to-manifest reshape
-internal/ego/         planned: ego file plan, upload, list, delete, wait
-internal/ui/          planned: stderr logger (text and JSON), progress, TTY and NO_COLOR detection
-internal/fakegateway/ planned: httptest server implementing the gateway contract for tests
-testdata/             planned: small fixtures
-scripts/              planned: sign-macos.sh, smoke-dev.sh
-docs/                 migration-2.0.md; release-checklist.md is planned
+internal/fakegateway/ in-process httptest gateway for tests
+testdata/             small fixtures: scene-glb, scene-gltf, object-gltf, ego-head
+scripts/              sign-macos.sh
+docs/                 migration-2.0.md
 ```
 
-## Commands
-
-### Testing
-
-- `./test-all.sh <scene_id> <env>` - Run comprehensive tests for scene and object uploads (requires scene_id from previous upload)
-- `bash test-scripts/test-model-files.sh` and `pwsh -File C3DUploadTools/Tests/test-model-files.ps1` - Offline unit tests for the model-file rule (`resolve_model_files` / `Resolve-C3DModelFiles`: one `.glb`, or the `.gltf` + `.bin` pair, never both), the reserved converter-output names (`is_reserved_converter_name` / `Test-C3DReservedConverterName`, `<base>_<n>.<ext>` beside a `.glb`) and the literal-path handling of bracketed file names in the PowerShell validators
-- A `.glb` model is sent as `--form 'file=@"<path>"'` (fixed field name, quoted path) because curl splits an unquoted form argument at the first `=` and the path at `,`/`;`; the gateway reads the filename, not the field name. The glTF Separate forms keep their filename-as-field-name convention. PowerShell file checks use `-LiteralPath` so `[`/`]` in a `.glb` name are not wildcards
-
-### Scene Operations
-
-- `./upload-scene.sh --scene_dir <dir> --scene_name <name> [--env prod|dev] [--scene_id <id>] [--verbose] [--dry_run]` - Upload scene files with enhanced security and validation (--scene_name required for new scenes). The scene model is one `.glb` of any name, or `scene.gltf` + `scene.bin`
-- `./upload-scene.sh --help` - Show usage information
-
-### Object Operations
-
-- `./upload-object.sh [--scene_id <id>] --object_filename <name> --object_dir <dir> [--object_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload dynamic 3D objects (supports PNG, JPG, JPEG, WEBP textures). The model is `<name>.glb`, or `<name>.gltf` + `<name>.bin`
-- `./upload-object-manifest.sh [--scene_id <id>] [--env prod|dev] [--verbose] [--dry_run]` - Upload object manifest after object upload
-- `./list-objects.sh [--scene_id <id>] --env <env> --verbose` - List objects for a scene
-
-### Dependencies
-
-- Requires `jq` and `curl` to be installed
-- Set `C3D_DEVELOPER_API_KEY` environment variable or use `.env` file (recommended)
-- Optional: Set `C3D_SCENE_ID` environment variable to avoid --scene_id parameters
-
-## Architecture
-
-### File Structure
-
-- **Shell scripts**: Main upload functionality in bash scripts with standardized logging, error handling, and API interaction patterns
-- **Test directories**: `scene-test/`, `object-test/`, `lantern-test/` contain sample assets for testing uploads; `scene-test-glb/` and `object-test-glb/` hold the same kind of assets as single `.glb` files (made with `gltf-pipeline`)
-- **Generated files**: `<scene_id>_object_manifest.json` files are created automatically after object uploads
-
-### Key Components
-
-- `sdk-version.txt`: Contains current SDK version (1.2.0) used for generated settings.json. Kept in lockstep with `ModuleVersion` in `C3DUploadTools.psd1`.
-- `settings.json`: Scene configuration with scale, sceneName, and sdkVersion fields - **generated automatically** during upload with SDK prefix (`cli-bash-v<version>` or `cli-powershell-v<version>`)
-- **API endpoints**: Support both prod (cognitive3d.com) and dev (c3ddev.com) environments
-
-### Upload Workflow
-
-1. Upload scene first to get scene_id
-2. Upload objects using scene_id (can be set in .env file for convenience)
-3. Upload object manifest to display objects in dashboard
-4. Object manifests are automatically generated but can be manually edited before upload
-
-### Object Manifest Structure
-
-The object manifest follows Unity SDK conventions. Each object entry has:
-
-- `id`: A unique UUID identifying this object instance (auto-generated if not provided)
-- `mesh`: The name of the 3D model file (e.g., "cube" for cube.glb or cube.gltf/cube.bin)
-- `name`: Display name for the object (defaults to mesh name)
-- `scaleCustom`: Scale factors [x, y, z]
-- `initialPosition`: Starting position [x, y, z]
-- `initialRotation`: Quaternion rotation [x, y, z, w]
-
-**Important:** The `id` field is a UUID, not the mesh name. Multiple objects can share the same `mesh` but must have unique `id` values. When no `--object_id` is provided, scripts auto-generate a UUID.
-
-### Texture Format Support
-
-- **Scene uploads** support PNG, JPG, JPEG, and WEBP image files
-- **Object uploads** support PNG, JPG, JPEG, and WEBP texture files
-- Textures are automatically detected and uploaded with scene/object files
-- Object thumbnail must be named `cvr_object_thumbnail.png` (PNG format required)
-
-### Environment Variable Support (SDK-191) ✅
-
-**Streamlined Workflow with .env:**
-
-- Set `C3D_SCENE_ID` in `.env` file to avoid --scene_id parameters
-- All object operations (upload-object.sh, upload-object-manifest.sh, list-objects.sh) support environment variable fallback
-- PowerShell module automatically loads .env file during import
-- Tested with real API uploads in both dev and prod environments
-
-### Common Patterns
-
-- All scripts use consistent argument parsing with `--parameter value` format
-- Standardized logging with color-coded output (INFO/WARN/ERROR/DEBUG) and timestamps
-- Comprehensive error checking for dependencies and required parameters
-- Support for `--verbose` and `--dry_run` flags across scripts
-
-## Enhanced upload-scene.sh Features
-
-### Security & Reliability
-
-- Secure API key handling without local storage exposure
-- Safe file operations with comprehensive validation
-- Automatic settings.json generation with SDK version prefixes
-- Comprehensive input validation (UUID format, semantic versioning, file size limits)
-- Cross-platform compatibility (macOS and Linux)
-
-### Advanced Error Handling
-
-- Specific guidance for HTTP 401 "Key expired" errors with step-by-step resolution
-- Authentication troubleshooting for general 401 errors
-- Clear messages for 403 (forbidden) and 404 (not found) errors
-- Actionable error messages that guide users to solutions
-
-### Validation Features
-
-- Scene ID must be valid UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
-- SDK version must follow semantic versioning: `x.y.z`
-- File size validation with 100MB limit per file
-- Early validation prevents costly operations with invalid data
-
-### Logging & Monitoring
-
-- Timestamped logs with format: `[YYYY-MM-DD HH:MM:SS] [LEVEL] message`
-- Upload timing metrics and performance monitoring
-- File size reporting in debug mode
-- Color-coded output for different log levels
-
-### Safe Testing
-
-- `--dry_run` mode shows exact operations without execution
-- Previews curl commands with redacted API keys
-- Displays file inventory with sizes before upload
-- Validates all inputs before making any changes
-
-### Best Practices for Development
-
-- Always test with `--dry_run` first before real uploads
-- Use `--verbose` for detailed debugging information
-- Check file sizes if uploads are slow or failing
-- Rotate API keys immediately when receiving 401 errors
-- Validate scene_id format from dashboard before use
-
-## PowerShell Implementation (Windows Compatibility)
-
-### Status: Complete ✅ (Enterprise-Grade)
-
-PowerShell module provides full Windows compatibility with enterprise-grade features and comprehensive validation.
-
-### Enterprise Features Implemented
-
-#### Module Architecture ✅
-
-- **Professional Organization**: Functions categorized in Core, Validation, Api, Utilities directories
-- **Type Safety**: PowerShell classes for structured data (`C3DConfiguration`, `C3DUploadRequest`, `C3DApiResponse`)
-- **Cross-platform compatibility**: Windows PowerShell 5.1+ and PowerShell Core 7.x
-- **Comprehensive validation**: Advanced `[ValidateScript()]` blocks with detailed error messages
-- **Error handling**: Proper PowerShell error records with categories and recommended actions
-
-#### Production-Ready Features ✅
-
-- **Progress tracking**: Visual feedback for large file uploads
-- **Memory optimization**: Efficient handling of large files without external dependencies
-- **Comprehensive help**: Detailed documentation with real-world examples and workflows
-- **Security**: Secure API key handling, HTTPS validation, no credential logging
-- **Reliability**: Automatic backup/rollback, retry logic, comprehensive input validation
-
-### PowerShell Commands
-
-#### Testing (Located in C3DUploadTools/Tests/)
-
-- `pwsh -File C3DUploadTools/Tests/test-module-structure.ps1` - Module structure validation
-- `pwsh -File C3DUploadTools/Tests/test-utilities-internal.ps1` - Internal function testing
-- `pwsh -File C3DUploadTools/Tests/test-scene-upload.ps1` - Scene upload workflow testing
-- `pwsh -File C3DUploadTools/Tests/test-object-upload.ps1` - Object upload workflow testing
-
-#### Module Usage (All Functions Complete ✅)
-
-```powershell
-# Import the module
-Import-Module ./C3DUploadTools -Force
-
-# Available functions (all production-ready)
-Upload-C3DScene -SceneDirectory <path> -SceneName <name> [-Environment prod|dev] [-SceneId <uuid>] [-DryRun] [-Verbose]    # ✅ COMPLETE (SceneName required for new scenes)
-Upload-C3DObject -ObjectFilename <name> -ObjectDirectory <path> [-SceneId <uuid>] [-Environment prod|dev] [-DryRun]  # ✅ COMPLETE
-Upload-C3DObjectManifest [-SceneId <uuid>] [-Environment prod|dev] [-DryRun]    # ✅ COMPLETE
-Get-C3DObjects [-SceneId <uuid>] [-Environment prod|dev] [-OutputFile <path>] [-FormatAsManifest]    # ✅ COMPLETE
-
-# Test-C3DUploads source exists at Public/Test-C3DUploads.ps1 but is intentionally
-# unexported (still a placeholder that throws). Add to FunctionsToExport in
-# C3DUploadTools.psd1 once a real implementation lands.
-
-# Environment variable support - SceneId parameter is optional when C3D_SCENE_ID is set
-```
-
-### PowerShell Advantages Over Bash
-
-| Feature | Bash (current) | PowerShell (new) |
-|---------|----------------|------------------|
-| **Dependencies** | Requires `jq` and `curl` | No external dependencies |
-| **JSON Processing** | External `jq` command | Native `ConvertFrom-Json` |
-| **HTTP Requests** | External `curl` command | Native System.Net.WebClient (Windows compatible) |
-| **Error Handling** | Exit codes + manual parsing | Rich exception objects with detailed context |
-| **Parameter Validation** | Manual validation functions | Declarative `[Parameter()]` attributes |
-| **File Operations** | External commands (`cp`, `mv`) | Native PowerShell cmdlets |
-| **Cross-platform Paths** | Manual path handling | Automatic path normalization |
-| **Progress Indicators** | Basic text output | Native progress bars for uploads |
-| **Windows Integration** | Limited Windows support | Native Windows PowerShell support |
-
-### Module Organization
-
-```text
-C3DUploadTools/
-├── Public/                    # User-facing functions (5 functions)
-├── Private/                   # Internal functions organized by purpose
-│   ├── Core/                 # Logging, error handling, classes, configuration
-│   ├── Validation/           # API key, UUID, file system validation
-│   ├── Api/                  # HTTP requests, multipart data, response handling
-│   └── Utilities/            # Upload sessions, helper functions
-└── Tests/                    # All test scripts (moved from root directory)
-    ├── test-module-structure.ps1
-    ├── test-utilities-internal.ps1
-    ├── test-scene-upload.ps1
-    ├── test-object-upload.ps1
-    ├── test-core-utilities.ps1
-    └── Test-EnvWorkflow.ps1
-```
-
-### PowerShell Gallery Readiness
-
-Status: 95% Ready for Publication
-
-- ✅ Enterprise-grade module structure and organization
-- ✅ Comprehensive parameter validation and error handling
-- ✅ Rich comment-based help with real-world examples
-- ✅ Cross-platform compatibility (Windows + Linux + macOS)
-- ✅ Professional documentation and best practices
-- 📋 Remaining: Pester test suite for automated testing
-
-### Enterprise-Grade Improvements Implemented
-
-#### Code Quality & Architecture
-
-- **Function refactoring**: Split large 500+ line functions into focused, single-responsibility components
-- **Type safety**: PowerShell classes for structured request/response handling
-- **Error handling**: Consistent error records with proper categories and actionable guidance
-- **Input validation**: Comprehensive `[ValidateScript()]` blocks with UUID, file, and directory validation
-
-#### User Experience
-
-- **Progress indicators**: Visual feedback for long-running upload operations
-- **Detailed help**: Real-world examples, complete workflows, and troubleshooting guidance
-- **Clear error messages**: Specific instructions for resolving common issues
-- **Workflow automation**: Environment variable support for streamlined batch operations
-
-#### Performance & Reliability
-
-- **Memory efficiency**: Optimized file handling for large uploads without external dependencies
-- **Cross-platform**: Native Windows PowerShell and PowerShell Core compatibility
-- **Security**: Secure credential handling with no API key logging or exposure
-- **Robustness**: Automatic settings.json generation, retry logic, and comprehensive validation
-
-### Compatibility & Production Readiness
-
-- **Bash Scripts**: Continue to work as before (no breaking changes)
-- **PowerShell Module**: Enterprise-grade Windows compatibility with no external dependencies
-- **Cross-platform**: Tested on Windows PowerShell 5.1+, PowerShell Core 7.x, macOS, and Linux
-- **Production-ready**: All functions complete with comprehensive validation and error handling
-- **Professional quality**: Suitable for enterprise environments and PowerShell Gallery publication
-
-### PowerShell HTTP Client Implementation ✅
-
-**Challenge Resolved:** PowerShell's `Invoke-WebRequest` validates Authorization headers strictly and rejects the `APIKEY:DEVELOPER` format required by Cognitive3D API.
-
-**Solution:** Uses `System.Net.WebClient` for multipart uploads with manual multipart form data construction:
-
-- ✅ **Windows Compatible**: No external dependencies (curl, jq) required
-- ✅ **Authorization Working**: Custom APIKEY:DEVELOPER format bypasses PowerShell validation
-- ✅ **Multipart Uploads**: Manual boundary construction for object file uploads
-- ✅ **Full Functionality**: Object upload (HTTP 200) and manifest upload (HTTP 201) working
-- ✅ **Environment Variables**: C3D_SCENE_ID fallback fully functional
-- ✅ **Cross-platform**: Works on Windows PowerShell 5.1+ and PowerShell Core 7.x+
+The release pipeline is `.goreleaser.yml` plus `.github/workflows/`. The plan and the decision table live outside this repo, in `cvr/c3d-agentic-scratch/matt/refactor-cli-upload-tools/plan.md`.
+
+## Conventions
+
+- **stdout is data, stderr is logs.** A command prints only its result on stdout (one JSON object or array with `--format json`). Logs, warnings and errors go to stderr as `[YYYY-MM-DD HH:MM:SS] [LEVEL] message`, or one JSON record per line in JSON mode. Never print a diagnostic to stdout.
+- **Exit codes:** 0 success, 1 general, 2 authentication, 3 not found or not accessible, 4 validation or usage.
+- **One sanitizer for path segments.** Every file name that enters a URL path or a multipart filename passes through `model.SafeSegment` first.
+- **Local first.** Every command runs its planning and validation before its first network call, and `--dry-run` returns before it. The API key is checked lazily, only when the first request is about to be made.
+- **Preflight.** Every command that names a scene calls `preflight` before any other request, so a later 401 with an empty body means "scene not accessible" (exit 3), not "bad key".
+- **Signals.** `main.go` owns the one signal handler (`signal.NotifyContext`); no other code installs one.
+- **Flags** are kebab-case; the root normalizer also accepts the legacy underscore spellings.
+- Units in identifiers and JSON are full words (`milliseconds`, `bytes`).
+- Comments state invariants the code cannot express; no ticket ids, dates or decision history.
+- `.gitattributes` keeps `*.go`, `*.md`, `*.json`, `*.gltf` and `*.sh` on LF; fixtures (`*.glb`, `*.bin`, images) are binary, so copy them with `cp`.
+
+## Testing
+
+- Tests run against `internal/fakegateway`, an in-process `httptest` server that implements the gateway contract. Never call the live gateway and never read a real key in a test.
+- Run with `-race`; CI runs Linux, macOS and Windows, so use `filepath` and `t.TempDir()` and avoid POSIX-only assumptions.
+- Fixtures are small files under `testdata/` or synthesized in the test. The large sample directories at the repo root belong to the legacy tools.
+- `internal/cli/readme_examples_test.go` parses every `cognitive3d-cli-upload` line in the README fenced blocks against the real command tree. Change a flag and the README fails until it is updated.
+- Update `README.md`, `docs/migration-2.0.md` and `CHANGELOG.md` when behavior or flags change.
+
+## Legacy 1.x tools
+
+The bash scripts (`upload-scene.sh`, `upload-object.sh`, `upload-object-manifest.sh`, `list-objects.sh`, `upload-utils.sh`) and the PowerShell module (`C3DUploadTools/`) print a deprecation banner and are removed in 3.0. Fix only critical bugs in them.
+
+- `bash test-scripts/test-model-files.sh`: offline tests of the model-file rule
+- `bash test-scripts/test-all.sh <scene_id> <env>`: end-to-end script tests against a real gateway
+- `pwsh -File C3DUploadTools/Tests/test-module-structure.ps1`: PowerShell module structure check
+- `pwsh -File C3DUploadTools/Tests/test-model-files.ps1`: PowerShell model-file rule tests

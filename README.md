@@ -1,542 +1,184 @@
 # Cognitive3D Upload Tools
 
-Upload 3D scenes and dynamic objects to the Cognitive3D platform with ease. Cross-platform tools supporting both Bash (macOS/Linux) and PowerShell (Windows) with streamlined environment variable workflows.
+`cognitive3d-cli-upload` is a single command-line program for Windows, macOS and Linux that uploads 3D scenes, dynamic objects and egocentric (session replay) models to the Cognitive3D platform. It checks your files locally before it sends anything, works in scripts and CI, and can print machine-readable JSON.
 
-## Key Features
+## Installation
 
-- **Complete Upload Workflow**: Scene files, dynamic objects, and manifests
-- **Cross-Platform**: Bash scripts for macOS/Linux, enterprise-grade PowerShell module for Windows
-- **Environment Variables**: Streamlined workflows with `.env` file support
-- **Enhanced Security**: Safe API key handling, comprehensive input validation, and secure HTTP requests
-- **Developer-Friendly**: Progress tracking, detailed help, dry-run mode, and comprehensive error guidance
-- **Production-Ready**: Enterprise-grade PowerShell module with type safety and comprehensive validation
+### macOS
 
-## 2.0 preview
+```bash
+brew tap cognitivevr/tap && brew install --cask cognitive3d-cli-upload
+```
 
-Version 2.0 replaces both the bash scripts and the PowerShell module with a single Go binary, `cognitive3d-cli-upload`. The 1.x tools keep working until then, and everything below this section describes them.
+### Windows
 
-Planned commands (only `version` and `auth verify` exist today):
+1. Download `cognitive3d-cli-upload_<version>_Windows_x86_64.zip` (or `_arm64.zip`) and `cognitive3d-cli-upload_<version>_checksums.txt` from the [GitHub release](https://github.com/CognitiveVR/c3d-upload-tools/releases).
+2. Compare the zip's sha256 with its line in the checksums file, in PowerShell with `Get-FileHash` or in a command prompt with `certutil`:
 
-- `auth verify`: preflight the developer API key and report project, organization and key expiry.
-- `scene upload`: create a scene or a new version from a directory.
-- `scene screenshot`: replace the screenshot of an existing version.
-- `scene list`: list the key's scenes with their versions.
-- `scene show`: show one scene with its versions, latest first.
-- `object upload`: upload one dynamic object's files and merge it into the local manifest file.
-- `object manifest upload`: upload the local manifest file.
-- `object list`: list the objects of the latest (or a given) version.
-- `ego upload`: upload or replace one egocentric model slot.
-- `ego list`: show the slots of a version.
-- `ego delete`: remove a slot, reverting session replay to the bundled model.
-- `version`: print version, commit and build date.
-- `completion`: shell completion for bash, zsh, fish and PowerShell.
+   ```powershell
+   Get-FileHash .\cognitive3d-cli-upload_<version>_Windows_x86_64.zip -Algorithm SHA256
+   ```
 
-Build from source today with Go 1.25 or newer:
+   ```bat
+   certutil -hashfile cognitive3d-cli-upload_<version>_Windows_x86_64.zip SHA256
+   ```
+
+3. Extract the zip and add the folder holding `cognitive3d-cli-upload.exe` to your `PATH`.
+
+The Windows binary is unsigned in 2.0.0, so the first launch shows a SmartScreen "unknown publisher" prompt. That is expected: choose "More info", then "Run anyway".
+
+### Linux
+
+Download `cognitive3d-cli-upload_<version>_Linux_x86_64.tar.gz` (or `_arm64.tar.gz`) and the checksums file from the release, then verify and extract:
+
+```bash
+sha256sum --ignore-missing -c cognitive3d-cli-upload_<version>_checksums.txt
+sudo tar -xzf cognitive3d-cli-upload_<version>_Linux_x86_64.tar.gz -C /usr/local/bin cognitive3d-cli-upload
+```
+
+### Build from source
+
+Requires Go 1.25 or newer.
 
 ```bash
 make build
 ./cognitive3d-cli-upload version
 ```
 
-The mapping from 1.x invocations to the new commands is outlined in [docs/migration-2.0.md](docs/migration-2.0.md).
+## Quick start
 
-## Quick Start
-
-### 1. Get Your API Key
-
-1. Go to [Cognitive3D Dashboard](https://app.cognitive3d.com/)
-2. Settings (gear icon) → "Manage developer key"
-3. Copy your Developer API key
-
-### 2. Set Up Environment
+Create a developer API key in the Cognitive3D dashboard under Settings, "Manage developer key", and export it:
 
 ```bash
-# Copy and edit the configuration file
-cp .env.example .env
-# Edit .env and add your API key: C3D_DEVELOPER_API_KEY=your_api_key_here
+export C3D_DEVELOPER_API_KEY=your_api_key
 ```
 
-### 3. Install Dependencies (Bash Only)
-
-**macOS:** `brew install jq curl`
-**Ubuntu/Debian:** `sudo apt install jq curl`
-**Fedora/RHEL:** `dnf install jq curl`
-**Windows:** Use PowerShell module (no dependencies required)
-
-### 4. Upload Your First Scene
+Check the key and see which project it belongs to:
 
 ```bash
-# Bash (macOS/Linux)
-./upload-scene.sh --scene_dir scene-test --scene_name "My First Scene" --env prod
-
-# PowerShell (Windows)
-Import-Module ./C3DUploadTools
-Upload-C3DScene -SceneDirectory scene-test -SceneName "My First Scene" -Environment prod
+cognitive3d-cli-upload auth verify
 ```
 
-Save the returned Scene ID for object uploads, or add it to your `.env` file:
+Upload a scene. The directory holds one `.glb` (or `scene.gltf` plus `scene.bin`), its textures and `screenshot.png`. A new scene needs a name; pass `--scene-id` to add a new version to an existing scene instead:
 
 ```bash
-echo "C3D_SCENE_ID=your-scene-id-here" >> .env
+cognitive3d-cli-upload scene upload --scene-dir ./my-scene --scene-name "My Scene"
 ```
 
-### 5. Upload Objects (Optional)
+Upload a dynamic object. The directory holds `<name>.glb` (or `<name>.gltf` plus `<name>.bin`), its textures and `cvr_object_thumbnail.png`. The object is merged into `<scene id>_object_manifest.json` in the current directory:
 
 ```bash
-# Bash - with scene ID in .env file
-./upload-object.sh --object_filename cube --object_dir object-test --env prod
-./upload-object-manifest.sh --env prod
-
-# PowerShell - with scene ID in environment
-Upload-C3DObject -ObjectFilename cube -ObjectDirectory object-test -Environment prod
-Upload-C3DObjectManifest -Environment prod
+cognitive3d-cli-upload object upload --scene-id <scene-id> --object-dir ./my-object --object-filename cube
 ```
 
-## Platform Support
+Upload the manifest so the objects appear in the dashboard:
 
-| Platform | Implementation | Dependencies | Status |
-|----------|---------------|--------------|---------|
-| **macOS/Linux** | Bash scripts | `jq`, `curl` | ✅ Fully tested |
-| **Windows** | PowerShell module | None (uses .NET) | ✅ Native support |
-| **WSL** | Bash scripts | `jq`, `curl` | ✅ Compatible |
+```bash
+cognitive3d-cli-upload object manifest upload --scene-id <scene-id>
+```
+
+List the objects of the latest version (add `--write-manifest` to save the list as a manifest file):
+
+```bash
+cognitive3d-cli-upload object list --scene-id <scene-id>
+```
+
+Upload an egocentric model into the `head` slot and wait for it to be optimized:
+
+```bash
+cognitive3d-cli-upload ego upload --scene-id <scene-id> --slot head --ego-dir ./my-head --wait
+```
+
+Every upload command accepts `--dry-run`, which validates the files and prints the request plan without contacting the gateway:
+
+```bash
+cognitive3d-cli-upload scene upload --scene-dir ./my-scene --scene-name "My Scene" --dry-run
+```
+
+Other commands: `scene list`, `scene show`, `scene screenshot`, `ego list`, `ego delete`, `version` and `completion`. Run any command with `--help` for its flags.
+
+## What goes in each directory
+
+| Command | Required files | Optional files |
+| --- | --- | --- |
+| `scene upload` | One `.glb` of any name, or `scene.gltf` plus `scene.bin`; `screenshot.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`), `settings.json` |
+| `object upload` | `<name>.glb`, or `<name>.gltf` plus `<name>.bin`; `cvr_object_thumbnail.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`) |
+| `ego upload` | The model and its `.bin` files | `.png`, `.jpg` and `.webp` images, one `ego.json` |
+
+`settings.json` is built in memory from the existing file and the scene name, sent with the upload, and written into the scene directory only after the upload succeeds. Its `sdkVersion` is `cli-go-v<version>`.
+
+The CLI warns about any file of 500 MB or more and about an upload of 2 GiB or more, and refuses an upload over 3 GiB, the gateway's limit per request. A large upload can legitimately take a long time because the gateway converts every file before it answers; there is no client-side response timeout unless you set `--timeout`.
 
 ## Configuration
 
-### Environment Variables
+Every setting is resolved in this order, first match wins:
 
-Set these in your `.env` file or shell environment:
+1. The command-line flag.
+2. The environment variable.
+3. A `.env` file in the working directory.
+4. `~/.cognitive3d/upload.yaml` (or the file named by `--config`).
 
-**Required:**
+| Setting | Flag | Variable |
+| --- | --- | --- |
+| Developer API key | `--api-key` | `C3D_DEVELOPER_API_KEY` |
+| Scene id | `--scene-id` | `C3D_SCENE_ID` |
+| Environment, `prod` or `dev` | `--env` | `C3D_DEFAULT_ENVIRONMENT`, then `C3D_ENV` |
+| Gateway base URL override | `--gateway-url` | `C3D_UPLOAD_GATEWAY_URL` |
+| Color off | none | `NO_COLOR` |
 
-- `C3D_DEVELOPER_API_KEY` - Your Cognitive3D Developer API key
+The environment defaults to `prod`. The config file holds `default_environment`, plus `developer_api_key` and `scene_id` under `production:` and `development:`:
 
-**Optional (for streamlined workflows):**
-
-- `C3D_SCENE_ID` - Default scene ID to avoid passing --scene_id to every command
-- `C3D_DEFAULT_ENVIRONMENT` - Default environment (`prod` or `dev`)
-
-### Setup Options
-
-#### Option 1: .env File (Recommended)
-
-```bash
-cp .env.example .env
-# Edit .env with your values
+```yaml
+default_environment: prod
+production:
+  developer_api_key: your_prod_key
+  scene_id: your_scene_id
+development:
+  developer_api_key: your_dev_key
 ```
 
-#### Option 2: Shell Environment
+The key is required only when a command is about to talk to the gateway, so `--dry-run` and local validation work without one. Keep the key out of version control; `.env` is git-ignored here.
 
-```bash
-export C3D_DEVELOPER_API_KEY="your_api_key"
-export C3D_SCENE_ID="your_scene_id"  # optional
-```
+Flags also accept the old underscore spellings, so `--scene_dir` and `--dry_run` still work in existing scripts.
 
-#### Option 3: PowerShell
+## Output and exit codes
 
-```powershell
-Import-Module ./C3DUploadTools  # Auto-loads .env file
-# Or set manually:
-$env:C3D_DEVELOPER_API_KEY = "your_api_key"
-```
+stdout carries only the result of the command. Logs, warnings and errors go to stderr as `[YYYY-MM-DD HH:MM:SS] [LEVEL] message`, so output can be piped safely. `--verbose` adds debug lines and `--quiet` hides informational ones.
 
-> **Security:** `.env` files are git-ignored automatically. Never commit API keys to version control.
+With `--format json`, a command prints exactly one JSON object or array on stdout, and stderr carries one JSON record per line, for example `{"error":"<code>","message":"...","hint":"...","status_code":401}`.
 
-## Command Reference
+| Code | Meaning |
+| --- | --- |
+| 0 | Success. |
+| 1 | General failure: server error, network error, interrupted upload, ambiguous scene version. |
+| 2 | Authentication failure: missing, invalid or expired key, or 403. |
+| 3 | Not found: the scene or resource does not exist or is outside the key's project. |
+| 4 | Validation or usage error: bad flags, a missing file, a model that fails the checks, an upload over 3 GiB. |
 
-### Scene Upload
+`--timeout <duration>` (for example `--timeout 2h`) bounds a whole command. Ctrl-C cancels it cleanly.
 
-Upload 3D scene files (glTF Binary or glTF Separate, plus textures) to create or update a scene.
+## Scene versions
 
-**Bash:**
+Each `scene upload` to an existing scene creates a new version. The CLI reads the latest version number before the upload and waits for the next one to appear, and prints that number as the new version. If more than one new version appears while the upload runs, it cannot tell which one is its own, so it lists the candidate numbers, prints no version number, and exits 1; check with `scene show`.
 
-```bash
-./upload-scene.sh --scene_dir <directory> --scene_name <name> [--env prod|dev] [--scene_id <uuid>] [--verbose] [--dry_run]
-```
+Objects, manifests and egos belong to a version. After a new version, upload them again; the CLI warns about this each time. Commands that take `--version` use the latest version when it is omitted.
 
-**PowerShell:**
+## Egocentric models
 
-```powershell
-Upload-C3DScene -SceneDirectory <directory> -SceneName <name> [-Environment prod|dev] [-SceneId <uuid>] [-Verbose] [-DryRun]
-```
+`ego upload` fills one slot (`head`, `controller_left`, `controller_right` or a custom key) from a directory of a model, its `.png`, `.jpg` and `.webp` images and an optional `ego.json`. `ego list` shows each slot with its file count and whether it is optimized, and `ego delete` empties a slot so session replay falls back to the bundled model.
 
-**Required Files in Scene Directory:**
-
-- The scene model, in one form: a single `.glb` (any filename), or `scene.bin` + `scene.gltf`
-- `screenshot.png`
-
-A `.glb` beside `scene.gltf`/`scene.bin`, more than one `.glb`, or a loose image named `scene_<n>.<ext>` beside a `.glb` (the name the gateway gives an image it extracts) is rejected before upload; the API rejects the same shapes. The gateway converts a `.glb` to glTF Separate on ingest and keeps the original. The `.glb` is sent under the multipart field `file` with its own filename, so names with `=`, `,` or `;` work.
-
-**Note:** `settings.json` is generated automatically with the scene name and SDK version (`cli-bash-v<version>` or `cli-powershell-v<version>`).
-
-**Examples:**
-
-```bash
-# Create new scene (--scene_name required for new scenes)
-./upload-scene.sh --scene_dir scene-test --scene_name "My Scene" --env prod
-
-# Update existing scene (--scene_name optional for updates)
-./upload-scene.sh --scene_dir scene-test --scene_id "12345678-1234-1234-1234-123456789012" --env prod
-
-# Preview changes (safe testing)
-./upload-scene.sh --scene_dir scene-test --scene_name "Test Scene" --dry_run --verbose
-```
-
-### Object Upload
-
-Upload dynamic 3D objects to an existing scene.
-
-**Bash:**
-
-```bash
-./upload-object.sh --object_filename <name> --object_dir <directory> [--scene_id <uuid>] [--env prod|dev] [--verbose] [--dry_run]
-```
-
-**PowerShell:**
-
-```powershell
-Upload-C3DObject -ObjectFilename <name> -ObjectDirectory <directory> [-SceneId <uuid>] [-Environment prod|dev] [-Verbose] [-DryRun]
-```
-
-**Required Files in Object Directory:**
-
-- The object model, in one form: `<filename>.glb`, or `<filename>.gltf` + `<filename>.bin`
-- `cvr_object_thumbnail.png` (optional, recommended)
-
-Beside a `.glb`, a texture named `<object id>_<n>.<ext>` (the object id with characters outside `[A-Za-z0-9_-]` replaced by `_`) is rejected: that is the name the gateway gives an image it extracts from the `.glb`.
-
-**Object Manifest:**
-When you upload an object, a manifest file (`{scene_id}_object_manifest.json`) is automatically created/updated. Each object entry includes:
-
-- A unique `id` (UUID) - auto-generated for each upload
-- `mesh` - the filename of the 3D model
-- `name` - display name in the dashboard
-- Transform data (position, rotation, scale)
-
-You can edit the manifest file before running `upload-object-manifest.sh` to customize positions or add multiple instances of the same object.
-
-**Examples:**
-
-```bash
-# Upload object (scene ID from environment)
-./upload-object.sh --object_filename cube --object_dir object-test --env prod
-
-# Upload with explicit scene ID
-./upload-object.sh --object_filename cube --object_dir object-test --scene_id "your-scene-id" --env prod
-```
-
-### Object Manifest Upload
-
-Upload object manifest to display objects in the dashboard.
-
-**Bash:**
-
-```bash
-./upload-object-manifest.sh [--scene_id <uuid>] [--env prod|dev] [--verbose] [--dry_run]
-```
-
-**PowerShell:**
-
-```powershell
-Upload-C3DObjectManifest [-SceneId <uuid>] [-Environment prod|dev] [-Verbose] [-DryRun]
-```
-
-### List Objects
-
-List all objects associated with a scene.
-
-**Bash:**
-
-```bash
-./list-objects.sh [--scene_id <uuid>] --env <prod|dev> [--verbose]
-```
-
-**PowerShell:**
-
-```powershell
-Get-C3DObjects [-SceneId <uuid>] [-Environment <prod|dev>] [-OutputFile <path>] [-FormatAsManifest] [-Verbose]
-```
-
-**Advanced PowerShell Features:**
-
-- `-OutputFile`: Save raw JSON response to file
-- `-FormatAsManifest`: Generate object manifest file
-- Comprehensive parameter validation with detailed error messages
-- Progress tracking for large operations
-- Type-safe responses with helper methods
-
-### Universal Options
-
-| Option | Description |
-|--------|-------------|
-| `--env` / `-Environment` | Target environment: `prod` (production) or `dev` (development) |
-| `--scene_id` / `-SceneId` | Scene UUID (optional if set in environment variables) |
-| `--verbose` / `-Verbose` | Enable detailed logging and debug information |
-| `--dry_run` / `-DryRun` | Preview operations without executing (safe testing mode) |
-
-**Security Features:**
-
-- Automatic input validation (UUID format, file sizes, SDK versions)
-- Safe file operations with comprehensive validation
-- API key validation with helpful error messages
-- 100MB file size limit with clear warnings
-
-## Testing & Validation
-
-### PowerShell Module Testing
-
-The PowerShell module includes comprehensive test suite in `C3DUploadTools/Tests/`:
-
-```powershell
-# Navigate to test directory
-cd C3DUploadTools/Tests
-
-# Run all tests
-./test-module-structure.ps1          # Module architecture validation
-./test-utilities-internal.ps1        # Internal function testing
-./test-scene-upload.ps1              # Scene workflow testing
-./test-object-upload.ps1              # Object workflow testing
-./Test-EnvWorkflow.ps1               # Complete end-to-end testing
-```
-
-### Complete Workflow Test
-
-Test the entire upload workflow with sample assets.
-
-**Bash:**
-
-```bash
-./test-env-workflow.sh --env prod [--verbose] [--dry_run]
-```
-
-**PowerShell:**
-
-```powershell
-# Run from C3DUploadTools/Tests/ directory
-./Test-EnvWorkflow.ps1 -Environment prod [-Verbose] [-DryRun]
-
-# Additional PowerShell tests
-./test-module-structure.ps1          # Validate module organization
-./test-utilities-internal.ps1        # Test internal functions
-./test-scene-upload.ps1              # Scene upload workflow
-./test-object-upload.ps1              # Object upload workflow
-```
-
-**Automated Test Steps:**
-
-1. Set up temporary environment configuration
-2. Upload test scene and capture scene ID
-3. Upload test objects (cube, lantern)
-4. Upload object manifests
-5. Verify objects are listed correctly
-6. Clean up temporary files
-
-### Individual Component Testing
-
-**Test scene upload:**
-
-```bash
-./upload-scene.sh --scene_dir scene-test --env dev --dry_run --verbose
-```
-
-**Test object upload:**
-
-```bash
-./upload-object.sh --object_filename cube --object_dir object-test --env dev --dry_run
-```
-
-### Legacy Test Script
-
-For existing workflows:
-
-```bash
-./test-all.sh [scene_id] [env]  # Use after manual scene upload
-```
-
-## Workflow Examples
-
-### Complete Upload Workflow
-
-**For New Projects:**
-
-```bash
-# 1. Set up configuration
-cp .env.example .env
-# Edit .env with your API key
-
-# 2. Upload scene (--scene_name required for new scenes)
-./upload-scene.sh --scene_dir your-scene --scene_name "My Project Scene" --env prod
-# Save the returned Scene ID
-
-# 3. Add Scene ID to environment (optional but recommended)
-echo "C3D_SCENE_ID=your-scene-id-here" >> .env
-
-# 4. Upload objects (as needed)
-./upload-object.sh --object_filename object1 --object_dir your-objects --env prod
-./upload-object.sh --object_filename object2 --object_dir your-objects --env prod
-
-# 5. Upload manifest to display in dashboard
-./upload-object-manifest.sh --env prod
-
-# 6. Verify objects
-./list-objects.sh --env prod
-```
-
-**For Existing Projects:**
-
-```bash
-# Update existing scene
-./upload-scene.sh --scene_dir updated-scene --scene_id "existing-uuid" --env prod
-
-# Add new objects to existing scene
-./upload-object.sh --object_filename new-object --object_dir objects --env prod
-./upload-object-manifest.sh --env prod
-```
-
-## PowerShell Module Features
-
-### Enterprise-Grade Capabilities
-
-The PowerShell module provides production-ready features:
-
-- **Type Safety**: PowerShell classes for structured data handling
-- **Comprehensive Validation**: Advanced parameter validation with detailed error messages
-- **Progress Tracking**: Visual feedback for large file uploads
-- **Rich Help System**: Detailed documentation with real-world examples
-- **Error Handling**: Proper PowerShell error records with recommended actions
-- **Cross-Platform**: Works on Windows PowerShell 5.1+ and PowerShell Core 7.x
-- **No Dependencies**: Pure PowerShell implementation without external tools
-
-### Advanced Usage Examples
-
-```powershell
-# Get detailed help
-Get-Help Upload-C3DScene -Detailed
-Get-Help Upload-C3DObject -Examples
-
-# Environment-based workflow
-$env:C3D_SCENE_ID = "12345678-1234-1234-1234-123456789012"
-Upload-C3DObject -ObjectFilename "chair" -ObjectDirectory "./furniture"
-Upload-C3DObject -ObjectFilename "table" -ObjectDirectory "./furniture"
-Upload-C3DObjectManifest  # Displays both objects in dashboard
-
-# Advanced error handling
-try {
-    $result = Upload-C3DScene -SceneDirectory "./scene" -Environment dev
-    Write-Host "Scene uploaded: $($result.SceneId)"
-} catch {
-    Write-Error "Upload failed: $($_.Exception.Message)"
-}
-
-# Batch operations with validation
-$objects = @("chair", "table", "lamp")
-foreach ($obj in $objects) {
-    if (Test-Path "./furniture/$obj.gltf") {
-        Upload-C3DObject -ObjectFilename $obj -ObjectDirectory "./furniture" -AutoUploadManifest:$false
-    }
-}
-Upload-C3DObjectManifest  # Upload manifest once for all objects
-```
+`--wait` polls every 5 seconds for up to 120 seconds and reports whether the gateway marked the model optimized. Running out of time is not an error: small models may never be marked optimized, so a `false` answer is normal for them. `--timeout` bounds the whole command, including the wait, so a long `--wait` needs a longer `--timeout` or none.
 
 ## Troubleshooting
 
-### Common Setup Issues
+Expired key (exit 2): the CLI prints the rotation steps. Open the dashboard, go to Settings, "Manage developer key", generate a new key and update `C3D_DEVELOPER_API_KEY`. Run `cognitive3d-cli-upload auth verify` to confirm it.
 
-| Issue | Solution |
-|-------|----------|
-| **"jq: command not found"** | Install dependencies: `brew install jq curl` (macOS) or `sudo apt install jq curl` (Ubuntu) |
-| **"API key not set"** | Set `C3D_DEVELOPER_API_KEY` in `.env` file or environment |
-| **"Invalid scene_id format"** | Scene IDs must be valid UUIDs: `12345678-1234-1234-1234-123456789012` |
-| **PowerShell execution policy** | Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` |
+"The upload may still have completed": the connection dropped, or the command timed out or was interrupted, after the files were sent. The gateway may have finished the job. Check with `cognitive3d-cli-upload scene show --scene-id <scene-id>` (or `object list`) before retrying, because a retry creates another version.
 
-### Common Upload Issues
+Scene not found (exit 3): the gateway answers an unknown scene and a scene from another project the same way. Both the plain id and the `p<projectId>-<uuid>` form are accepted. Run `cognitive3d-cli-upload scene list` to see the scenes this key can reach, and `auth verify --scene-id <id>` to test one id. Check that the key belongs to the right project and `--env`.
 
-| Issue | Solution |
-|-------|----------|
-| **"Scene not found" (objects)** | Upload a scene first; objects require an existing scene |
-| **"Manifest file not found"** | Object manifests auto-generate after successful object upload |
-| **File size errors** | Individual files cannot exceed 100MB; check with `--verbose` |
-| **HTTP 401 "Key expired"** | Generate new API key from Dashboard → Settings → "Manage developer key" |
-| **HTTP 403 "Forbidden"** | Verify API key permissions and scene ownership |
+Model check failures (exit 4): textures must be `.png`, `.jpg`, `.jpeg` or `.webp`. Other files in the directory are skipped with a warning naming each one, and the upload is refused if the model references a skipped file or a file that is not in the directory. A `.glb` must be valid glTF 2.0 with no external references, and a scene directory holds either one `.glb` or `scene.gltf` plus `scene.bin`, never both. Symlinks are not uploaded.
 
-### Debug and Testing
+## Legacy tools
 
-**Use dry-run mode for safe testing:**
-
-```bash
-./upload-scene.sh --scene_dir scene-test --dry_run --verbose
-```
-
-**Enable verbose logging:**
-
-```bash
-./upload-object.sh --object_filename cube --object_dir object-test --verbose
-```
-
-**Check file contents and structure:**
-
-```bash
-# Verify scene directory structure
-ls -la scene-test/
-# Should contain: one .glb (or scene.bin + scene.gltf), screenshot.png
-# Note: settings.json is generated automatically during upload
-
-# Verify object directory structure
-ls -la object-test/
-# Should contain: <filename>.glb (or <filename>.gltf + <filename>.bin), optional textures
-```
-
-### Windows-Specific Issues
-
-**PowerShell module not loading:**
-
-```powershell
-# Ensure you're in the correct directory
-Import-Module ./C3DUploadTools -Force
-```
-
-**.env file not recognized:**
-
-```powershell
-# PowerShell automatically loads .env files when importing the module
-# Alternatively, set variables manually:
-$env:C3D_DEVELOPER_API_KEY = "your_api_key"
-```
-
-### Getting Help
-
-**Built-in Help:**
-
-- `./upload-scene.sh --help` - Show usage information
-- `--verbose` flag - Enable detailed logging
-- `--dry_run` flag - Preview operations safely
-
-**Support Channels:**
-
-- [GitHub Issues](https://github.com/cognitive3d/c3d-upload-tools/issues) - Bug reports and feature requests
-- [Discord Community](https://discord.gg/x38sNUdDRH) - Community support and discussion
-- [Cognitive3D Support](https://cognitive3d.com/support) - Official technical support
-
-## Project Structure
-
-```text
-c3d-upload-tools/
-├── upload-scene.sh           # Scene upload (Bash)
-├── upload-object.sh          # Object upload (Bash)
-├── upload-object-manifest.sh # Manifest upload (Bash)
-├── list-objects.sh           # List objects (Bash)
-├── test-*.sh                 # Test scripts (Bash)
-├── C3DUploadTools/           # PowerShell module
-│   ├── C3DUploadTools.psd1   # Module manifest
-│   ├── Public/               # User-facing functions
-│   └── Private/              # Internal utilities
-├── scene-test/               # Sample scene assets
-├── object-test/              # Sample object assets
-├── .env.example              # Configuration template
-└── sdk-version.txt           # Current SDK version
-```
-
-**Sample Assets Included:**
-
-- `scene-test/` - Complete scene for testing uploads
-- `object-test/` - Dynamic object (cube) for testing
-- `lantern-test/` - Additional object example
+The bash scripts and the PowerShell module still ship in this release but are deprecated: they print a banner and are removed in 3.0. See the [migration guide](docs/migration-2.0.md) for the command and flag mapping.

@@ -36,7 +36,12 @@ func newAuthVerifyCmd(rt *runtime) *cobra.Command {
 	verify := &cobra.Command{
 		Use:   "verify",
 		Short: "Verify the developer API key and report project, organization and key expiry",
-		Args:  noArgs,
+		Long: `Verify the developer API key and report project, organization and key expiry.
+
+With --scene-id, also check that the scene is reachable with this key. A scene
+the key cannot reach is reported (the result shows sceneReachable false in
+JSON) and the command exits 3.`,
+		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runAuthVerify(cmd, rt)
 		},
