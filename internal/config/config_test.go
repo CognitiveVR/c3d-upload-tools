@@ -385,3 +385,52 @@ func TestResolveGatewayHostCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveForeignDotenvGatewayWithTrustedKeyIsRejected(t *testing.T) {
+	foreign := map[string]string{"C3D_UPLOAD_GATEWAY_URL": "https://proxy.example.com/v0"}
+	const wantFmt = "C3D_UPLOAD_GATEWAY_URL in .env points at proxy.example.com, which is not a Cognitive3D gateway, while your API key comes from %s. Pass --gateway-url explicitly if you mean it."
+
+	cases := []struct {
+		name   string
+		flags  Flags
+		env    map[string]string
+		dotenv map[string]string
+		file   *File
+		source string
+	}{
+		{"flag key", Flags{APIKey: "k"}, nil, foreign, nil, "the --api-key flag"},
+		{"process environment key", Flags{}, map[string]string{"C3D_DEVELOPER_API_KEY": "k"}, foreign, nil, "the process environment"},
+		{"config file key", Flags{}, nil, foreign, fileWith("", "k", "", "", ""), "the config file"},
+	}
+	for _, tc := range cases {
+		_, err := Resolve(tc.flags, envMap(tc.env), tc.dotenv, tc.file)
+		if err == nil || err.Error() != fmt.Sprintf(wantFmt, tc.source) {
+			t.Errorf("%s: err = %v, want %q", tc.name, err, fmt.Sprintf(wantFmt, tc.source))
+		}
+	}
+}
+
+func TestResolveForeignGatewayKeepsWarningWhenSourcesAreAligned(t *testing.T) {
+	const url = "https://proxy.example.com/v0"
+	cases := []struct {
+		name   string
+		flags  Flags
+		env    map[string]string
+		dotenv map[string]string
+	}{
+		{"flag url", Flags{GatewayURL: url}, map[string]string{"C3D_DEVELOPER_API_KEY": "k"}, nil},
+		{"environment url", Flags{}, map[string]string{"C3D_UPLOAD_GATEWAY_URL": url, "C3D_DEVELOPER_API_KEY": "k"}, nil},
+		{"dotenv url and dotenv key", Flags{}, nil, map[string]string{"C3D_UPLOAD_GATEWAY_URL": url, "C3D_DEVELOPER_API_KEY": "k"}},
+		{"dotenv url and no key", Flags{}, nil, map[string]string{"C3D_UPLOAD_GATEWAY_URL": url}},
+	}
+	for _, tc := range cases {
+		s, err := Resolve(tc.flags, envMap(tc.env), tc.dotenv, nil)
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if len(s.Warnings) != 1 || !strings.Contains(s.Warnings[0], "proxy.example.com") {
+			t.Errorf("%s: warnings = %q, want the foreign-host warning", tc.name, s.Warnings)
+		}
+	}
+}

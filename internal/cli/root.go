@@ -40,7 +40,8 @@ func normalizeFlag(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 }
 
 func Execute(ctx context.Context, args []string, streams IO) int {
-	return run(ctx, newRootCmd(streams), args, streams)
+	rt := &runtime{streams: streams}
+	return run(ctx, newRootCmd(streams, rt), rt, args, streams)
 }
 
 // codedError is a failure with its own exit code and machine-readable kind,
@@ -61,14 +62,10 @@ func noArgs(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func run(ctx context.Context, root *cobra.Command, args []string, streams IO) int {
+func run(ctx context.Context, root *cobra.Command, rt *runtime, args []string, streams IO) int {
+	defer rt.release()
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)
-	rt := runtimeOf(root)
-	if rt != nil {
-		rt.release()
-		runtimes.Delete(root)
-	}
 	if err == nil {
 		return 0
 	}
@@ -100,9 +97,8 @@ func report(rt *runtime, streams IO, err error) int {
 	return code
 }
 
-func newRootCmd(streams IO) *cobra.Command {
+func newRootCmd(streams IO, rt *runtime) *cobra.Command {
 	cobra.EnableTraverseRunHooks = true
-	rt := &runtime{streams: streams}
 	root := &cobra.Command{
 		Use:           binaryName,
 		Short:         "Upload scenes, dynamic objects and egocentric models to Cognitive3D",
@@ -146,6 +142,5 @@ func newRootCmd(streams IO) *cobra.Command {
 	flags.String("config", "", "path to the config file")
 
 	root.AddCommand(newVersionCmd(streams), newAuthCmd(rt))
-	runtimes.Store(root, rt)
 	return root
 }

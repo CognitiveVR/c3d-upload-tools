@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"os"
-	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -19,7 +18,7 @@ const skipRuntimeAnnotation = "skipRuntime"
 
 // runtime is the per-invocation state shared by commands: the resolved
 // settings, the logger and the lazily built gateway client. It is created by
-// newRootCmd and populated by the root PersistentPreRunE.
+// Execute and populated by the root PersistentPreRunE.
 type runtime struct {
 	streams  IO
 	settings config.Settings
@@ -28,19 +27,8 @@ type runtime struct {
 	gw       *gateway.Client
 }
 
-// runtimes lets run find the runtime of the root command it executes; entries
-// are removed when run returns.
-var runtimes sync.Map
-
-func runtimeOf(root *cobra.Command) *runtime {
-	if v, ok := runtimes.Load(root); ok {
-		return v.(*runtime)
-	}
-	return nil
-}
-
 func (rt *runtime) prepare(cmd *cobra.Command) error {
-	if cmd.Annotations[skipRuntimeAnnotation] != "" {
+	if cmd == cmd.Root() || cmd.Annotations[skipRuntimeAnnotation] != "" {
 		return nil
 	}
 	flags, err := flagValues(cmd)

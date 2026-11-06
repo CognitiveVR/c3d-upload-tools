@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -241,5 +244,48 @@ func TestInvalidConfigurationIsAUsageError(t *testing.T) {
 	}
 	if n := len(strings.Split(strings.TrimRight(got.stderr, "\n"), "\n")); n != 1 {
 		t.Errorf("stderr has %d lines, want 1: %q", n, got.stderr)
+	}
+}
+
+func TestAuthVerifySceneIDFlagBeatsEnvironment(t *testing.T) {
+	fake := startFake(t)
+	fake.AddScene(fakegateway.Scene{ID: testSceneUUID, SDKFacingID: testSceneUUID, SceneName: "S"})
+	t.Setenv("C3D_SCENE_ID", "11111111-2222-4333-8444-555555555555")
+	got := runCommand(t, "auth", "verify", "--scene-id", testSceneUUID)
+	if got.code != 0 || !strings.Contains(got.stdout, "Scene "+testSceneUUID+": reachable") {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+}
+
+func TestAuthVerifySendsSceneIDUnchanged(t *testing.T) {
+	fake := startFake(t)
+	upper := strings.ToUpper(testSceneUUID)
+	fake.AddScene(fakegateway.Scene{ID: upper, SDKFacingID: upper, SceneName: "S"})
+	got := runCommand(t, "auth", "verify", "--scene-id", upper)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+	var paths []string
+	for _, req := range fake.Requests() {
+		paths = append(paths, req.Path)
+	}
+	if want := "/v0/scenes/" + upper; !slices.Contains(paths, want) {
+		t.Errorf("requests = %v, want one for %s", paths, want)
+	}
+}
+
+func TestRootWithoutSubcommandNeverReadsConfiguration(t *testing.T) {
+	isolate(t)
+	home := os.Getenv("HOME")
+	dir := filepath.Join(home, ".cognitive3d")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "upload.yaml"), []byte("production: [unclosed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runCommand(t, "nope")
+	if got.code != 4 || !strings.Contains(got.stderr, `unknown command "nope"`) || strings.Contains(got.stderr, "config") {
+		t.Errorf("exit %d, stderr %q, want a plain unknown-command usage error", got.code, got.stderr)
 	}
 }

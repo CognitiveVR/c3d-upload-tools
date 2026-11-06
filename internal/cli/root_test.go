@@ -25,7 +25,8 @@ func TestLegacyUnderscoreFlagsAreAccepted(t *testing.T) {
 	}
 	for _, tc := range cases {
 		streams := testIO()
-		root := newRootCmd(streams)
+		rt := &runtime{streams: streams}
+		root := newRootCmd(streams, rt)
 		var gotDir string
 		var gotDry bool
 		stub := &cobra.Command{
@@ -40,7 +41,7 @@ func TestLegacyUnderscoreFlagsAreAccepted(t *testing.T) {
 		stub.Flags().Bool("dry-run", false, "")
 		root.AddCommand(stub)
 
-		if code := run(context.Background(), root, tc.args, streams); code != tc.want {
+		if code := run(context.Background(), root, rt, tc.args, streams); code != tc.want {
 			t.Fatalf("%v: exit code = %d, want %d", tc.args, code, tc.want)
 		}
 		if tc.want == 0 && (gotDir != "x" || !gotDry) {
@@ -52,7 +53,8 @@ func TestLegacyUnderscoreFlagsAreAccepted(t *testing.T) {
 func TestExecuteStopsWhenContextIsCancelled(t *testing.T) {
 	isolate(t)
 	streams := testIO()
-	root := newRootCmd(streams)
+	rt := &runtime{streams: streams}
+	root := newRootCmd(streams, rt)
 	started := make(chan struct{})
 	root.AddCommand(&cobra.Command{
 		Use: "block",
@@ -66,7 +68,7 @@ func TestExecuteStopsWhenContextIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan int, 1)
-	go func() { done <- run(ctx, root, []string{"block"}, streams) }()
+	go func() { done <- run(ctx, root, rt, []string{"block"}, streams) }()
 
 	<-started
 	cancel()
@@ -89,7 +91,8 @@ func TestNormalizeFlagReplacesUnderscores(t *testing.T) {
 func TestFormatIsValidatedWhenSubcommandHasOwnPersistentPreRun(t *testing.T) {
 	isolate(t)
 	streams := testIO()
-	root := newRootCmd(streams)
+	rt := &runtime{streams: streams}
+	root := newRootCmd(streams, rt)
 	hookRan, bodyRan := false, false
 	root.AddCommand(&cobra.Command{
 		Use:               "stub",
@@ -97,7 +100,7 @@ func TestFormatIsValidatedWhenSubcommandHasOwnPersistentPreRun(t *testing.T) {
 		RunE:              func(*cobra.Command, []string) error { bodyRan = true; return nil },
 	})
 
-	if code := run(context.Background(), root, []string{"stub", "--format", "bogus"}, streams); code != 4 {
+	if code := run(context.Background(), root, rt, []string{"stub", "--format", "bogus"}, streams); code != 4 {
 		t.Fatalf("exit code = %d, want 4", code)
 	}
 	if bodyRan {
@@ -105,7 +108,7 @@ func TestFormatIsValidatedWhenSubcommandHasOwnPersistentPreRun(t *testing.T) {
 	}
 
 	hookRan = false
-	if code := run(context.Background(), root, []string{"stub", "--format", "json"}, streams); code != 0 {
+	if code := run(context.Background(), root, rt, []string{"stub", "--format", "json"}, streams); code != 0 {
 		t.Fatalf("valid format: exit code = %d, want 0", code)
 	}
 	if !hookRan || !bodyRan {

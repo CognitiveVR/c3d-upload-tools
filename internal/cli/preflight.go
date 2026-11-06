@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"regexp"
-	"strings"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/config"
 )
@@ -26,19 +25,13 @@ func preflight(ctx context.Context, rt *runtime) error {
 
 const sceneIDFlag = "scene-id"
 
-var (
-	sceneIDPattern   = regexp.MustCompile(`^[A-Za-z0-9_-]{1,255}$`)
-	uuidShapePattern = regexp.MustCompile(`^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$`)
-)
+var sceneIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,255}$`)
 
-// normalizeSceneID validates a scene id for use in a URL path and lowercases
-// a UUID-shaped one; any other form is passed through verbatim.
+// normalizeSceneID validates a scene id for use in a URL path. The gateway
+// compares ids literally, so the id is passed through unchanged.
 func normalizeSceneID(id string) (string, error) {
 	if !sceneIDPattern.MatchString(id) {
 		return "", usageErrorf("invalid scene id %q: use 1 to 255 letters, digits, '-' or '_'", id)
-	}
-	if uuidShapePattern.MatchString(id) {
-		return strings.ToLower(id), nil
 	}
 	return id, nil
 }

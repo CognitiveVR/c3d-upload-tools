@@ -34,13 +34,30 @@ func runCLI(t *testing.T, args ...string) cliResult {
 	return runCLIWith(t, "", nil, args...)
 }
 
-// runCLIWith runs the CLI in dir (the current directory when empty) with extra
-// appended to the environment.
+// isolatedEnvironment blanks every C3D_* variable and points HOME at an empty
+// directory, so no real configuration is read.
+func isolatedEnvironment(t *testing.T) []string {
+	t.Helper()
+	home := t.TempDir()
+	env := []string{subprocessEnv + "=1", "HOME=" + home, "USERPROFILE=" + home, "NO_COLOR=1"}
+	for _, entry := range os.Environ() {
+		if name, _, _ := strings.Cut(entry, "="); strings.HasPrefix(name, "C3D_") && name != subprocessEnv {
+			env = append(env, name+"=")
+		}
+	}
+	return env
+}
+
+// runCLIWith runs the CLI in dir (a fresh temporary directory when empty) with
+// an isolated environment plus extra, whose entries win.
 func runCLIWith(t *testing.T, dir string, extra []string, args ...string) cliResult {
 	t.Helper()
+	if dir == "" {
+		dir = t.TempDir()
+	}
 	cmd := exec.Command(os.Args[0], args...)
 	cmd.Dir = dir
-	cmd.Env = append(append(os.Environ(), subprocessEnv+"=1"), extra...)
+	cmd.Env = append(append(os.Environ(), isolatedEnvironment(t)...), extra...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

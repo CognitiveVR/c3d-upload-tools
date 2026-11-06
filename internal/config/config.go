@@ -129,11 +129,32 @@ func Resolve(flags Flags, env func(string) string, dotenv map[string]string, fil
 		return Settings{}, err
 	}
 
+	apiKey := firstNonEmpty(flags.APIKey, lookup("C3D_DEVELOPER_API_KEY"), section.DeveloperAPIKey)
+	if len(warnings) > 0 && apiKey != "" && flags.GatewayURL == "" && env("C3D_UPLOAD_GATEWAY_URL") == "" {
+		keySource := ""
+		switch {
+		case flags.APIKey != "":
+			keySource = "the --api-key flag"
+		case env("C3D_DEVELOPER_API_KEY") != "":
+			keySource = "the process environment"
+		case dotenv["C3D_DEVELOPER_API_KEY"] == "":
+			keySource = "the config file"
+		}
+		if keySource != "" {
+			host := ""
+			if u, err := url.Parse(gatewayURL); err == nil {
+				host = strings.ToLower(u.Hostname())
+			}
+			message := fmt.Sprintf("C3D_UPLOAD_GATEWAY_URL in .env points at %s, which is not a Cognitive3D gateway, while your API key comes from %s. Pass --gateway-url explicitly if you mean it.", host, keySource)
+			return Settings{}, errors.New(message)
+		}
+	}
+
 	return Settings{
 		Environment: environment,
 		GatewayURL:  gatewayURL,
 		Warnings:    warnings,
-		APIKey:      firstNonEmpty(flags.APIKey, lookup("C3D_DEVELOPER_API_KEY"), section.DeveloperAPIKey),
+		APIKey:      apiKey,
 		SceneID:     firstNonEmpty(flags.SceneID, lookup("C3D_SCENE_ID"), section.SceneID),
 		Format:      firstNonEmpty(flags.Format, "text"),
 		Timeout:     flags.Timeout,
