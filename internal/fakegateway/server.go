@@ -95,6 +95,8 @@ type Server struct {
 	nextObjectID  int
 	egos          map[versionKey]map[string]*egoSlot
 	optimizeAfter map[slotKey]int
+	routeFailures map[string]failure
+	routeHooks    map[string][]func()
 }
 
 // pendingVersions are versions a POST adds, left out of the next polls GET
@@ -143,6 +145,8 @@ func New(t testing.TB) *Server {
 		objectRows:    map[versionKey][]objectRow{},
 		egos:          map[versionKey]map[string]*egoSlot{},
 		optimizeAfter: map[slotKey]int{},
+		routeFailures: map[string]failure{},
+		routeHooks:    map[string][]func(){},
 	}
 	mux := http.NewServeMux()
 	for _, rt := range s.routes() {
@@ -190,6 +194,44 @@ func (s *Server) FailWithHeaders(status int, body string, header http.Header) {
 	s.failures = append(s.failures, failure{status: status, body: body, header: header.Clone()})
 }
 
+// FailRoute answers every later authenticated request to the route pattern,
+// spelled as in routes (such as "GET /v0/versions/{versionId}/objects"), with
+// status, a plain-text body and header.
+func (s *Server) FailRoute(pattern string, status int, body string, header http.Header) {
+	s.mustBeRoute(pattern)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routeFailures[pattern] = failure{status: status, body: body, header: header.Clone()}
+}
+
+// OnRoute runs fn before each later authenticated request to the route
+// pattern is answered.
+func (s *Server) OnRoute(pattern string, fn func()) {
+	s.mustBeRoute(pattern)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routeHooks[pattern] = append(s.routeHooks[pattern], fn)
+}
+
+func (s *Server) mustBeRoute(pattern string) {
+	for _, rt := range s.routes() {
+		if rt.pattern == pattern {
+			return
+		}
+	}
+	panic("fakegateway: no route " + pattern)
+}
+
+func (s *Server) routeState(pattern string) ([]func(), *failure) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hooks := append([]func(){}, s.routeHooks[pattern]...)
+	if f, ok := s.routeFailures[pattern]; ok {
+		return hooks, &f
+	}
+	return hooks, nil
+}
+
 // AddScene makes the scene visible to GET /scenes and GET /scenes/{id}.
 func (s *Server) AddScene(scene Scene) {
 	if scene.Versions == nil {
@@ -230,17 +272,29 @@ func (s *Server) serve(rt route) http.HandlerFunc {
 			}
 		}
 		if fail != nil {
-			for name, values := range fail.header {
-				w.Header()[name] = values
-			}
-			writeText(w, fail.status, fail.body)
+			writeFailure(w, fail)
 			return
 		}
 		if !s.authenticate(w, r, rt.auth) {
 			return
 		}
+		hooks, routeFail := s.routeState(rt.pattern)
+		for _, hook := range hooks {
+			hook()
+		}
+		if routeFail != nil {
+			writeFailure(w, routeFail)
+			return
+		}
 		rt.handle(w, r)
 	}
+}
+
+func writeFailure(w http.ResponseWriter, f *failure) {
+	for name, values := range f.header {
+		w.Header()[name] = values
+	}
+	writeText(w, f.status, f.body)
 }
 
 func (s *Server) next() (time.Duration, *failure) {

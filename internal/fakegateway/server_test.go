@@ -170,6 +170,44 @@ func TestFailuresApplyToOneRequestEachInOrder(t *testing.T) {
 	}
 }
 
+func TestFailRouteAnswersEveryLaterRequestToThatRouteOnly(t *testing.T) {
+	s := New(t)
+	s.FailRoute("GET /v0/user", 500, "boom", http.Header{"Retry-After": {"60"}})
+	for i := 0; i < 2; i++ {
+		if status, body := call(t, s, "GET", "/user", header(s.Key()), nil); status != 500 || body != "boom" {
+			t.Fatalf("user %d: %d %q", i, status, body)
+		}
+	}
+	if status, _ := call(t, s, "GET", "/user", "", nil); status != 401 {
+		t.Fatalf("unauthenticated: %d", status)
+	}
+	if status, _ := call(t, s, "GET", "/apiKeys/verify", header(s.Key()), nil); status != 200 {
+		t.Fatalf("verify: %d", status)
+	}
+}
+
+func TestOnRouteRunsBeforeEachRequestToThatRoute(t *testing.T) {
+	s := New(t)
+	calls := 0
+	s.OnRoute("GET /v0/apiKeys/verify", func() { calls++ })
+	call(t, s, "GET", "/apiKeys/verify", header(s.Key()), nil)
+	call(t, s, "GET", "/apiKeys/verify", header(s.Key()), nil)
+	call(t, s, "GET", "/user", header(s.Key()), nil)
+	if calls != 2 {
+		t.Fatalf("hook ran %d times", calls)
+	}
+}
+
+func TestRouteHelpersRejectAnUnknownPattern(t *testing.T) {
+	s := New(t)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("no panic for an unknown pattern")
+		}
+	}()
+	s.OnRoute("GET /v0/nothing", func() {})
+}
+
 func TestFailWithOverridesAuth(t *testing.T) {
 	s := New(t)
 	s.FailWith(413, "<html>too big</html>")
