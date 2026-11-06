@@ -230,3 +230,16 @@ func TestRecordsRequests(t *testing.T) {
 		t.Fatal("Requests did not return copies")
 	}
 }
+
+func TestRecordsBodyLengthAndTransferEncoding(t *testing.T) {
+	s := New(t)
+	call(t, s, "POST", "/objects/scene-a", header(s.Key()), strings.NewReader(`{"objects":[]}`))
+	call(t, s, "POST", "/objects/scene-a", header(s.Key()), io.MultiReader(strings.NewReader(`[]`)))
+	got := s.Requests()
+	if got[0].ContentLength != 14 || got[0].BodyBytes != 14 || len(got[0].TransferEncoding) != 0 {
+		t.Errorf("sized body: length %d read %d encoding %v", got[0].ContentLength, got[0].BodyBytes, got[0].TransferEncoding)
+	}
+	if got[1].ContentLength != -1 || got[1].BodyBytes != 2 || len(got[1].TransferEncoding) != 1 || got[1].TransferEncoding[0] != "chunked" {
+		t.Errorf("chunked body: length %d read %d encoding %v", got[1].ContentLength, got[1].BodyBytes, got[1].TransferEncoding)
+	}
+}

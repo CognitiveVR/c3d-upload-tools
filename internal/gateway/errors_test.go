@@ -27,6 +27,7 @@ func TestExitCode(t *testing.T) {
 		{&Error{Kind: ServerError}, 1},
 		{&Error{Kind: Network}, 1},
 		{&Error{Kind: Interrupted}, 1},
+		{&Error{Kind: LocalFile}, 4},
 		{fmt.Errorf("scene show: %w", &Error{Kind: NotFound}), 3},
 	}
 	for _, tt := range tests {
@@ -41,7 +42,7 @@ func TestKindNames(t *testing.T) {
 		KeyExpired: "key_expired", Unauthorized: "unauthorized", SceneNotAccessible: "scene_not_accessible",
 		Forbidden: "forbidden", NotFound: "not_found", Conflict: "conflict", TooLarge: "too_large",
 		ManifestRejected: "manifest_rejected", ClientError: "client_error", ServerError: "server_error",
-		Network: "network", Interrupted: "interrupted",
+		Network: "network", Interrupted: "interrupted", LocalFile: "local_file",
 	}
 	for kind, name := range want {
 		if kind.String() != name {
@@ -170,5 +171,19 @@ func TestErrorStringIsOneTechnicalLine(t *testing.T) {
 	n := newTransportError("GET", "/user", "host", cause, false, false)
 	if !errors.Is(n, cause) || !strings.Contains(n.Error(), "network") {
 		t.Errorf("transport Error() %q", n.Error())
+	}
+}
+
+func TestLocalFileErrorShowsTheCause(t *testing.T) {
+	cause := fmt.Errorf("read cube.glb: %w", errors.New("disk read failed"))
+	e := newLocalFileError("POST", "/scenes/s1", cause)
+	if e.Kind != LocalFile || e.BodySent || e.StatusCode != 0 || !errors.Is(e, cause) {
+		t.Fatalf("%+v", e)
+	}
+	if e.UserMessage() != "read cube.glb: disk read failed" {
+		t.Errorf("UserMessage %q", e.UserMessage())
+	}
+	if got := e.Error(); !strings.Contains(got, "POST /scenes/s1") || !strings.Contains(got, "local_file") {
+		t.Errorf("Error() %q", got)
 	}
 }

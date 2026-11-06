@@ -5,11 +5,16 @@ import (
 	"context"
 	"errors"
 	"io"
+	"mime"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -152,9 +157,9 @@ func TestMultipartOpenErrorIsReturned(t *testing.T) {
 	if !errors.Is(err, errMissing) {
 		t.Fatalf("got %v", err)
 	}
-	var gerr *Error
-	if errors.As(err, &gerr) {
-		t.Fatalf("a local file error must not be a gateway error: %v", err)
+	gerr := gatewayError(t, err)
+	if gerr.Kind != LocalFile || ExitCode(err) != 4 || gerr.BodySent || gerr.UserMessage() != "open cube.glb: missing file" {
+		t.Fatalf("kind %v exit %d bodySent %v message %q", gerr.Kind, ExitCode(err), gerr.BodySent, gerr.UserMessage())
 	}
 }
 
@@ -404,11 +409,11 @@ func TestInterruptedBeforeSending(t *testing.T) {
 	}
 }
 
-// blockingPart's reader blocks until ctx is done, then streams bytes without
-// end, so the body can never be fully sent.
+// blockingPart's reader blocks until ctx is done, then streams one byte per
+// read, so the body is still being sent when the request is cancelled.
 func blockingPart(ctx context.Context, started chan<- struct{}) Part {
 	var once sync.Once
-	return Part{Field: "file", Filename: "big.glb", Open: func() (io.ReadCloser, error) {
+	return Part{Field: "file", Filename: "big.glb", Size: 1 << 20, Open: func() (io.ReadCloser, error) {
 		return io.NopCloser(readerFunc(func(p []byte) (int, error) {
 			once.Do(func() { close(started) })
 			<-ctx.Done()
@@ -446,7 +451,7 @@ func TestPartReadErrorIsReturned(t *testing.T) {
 	fake := fakegateway.New(t)
 	c, _ := newTestClient(t, fake, fake.Key())
 	errDisk := errors.New("disk read failed")
-	part := Part{Field: "file", Filename: "cube.glb", Open: func() (io.ReadCloser, error) {
+	part := Part{Field: "file", Filename: "cube.glb", Size: 100, Open: func() (io.ReadCloser, error) {
 		sent := false
 		return io.NopCloser(readerFunc(func(p []byte) (int, error) {
 			if !sent {
@@ -460,9 +465,9 @@ func TestPartReadErrorIsReturned(t *testing.T) {
 	if !errors.Is(err, errDisk) {
 		t.Fatalf("got %v", err)
 	}
-	var gerr *Error
-	if errors.As(err, &gerr) {
-		t.Fatalf("a local read error must not be a gateway error: %v", err)
+	gerr := gatewayError(t, err)
+	if gerr.Kind != LocalFile || ExitCode(err) != 4 || gerr.UserMessage() != "read cube.glb: disk read failed" {
+		t.Fatalf("kind %v exit %d message %q", gerr.Kind, ExitCode(err), gerr.UserMessage())
 	}
 	for _, r := range fake.Requests() {
 		if r.Complete {
@@ -575,4 +580,166 @@ func TestKeyNeverInErrors(t *testing.T) {
 	cancel()
 	_, err = c.PostMultipart(ctxDone, "/scenes/s1", nil, sceneParts(), nil)
 	check("interrupted", err, fake.Key())
+}
+
+// waitForRequests returns the fake's requests once at least n have been
+// recorded; the server may still be reading a body the client gave up on.
+func waitForRequests(t *testing.T, fake *fakegateway.Server, n int) []fakegateway.Recorded {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		reqs := fake.Requests()
+		if len(reqs) >= n {
+			return reqs
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("fake recorded %d requests, want %d", len(reqs), n)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// recordedLength is the length NewMultipartBody computes for parts with the
+// boundary the recorded request declared.
+func recordedLength(t *testing.T, r fakegateway.Recorded, parts []Part) int64 {
+	t.Helper()
+	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundary := params["boundary"]
+	if !regexp.MustCompile(`^[0-9a-f]{60}$`).MatchString(boundary) {
+		t.Fatalf("boundary %q", boundary)
+	}
+	body, _, length, err := NewMultipartBody(parts, boundary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = body.Close()
+	return length
+}
+
+func TestMultipartSendsContentLengthNotChunked(t *testing.T) {
+	fake := fakegateway.New(t)
+	c, _ := newTestClient(t, fake, fake.Key())
+	if _, err := c.PostMultipart(context.Background(), "/scenes/s1", nil, sceneParts(), ui.NewProgress(nil, 0, "")); err != nil {
+		t.Fatal(err)
+	}
+	r := fake.Requests()[0]
+	want := recordedLength(t, r, sceneParts())
+	if r.Header.Get("Content-Length") != strconv.FormatInt(want, 10) || r.ContentLength != want {
+		t.Errorf("Content-Length header %q, request length %d, want %d", r.Header.Get("Content-Length"), r.ContentLength, want)
+	}
+	if len(r.TransferEncoding) != 0 || r.Header.Get("Transfer-Encoding") != "" {
+		t.Errorf("Transfer-Encoding %v", r.TransferEncoding)
+	}
+	if r.BodyBytes != want || !r.Complete {
+		t.Errorf("fake read %d bytes complete %v, want %d", r.BodyBytes, r.Complete, want)
+	}
+}
+
+func TestMultipartFileChangedSizeIsLocalFileError(t *testing.T) {
+	const planned = 256 << 10
+	tests := []struct {
+		name   string
+		change func(path string) error
+		want   string
+	}{
+		{"truncated", func(path string) error { return os.Truncate(path, planned/2) }, "read big.glb: file size changed from 262144 to 131072 bytes"},
+		{"extended", func(path string) error { return os.WriteFile(path, make([]byte, planned*3/2), 0o600) }, "read big.glb: file size changed from 262144 to more than 262144 bytes"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := fakegateway.New(t)
+			c, _ := newTestClient(t, fake, fake.Key())
+			path := filepath.Join(t.TempDir(), "big.glb")
+			if err := os.WriteFile(path, make([]byte, planned), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			part := Part{Field: "file", Filename: "big.glb", Size: info.Size(), Open: func() (io.ReadCloser, error) { return os.Open(path) }}
+			if err := tt.change(path); err != nil {
+				t.Fatal(err)
+			}
+			resp, err := c.PostMultipart(context.Background(), "/scenes/s1", nil, []Part{part}, nil)
+			if resp != nil {
+				t.Fatalf("success reported: %+v", resp)
+			}
+			gerr := gatewayError(t, err)
+			if gerr.Kind != LocalFile || ExitCode(err) != 4 || gerr.BodySent || gerr.UserMessage() != tt.want {
+				t.Fatalf("kind %v exit %d bodySent %v message %q", gerr.Kind, ExitCode(err), gerr.BodySent, gerr.UserMessage())
+			}
+			reqs := waitForRequests(t, fake, 1)
+			if reqs[0].Complete {
+				t.Fatalf("fake recorded a complete request: %+v", reqs[0].Parts)
+			}
+		})
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+const syntheticUploadBytes = 100_000_000
+
+func TestMultipartHundredMegabyteUpload(t *testing.T) {
+	fake := fakegateway.New(t)
+	c, _ := newTestClient(t, fake, fake.Key())
+	parts := []Part{{Field: "file", Filename: "big.glb", Size: syntheticUploadBytes, Open: func() (io.ReadCloser, error) {
+		return io.NopCloser(io.LimitReader(zeroReader{}, syntheticUploadBytes)), nil
+	}}}
+	if _, err := c.PostMultipart(context.Background(), "/scenes/s1", nil, parts, nil); err != nil {
+		t.Fatal(err)
+	}
+	r := fake.Requests()[0]
+	want := recordedLength(t, r, parts)
+	if r.Header.Get("Content-Length") != strconv.FormatInt(want, 10) {
+		t.Errorf("Content-Length %q, want %d", r.Header.Get("Content-Length"), want)
+	}
+	if r.BodyBytes != want || !r.Complete {
+		t.Errorf("fake read %d bytes complete %v, want %d", r.BodyBytes, r.Complete, want)
+	}
+	if len(r.Parts) != 1 || r.Parts[0].Size != syntheticUploadBytes {
+		t.Errorf("parts %+v", r.Parts)
+	}
+}
+
+func TestMultipartCancelHalfwayReturnsWithinOneSecond(t *testing.T) {
+	fake := fakegateway.New(t)
+	c, _ := newTestClient(t, fake, fake.Key())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var produced int64
+	var cancelledAt atomic.Int64
+	part := Part{Field: "file", Filename: "big.glb", Size: syntheticUploadBytes, Open: func() (io.ReadCloser, error) {
+		source := io.LimitReader(zeroReader{}, syntheticUploadBytes)
+		return io.NopCloser(readerFunc(func(p []byte) (int, error) {
+			n, err := source.Read(p)
+			produced += int64(n)
+			if produced >= syntheticUploadBytes/2 && cancelledAt.Load() == 0 {
+				cancelledAt.Store(time.Now().UnixNano())
+				cancel()
+			}
+			return n, err
+		})), nil
+	}}
+	_, err := c.PostMultipart(ctx, "/scenes/s1", nil, []Part{part}, nil)
+	returned := time.Now()
+	if cancelledAt.Load() == 0 {
+		t.Fatalf("the upload never reached half way: %v", err)
+	}
+	if elapsed := returned.Sub(time.Unix(0, cancelledAt.Load())); elapsed > time.Second {
+		t.Errorf("returned %v after the cancel", elapsed)
+	}
+	gerr := gatewayError(t, err)
+	if gerr.Kind != Interrupted || gerr.BodySent {
+		t.Fatalf("kind %v bodySent %v", gerr.Kind, gerr.BodySent)
+	}
 }

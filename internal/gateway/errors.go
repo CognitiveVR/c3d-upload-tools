@@ -22,11 +22,13 @@ const (
 	ServerError
 	Network
 	Interrupted
+	LocalFile
 )
 
 var kindNames = [...]string{
 	"key_expired", "unauthorized", "scene_not_accessible", "forbidden", "not_found", "conflict",
 	"too_large", "manifest_rejected", "client_error", "server_error", "network", "interrupted",
+	"local_file",
 }
 
 // String is the snake_case code used in JSON error records.
@@ -54,8 +56,9 @@ const keyVerificationSteps = `Verify your API key is correct:
   2. Ensure you're using the correct environment (--env prod or --env dev)
   3. Update your key: export C3D_DEVELOPER_API_KEY="your_correct_key"`
 
-// Error is a failed gateway call. StatusCode is zero for Network and
-// Interrupted. Error() never contains the API key or the response body.
+// Error is a failed gateway call. StatusCode is zero for Network,
+// Interrupted and LocalFile. Error() never contains the API key or the
+// response body.
 type Error struct {
 	Operation  string
 	StatusCode int
@@ -80,7 +83,8 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() error { return e.cause }
 
 // ExitCode maps an error to the process exit code: 0 for nil, 2 for
-// authentication, 3 for not found or not accessible, 4 for too large, else 1.
+// authentication, 3 for not found or not accessible, 4 for too large or a
+// local file that could not be read, else 1.
 func ExitCode(err error) int {
 	if err == nil {
 		return 0
@@ -94,10 +98,16 @@ func ExitCode(err error) int {
 		return 2
 	case SceneNotAccessible, NotFound:
 		return 3
-	case TooLarge:
+	case TooLarge, LocalFile:
 		return 4
 	}
 	return 1
+}
+
+// newLocalFileError is a failure to open or read a part during an upload;
+// cause names the file.
+func newLocalFileError(method, path string, cause error) *Error {
+	return &Error{Operation: method + " " + path, Kind: LocalFile, method: method, path: path, cause: cause}
 }
 
 func newStatusError(method, path string, status int, body []byte, contentType string, preflighted bool) *Error {
@@ -182,6 +192,10 @@ func (e *Error) UserMessage() string {
 			}
 		}
 		return fmt.Sprintf("Could not reach %s: %v", e.host, e.cause)
+	case LocalFile:
+		if e.cause != nil {
+			return e.cause.Error()
+		}
 	}
 	return fmt.Sprintf("%s failed with status %d: %s", e.Operation, e.StatusCode, orNoDetails(e.displayBody()))
 }

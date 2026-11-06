@@ -43,14 +43,19 @@ type User struct {
 
 // Recorded is one request as the fake received it. Body and Part.Body are
 // kept only when under 1 MB. Complete is false when the body ended early.
+// ContentLength is -1 for a body of undeclared length; BodyBytes counts every
+// body byte read, kept or not.
 type Recorded struct {
-	Method   string
-	Path     string
-	Query    url.Values
-	Header   http.Header
-	Body     []byte
-	Parts    []RecordedPart
-	Complete bool
+	Method           string
+	Path             string
+	Query            url.Values
+	Header           http.Header
+	ContentLength    int64
+	TransferEncoding []string
+	Body             []byte
+	BodyBytes        int64
+	Parts            []RecordedPart
+	Complete         bool
 }
 
 type RecordedPart struct {
@@ -209,7 +214,12 @@ func (s *Server) next() (time.Duration, *failure) {
 }
 
 func (s *Server) record(r *http.Request) {
-	rec := Recorded{Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(), Header: r.Header.Clone()}
+	rec := Recorded{
+		Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(), Header: r.Header.Clone(),
+		ContentLength: r.ContentLength, TransferEncoding: append([]string(nil), r.TransferEncoding...),
+	}
+	body := &countingBody{ReadCloser: r.Body}
+	r.Body = body
 	var err error
 	if mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mediaType == "multipart/form-data" {
 		rec.Parts, err = readParts(r)
@@ -221,9 +231,21 @@ func (s *Server) record(r *http.Request) {
 		rec.Body, _, err = readCapped(r.Body)
 	}
 	rec.Complete = err == nil
+	rec.BodyBytes = body.bytes
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.requests = append(s.requests, rec)
+}
+
+type countingBody struct {
+	io.ReadCloser
+	bytes int64
+}
+
+func (c *countingBody) Read(p []byte) (int, error) {
+	n, err := c.ReadCloser.Read(p)
+	c.bytes += int64(n)
+	return n, err
 }
 
 func readParts(r *http.Request) ([]RecordedPart, error) {
@@ -267,6 +289,7 @@ func (r Recorded) clone() Recorded {
 	out := r
 	out.Query = cloneValues(r.Query)
 	out.Header = r.Header.Clone()
+	out.TransferEncoding = append([]string(nil), r.TransferEncoding...)
 	out.Body = bytes.Clone(r.Body)
 	if r.Parts != nil {
 		out.Parts = make([]RecordedPart, len(r.Parts))

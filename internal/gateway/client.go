@@ -12,7 +12,6 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
-	"net/textproto"
 	"net/url"
 	"runtime"
 	"strings"
@@ -161,16 +160,27 @@ func (c *Client) PostJSON(ctx context.Context, path string, query url.Values, bo
 }
 
 // PostMultipart has no response-header timeout: the gateway answers only
-// after it has processed every part.
+// after it has processed every part. A part that cannot be opened or read, or
+// whose size differs from Part.Size, fails with Kind LocalFile whatever the
+// transport reports. progress counts every body byte, headers included.
 func (c *Client) PostMultipart(ctx context.Context, path string, query url.Values, parts []Part, progress *ui.Progress) (*Response, error) {
-	body := buildMultipartBody(parts, progress)
-	resp, err := c.attempt(ctx, c.uploadHTTP, http.MethodPost, path, query, body, body.contentLength, body.contentType)
-	_ = body.Close()
-	<-body.done
-	if body.err != nil {
-		return nil, body.err
+	body, contentType, contentLength, err := NewMultipartBody(parts, multipart.NewWriter(io.Discard).Boundary())
+	if err != nil {
+		return nil, fmt.Errorf("build POST %s body: %w", path, err)
 	}
-	return c.result(http.MethodPost, path, resp, err, body.sent.Load())
+	var reader io.ReadCloser = body
+	if progress != nil {
+		reader = struct {
+			io.Reader
+			io.Closer
+		}{ui.CountingReader(body, progress), body}
+	}
+	resp, err := c.attempt(ctx, c.uploadHTTP, http.MethodPost, path, query, reader, contentLength, contentType)
+	_ = body.Close()
+	if local := body.failure(); local != nil {
+		return nil, newLocalFileError(http.MethodPost, path, local)
+	}
+	return c.result(http.MethodPost, path, resp, err, body.BodySent())
 }
 
 func (c *Client) result(method, path string, resp *Response, err error, bodySent bool) (*Response, error) {
@@ -282,98 +292,6 @@ func (s *sentReader) Read(p []byte) (int, error) {
 	s.remaining -= int64(n)
 	if s.remaining <= 0 {
 		s.sent.Store(true)
-	}
-	return n, err
-}
-
-// multipartBody streams parts to the transport. sent becomes true once the
-// closing boundary has been consumed; err holds a local failure to read a
-// part and is valid after done is closed.
-type multipartBody struct {
-	*io.PipeReader
-	contentType   string
-	contentLength int64
-	sent          atomic.Bool
-	done          chan struct{}
-	err           error
-}
-
-func buildMultipartBody(parts []Part, progress *ui.Progress) *multipartBody {
-	pr, pw := io.Pipe()
-	mw := multipart.NewWriter(pw)
-	body := &multipartBody{PipeReader: pr, contentType: mw.FormDataContentType(), contentLength: -1, done: make(chan struct{})}
-	go func() {
-		defer close(body.done)
-		err := writeParts(mw, parts, progress)
-		var local *partError
-		if errors.As(err, &local) {
-			body.err = local.err
-		}
-		if err == nil {
-			if err = mw.Close(); err == nil {
-				body.sent.Store(true)
-			}
-		}
-		_ = pw.CloseWithError(err)
-	}()
-	return body
-}
-
-type partError struct{ err error }
-
-func (e *partError) Error() string { return e.err.Error() }
-
-func writeParts(mw *multipart.Writer, parts []Part, progress *ui.Progress) error {
-	for _, part := range parts {
-		if err := writePart(mw, part, progress); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func writePart(mw *multipart.Writer, part Part, progress *ui.Progress) error {
-	contentType := part.ContentType
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", multipart.FileContentDisposition(part.Field, part.Filename))
-	header.Set("Content-Type", contentType)
-	w, err := mw.CreatePart(header)
-	if err != nil {
-		return err
-	}
-	rc, err := part.Open()
-	if err != nil {
-		return &partError{err: fmt.Errorf("open %s: %w", part.Filename, err)}
-	}
-	defer func() { _ = rc.Close() }()
-	src := &readErrorRecorder{r: rc}
-	var r io.Reader = src
-	if progress != nil {
-		r = ui.CountingReader(src, progress)
-	}
-	if _, err := io.Copy(w, r); err != nil {
-		if src.err != nil {
-			return &partError{err: fmt.Errorf("read %s: %w", part.Filename, src.err)}
-		}
-		return err
-	}
-	return nil
-}
-
-// readErrorRecorder separates a failure reading a part from a failure writing
-// it to a transport that has stopped reading.
-type readErrorRecorder struct {
-	r   io.Reader
-	err error
-}
-
-func (r *readErrorRecorder) Read(p []byte) (int, error) {
-	n, err := r.r.Read(p)
-	if err != nil && !errors.Is(err, io.EOF) {
-		r.err = err
 	}
 	return n, err
 }
