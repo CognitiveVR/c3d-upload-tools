@@ -142,6 +142,6 @@ func newRootCmd(streams IO, rt *runtime) *cobra.Command {
 	flags.Bool("quiet", false, "suppress informational logging")
 	flags.String("config", "", "path to the config file")
 
-	root.AddCommand(newVersionCmd(streams), newAuthCmd(rt), newSceneCmd(rt))
+	root.AddCommand(newVersionCmd(streams), newAuthCmd(rt), newSceneCmd(rt), newObjectCmd(rt))
 	return root
 }

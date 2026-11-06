@@ -289,3 +289,20 @@ func TestTimeoutAcrossTheProcessBoundary(t *testing.T) {
 		t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
 	}
 }
+
+func TestObjectUploadDryRunAcrossTheProcessBoundary(t *testing.T) {
+	fake := fakegateway.New(t)
+	objectDir := copyFixture(t, "object-gltf")
+	dir, env := authEnvironment(t, fake, "")
+	res := runCLIWith(t, dir, env, "object", "upload", "--object-dir", objectDir, "--object-filename", "cube",
+		"--scene-id", "s-1", "--object-id", "cube-1", "--dry-run")
+	if res.exitCode != 0 || !strings.Contains(res.stdout, "POST /objects/s-1/cube?version=") || !strings.Contains(res.stdout, "Object ID: cube-1") {
+		t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
+	}
+	if n := len(fake.Requests()); n != 0 {
+		t.Errorf("%d requests, want 0", n)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "s-1_object_manifest.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("dry run wrote a manifest (stat err %v)", err)
+	}
+}

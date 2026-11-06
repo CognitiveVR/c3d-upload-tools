@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/internal/object"
 	"github.com/cognitivevr/c3d-upload-tools/internal/scene"
 	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
 	"github.com/cognitivevr/c3d-upload-tools/internal/version"
@@ -160,14 +161,20 @@ func runSceneUpload(cmd *cobra.Command, rt *runtime) error {
 // planFailure shows every model-check finding before the summary, and makes
 // any planning failure a usage error.
 func planFailure(rt *runtime, err error) error {
-	var check *scene.CheckError
-	if errors.As(err, &check) {
-		for _, warning := range check.Warnings {
-			rt.log.Warn("%s", warning)
-		}
-		for _, message := range check.Errors {
-			rt.log.Error("%s", message)
-		}
+	var sceneCheck *scene.CheckError
+	var objectCheck *object.CheckError
+	var warnings, errs []string
+	switch {
+	case errors.As(err, &sceneCheck):
+		warnings, errs = sceneCheck.Warnings, sceneCheck.Errors
+	case errors.As(err, &objectCheck):
+		warnings, errs = objectCheck.Warnings, objectCheck.Errors
+	}
+	for _, warning := range warnings {
+		rt.log.Warn("%s", warning)
+	}
+	for _, message := range errs {
+		rt.log.Error("%s", message)
 	}
 	return &usageError{message: err.Error()}
 }

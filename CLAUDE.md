@@ -21,7 +21,7 @@ internal/dotenv/      planned: bash-compatible .env parser
 internal/gateway/     planned: client, request builders, error mapping, retry for GET, multipart streaming
 internal/model/       planned: model-file rule (glb vs gltf+bin), reserved converter names, glTF/GLB checks
 internal/scene/       planned: scene directory plan, settings.json, upload orchestration, version lookup
-internal/object/      planned: object directory plan, upload, manifest file merge
+internal/object/      object directory plan, upload, object id resolution, manifest upload
 internal/manifest/    planned: manifest types, validation, list-to-manifest reshape
 internal/ego/         planned: ego file plan, upload, list, delete, wait
 internal/ui/          planned: stderr logger (text and JSON), progress, TTY and NO_COLOR detection

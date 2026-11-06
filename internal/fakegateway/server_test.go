@@ -87,7 +87,7 @@ func TestSceneScopedRoutesAcceptExpiredKey(t *testing.T) {
 	for _, route := range []struct {
 		method, path string
 		want         int
-	}{{"GET", "/scenes/scene-a", 200}, {"POST", "/scenes/scene-a", 201}, {"POST", "/objects/scene-a", 200}} {
+	}{{"GET", "/scenes/scene-a", 200}, {"POST", "/scenes/scene-a", 201}, {"POST", "/objects/scene-a", 201}, {"POST", "/objects/scene-a/cube", 200}} {
 		status, _ := call(t, s, route.method, route.path, header(s.ExpiredKey()), nil)
 		if status != route.want {
 			t.Errorf("%s %s with expired key: got %d, want %d", route.method, route.path, status, route.want)
@@ -95,6 +95,25 @@ func TestSceneScopedRoutesAcceptExpiredKey(t *testing.T) {
 	}
 	if status, body := call(t, s, "POST", "/scenes/scene-a", header("fake-unknown"), nil); status != 401 || body != "Nonexistent API key." {
 		t.Errorf("unknown key on scene route: got %d %q", status, body)
+	}
+}
+
+func TestObjectRoutesAnswer401WithAnEmptyBodyForAnUnknownScene(t *testing.T) {
+	s := New(t)
+	for _, path := range []string{"/objects/nope", "/objects/nope/cube"} {
+		if status, body := call(t, s, "POST", path, header(s.Key()), nil); status != 401 || body != "" {
+			t.Errorf("POST %s: got %d %q", path, status, body)
+		}
+	}
+}
+
+func TestRecordedRawPathKeepsTheEscapedSegment(t *testing.T) {
+	s := New(t)
+	s.AddScene(Scene{ID: "scene-a"})
+	call(t, s, "POST", "/objects/scene-a/My%20Object%20%28v2%29", header(s.Key()), nil)
+	got := s.Requests()[0]
+	if got.RawPath != "/v0/objects/scene-a/My%20Object%20%28v2%29" || got.Path != "/v0/objects/scene-a/My Object (v2)" {
+		t.Errorf("RawPath %q, Path %q", got.RawPath, got.Path)
 	}
 }
 

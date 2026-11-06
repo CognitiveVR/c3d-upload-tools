@@ -51,6 +51,7 @@ type User struct {
 type Recorded struct {
 	Method           string
 	Path             string
+	RawPath          string
 	Query            url.Values
 	Header           http.Header
 	ContentLength    int64
@@ -113,6 +114,8 @@ func (s *Server) routes() []route {
 		{"GET /v0/scenes/{sceneId}", acceptExpired, s.getScene},
 		{"POST /v0/scenes/{sceneId}", acceptExpired, s.addVersion},
 		{"POST /v0/scenes/{sceneId}/screenshot", acceptExpired, s.replaceScreenshot},
+		{"POST /v0/objects/{sceneId}/{meshName}", acceptExpired, s.uploadObject},
+		{"POST /v0/objects/{sceneId}", acceptExpired, s.uploadManifest},
 		{"/", acceptExpired, s.empty},
 	}
 }
@@ -244,7 +247,7 @@ func (s *Server) next() (time.Duration, *failure) {
 
 func (s *Server) record(r *http.Request) {
 	rec := Recorded{
-		Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(), Header: r.Header.Clone(),
+		Method: r.Method, Path: r.URL.Path, RawPath: r.URL.EscapedPath(), Query: r.URL.Query(), Header: r.Header.Clone(),
 		ContentLength: r.ContentLength, TransferEncoding: append([]string(nil), r.TransferEncoding...),
 	}
 	body := &countingBody{ReadCloser: r.Body}
@@ -452,6 +455,29 @@ func (s *Server) replaceScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// uploadObject answers 200 with an empty body for a known scene and 401 with
+// an empty body for an unknown one.
+func (s *Server) uploadObject(w http.ResponseWriter, r *http.Request) {
+	s.answerForScene(w, r, http.StatusOK)
+}
+
+// uploadManifest answers 201 with an empty body for a known scene and 401
+// with an empty body for an unknown one.
+func (s *Server) uploadManifest(w http.ResponseWriter, r *http.Request) {
+	s.answerForScene(w, r, http.StatusCreated)
+}
+
+func (s *Server) answerForScene(w http.ResponseWriter, r *http.Request, status int) {
+	s.mu.Lock()
+	known := s.findSceneLocked(r.PathValue("sceneId")) != nil
+	s.mu.Unlock()
+	if !known {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	w.WriteHeader(status)
 }
 
 func (s *Server) findSceneLocked(id string) *Scene {
