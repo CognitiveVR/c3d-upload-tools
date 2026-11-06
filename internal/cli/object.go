@@ -217,6 +217,10 @@ func printObjectDryRun(rt *runtime, plan *object.UploadPlan, sceneID, id string,
 		IDSource:      idSourceCode(source),
 		ManifestPath:  manifestFile,
 	}
-	extra := fmt.Sprintf("Object ID: %s (%s)\nManifest: %s\n", id, describeIDSource(source, manifestFile), manifestFile)
+	origin := describeIDSource(source, manifestFile)
+	if source == object.Generated {
+		origin = "illustrative; a new id is generated at upload"
+	}
+	extra := fmt.Sprintf("Object ID: %s (%s)\nManifest: %s\n", id, origin, manifestFile)
 	return printDryRun(rt, request.dryRunRequest, request, extra)
 }

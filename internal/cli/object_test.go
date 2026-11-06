@@ -406,6 +406,19 @@ func TestObjectUploadDryRunMakesNoRequestsNeedsNoKeyAndWritesNothing(t *testing.
 	}
 }
 
+func TestObjectUploadDryRunSaysAGeneratedIDIsIllustrative(t *testing.T) {
+	startFake(t)
+	dir := sceneDir(t, "object-gltf")
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--dry-run")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	line := regexp.MustCompile(`(?m)^Object ID: [0-9a-f-]{36} \(illustrative; a new id is generated at upload\)$`)
+	if !line.MatchString(got.stdout) {
+		t.Errorf("stdout = %q, want the generated id marked illustrative", got.stdout)
+	}
+}
+
 func TestObjectUploadDryRunJSONEscapesTheMeshAndRedactsTheKey(t *testing.T) {
 	startFake(t)
 	dir := t.TempDir()
