@@ -76,6 +76,7 @@ func sceneParts() []Part {
 
 func TestRequestHeaders(t *testing.T) {
 	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "s1"})
 	c, _ := newTestClient(t, fake, fake.Key())
 	ctx := context.Background()
 	if err := c.VerifyKey(ctx); err != nil {
@@ -119,6 +120,7 @@ func TestRequestHeaders(t *testing.T) {
 
 func TestMultipartPartsAndProgress(t *testing.T) {
 	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "s1"})
 	c, _ := newTestClient(t, fake, fake.Key())
 	var terminal bytes.Buffer
 	progress := ui.NewProgress(&terminal, 23, "Uploading")
@@ -126,7 +128,7 @@ func TestMultipartPartsAndProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 201 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	parts := fake.Requests()[0].Parts
@@ -485,10 +487,11 @@ func TestPartReadErrorIsReturned(t *testing.T) {
 func TestMultipartWithoutDeadlineAwaitsSlowResponse(t *testing.T) {
 	t.Parallel()
 	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "s1"})
 	c, _ := newTestClient(t, fake, fake.Key())
 	fake.Delay(3 * time.Second)
 	resp, err := c.PostMultipart(context.Background(), "/scenes/s1", nil, sceneParts(), nil)
-	if err != nil || resp.StatusCode != 200 {
+	if err != nil || resp.StatusCode != 201 {
 		t.Fatalf("resp %+v err %v", resp, err)
 	}
 }
@@ -509,9 +512,10 @@ func TestResponseHeaderTimeoutAppliesToGetButNotMultipart(t *testing.T) {
 		t.Fatalf("GET attempts %d, want 3", n)
 	}
 
+	fake.AddScene(fakegateway.Scene{ID: "s1"})
 	fake.Delay(400 * time.Millisecond)
 	resp, err := c.PostMultipart(context.Background(), "/scenes/s1", nil, sceneParts(), nil)
-	if err != nil || resp.StatusCode != 200 {
+	if err != nil || resp.StatusCode != 201 {
 		t.Fatalf("multipart resp %+v err %v", resp, err)
 	}
 }
@@ -627,6 +631,7 @@ func recordedLength(t *testing.T, r fakegateway.Recorded, parts []Part) int64 {
 
 func TestMultipartSendsContentLengthNotChunked(t *testing.T) {
 	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "s1"})
 	c, _ := newTestClient(t, fake, fake.Key())
 	if _, err := c.PostMultipart(context.Background(), "/scenes/s1", nil, sceneParts(), ui.NewProgress(nil, 0, "")); err != nil {
 		t.Fatal(err)
@@ -697,6 +702,7 @@ const syntheticUploadBytes = 100_000_000
 
 func TestMultipartHundredMegabyteUpload(t *testing.T) {
 	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "s1"})
 	c, _ := newTestClient(t, fake, fake.Key())
 	parts := []Part{{Field: "file", Filename: "big.glb", Size: syntheticUploadBytes, Open: func() (io.ReadCloser, error) {
 		return io.NopCloser(io.LimitReader(zeroReader{}, syntheticUploadBytes)), nil

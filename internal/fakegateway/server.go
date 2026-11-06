@@ -4,6 +4,8 @@ package fakegateway
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -59,10 +62,11 @@ type Recorded struct {
 }
 
 type RecordedPart struct {
-	Field    string
-	Filename string
-	Size     int64
-	Body     []byte
+	Field       string
+	Filename    string
+	ContentType string
+	Size        int64
+	Body        []byte
 }
 
 type failure struct {
@@ -76,12 +80,22 @@ type Server struct {
 	key        string
 	expiredKey string
 
-	mu       sync.Mutex
-	requests []Recorded
-	delays   []time.Duration
-	failures []failure
-	scenes   []Scene
-	user     User
+	mu            sync.Mutex
+	requests      []Recorded
+	delays        []time.Duration
+	failures      []failure
+	scenes        []Scene
+	user          User
+	nextVersionID int
+	planned       map[string]pendingVersions
+	hidden        map[string]*pendingVersions
+}
+
+// pendingVersions are versions a POST adds, left out of the next polls GET
+// answers for the scene.
+type pendingVersions struct {
+	polls    int
+	versions []Version
 }
 
 type route struct {
@@ -95,8 +109,9 @@ func (s *Server) routes() []route {
 		{"GET /v0/apiKeys/verify", rejectExpired, s.empty},
 		{"GET /v0/user", rejectExpired, s.getUser},
 		{"GET /v0/scenes", rejectExpired, s.listScenes},
-		{"POST /v0/scenes", rejectExpired, s.empty},
+		{"POST /v0/scenes", rejectExpired, s.createScene},
 		{"GET /v0/scenes/{sceneId}", acceptExpired, s.getScene},
+		{"POST /v0/scenes/{sceneId}", acceptExpired, s.addVersion},
 		{"/", acceptExpired, s.empty},
 	}
 }
@@ -105,9 +120,12 @@ func (s *Server) routes() []route {
 func New(t testing.TB) *Server {
 	t.Helper()
 	s := &Server{
-		key:        newKey("valid"),
-		expiredKey: newKey("expired"),
-		user:       User{ProjectName: "Fake Project", OrganizationName: "Fake Organization"},
+		key:           newKey("valid"),
+		expiredKey:    newKey("expired"),
+		user:          User{ProjectName: "Fake Project", OrganizationName: "Fake Organization"},
+		nextVersionID: 1000,
+		planned:       map[string]pendingVersions{},
+		hidden:        map[string]*pendingVersions{},
 	}
 	mux := http.NewServeMux()
 	for _, rt := range s.routes() {
@@ -163,6 +181,16 @@ func (s *Server) AddScene(scene Scene) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.scenes = append(s.scenes, scene)
+}
+
+// SetNextUpload decides what the next POST /scenes/{sceneId} for sceneID
+// adds: versions, left out of the first hiddenPolls GET /scenes/{sceneId}
+// answers after that POST. Without it a POST adds the next version number,
+// visible at once.
+func (s *Server) SetNextUpload(sceneID string, hiddenPolls int, versions ...Version) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.planned[sceneID] = pendingVersions{polls: hiddenPolls, versions: append([]Version(nil), versions...)}
 }
 
 func (s *Server) SetUser(u User) {
@@ -264,7 +292,9 @@ func readParts(r *http.Request) ([]RecordedPart, error) {
 		}
 		_, params, _ := mime.ParseMediaType(p.Header.Get("Content-Disposition"))
 		body, size, err := readCapped(p)
-		parts = append(parts, RecordedPart{Field: params["name"], Filename: params["filename"], Size: size, Body: body})
+		parts = append(parts, RecordedPart{
+			Field: params["name"], Filename: params["filename"], ContentType: p.Header.Get("Content-Type"), Size: size, Body: body,
+		})
 		if err != nil {
 			return parts, err
 		}
@@ -349,12 +379,18 @@ func (s *Server) getScene(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("sceneId")
 	s.mu.Lock()
 	var found *Scene
-	for i := range s.scenes {
-		if s.scenes[i].ID == id {
-			scene := s.scenes[i]
-			found = &scene
-			break
+	if scene := s.findSceneLocked(id); scene != nil {
+		if pending := s.hidden[id]; pending != nil {
+			if pending.polls > 0 {
+				pending.polls--
+			} else {
+				scene.Versions = append(scene.Versions, pending.versions...)
+				delete(s.hidden, id)
+			}
 		}
+		copied := *scene
+		copied.Versions = slices.Clone(scene.Versions)
+		found = &copied
 	}
 	s.mu.Unlock()
 	if found == nil {
@@ -362,4 +398,68 @@ func (s *Server) getScene(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, found)
+}
+
+// createScene answers 201 with the new scene id as plain text and registers
+// the scene with version 1.
+func (s *Server) createScene(w http.ResponseWriter, _ *http.Request) {
+	id := newSceneID()
+	s.mu.Lock()
+	s.scenes = append(s.scenes, Scene{ID: id, SDKFacingID: id, Versions: []Version{s.newVersionLocked(1)}})
+	s.mu.Unlock()
+	writeText(w, http.StatusCreated, id)
+}
+
+// addVersion answers 201 with an empty body; an unknown scene gets 401 with
+// an empty body, as GET does.
+func (s *Server) addVersion(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("sceneId")
+	s.mu.Lock()
+	scene := s.findSceneLocked(id)
+	if scene != nil {
+		pending, ok := s.planned[id]
+		delete(s.planned, id)
+		if !ok {
+			latest := 0
+			for _, v := range scene.Versions {
+				latest = max(latest, v.VersionNumber)
+			}
+			pending.versions = []Version{s.newVersionLocked(latest + 1)}
+		}
+		if pending.polls > 0 {
+			s.hidden[id] = &pending
+		} else {
+			scene.Versions = append(scene.Versions, pending.versions...)
+		}
+	}
+	s.mu.Unlock()
+	if scene == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (s *Server) findSceneLocked(id string) *Scene {
+	for i := range s.scenes {
+		if s.scenes[i].ID == id {
+			return &s.scenes[i]
+		}
+	}
+	return nil
+}
+
+func (s *Server) newVersionLocked(number int) Version {
+	s.nextVersionID++
+	return Version{ID: s.nextVersionID, VersionNumber: number, Scale: 1}
+}
+
+// newSceneID returns a random lowercase UUID v4.
+func newSceneID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	h := hex.EncodeToString(b)
+	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32]
 }

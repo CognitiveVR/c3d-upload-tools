@@ -84,10 +84,13 @@ func TestAccountRoutesRejectExpiredKey(t *testing.T) {
 func TestSceneScopedRoutesAcceptExpiredKey(t *testing.T) {
 	s := New(t)
 	s.AddScene(Scene{ID: "scene-a", SceneName: "A"})
-	for _, route := range []struct{ method, path string }{{"GET", "/scenes/scene-a"}, {"POST", "/scenes/scene-a"}, {"POST", "/objects/scene-a"}} {
+	for _, route := range []struct {
+		method, path string
+		want         int
+	}{{"GET", "/scenes/scene-a", 200}, {"POST", "/scenes/scene-a", 201}, {"POST", "/objects/scene-a", 200}} {
 		status, _ := call(t, s, route.method, route.path, header(s.ExpiredKey()), nil)
-		if status != 200 {
-			t.Errorf("%s %s with expired key: got %d", route.method, route.path, status)
+		if status != route.want {
+			t.Errorf("%s %s with expired key: got %d, want %d", route.method, route.path, status, route.want)
 		}
 	}
 	if status, body := call(t, s, "POST", "/scenes/scene-a", header("fake-unknown"), nil); status != 401 || body != "Nonexistent API key." {
@@ -219,6 +222,7 @@ func TestRecordsRequests(t *testing.T) {
 	}
 	parts := got[1].Parts
 	if len(parts) != 2 || parts[0].Field != "file" || parts[0].Filename != "cube.glb" || parts[0].Size != 10 || string(parts[0].Body) != "0123456789" ||
+		parts[0].ContentType != "application/octet-stream" ||
 		parts[1].Field != "screenshot" || parts[1].Filename != "screenshot.png" || parts[1].Size != 3 {
 		t.Fatalf("parts %+v", parts)
 	}
@@ -241,5 +245,89 @@ func TestRecordsBodyLengthAndTransferEncoding(t *testing.T) {
 	}
 	if got[1].ContentLength != -1 || got[1].BodyBytes != 2 || len(got[1].TransferEncoding) != 1 || got[1].TransferEncoding[0] != "chunked" {
 		t.Errorf("chunked body: length %d read %d encoding %v", got[1].ContentLength, got[1].BodyBytes, got[1].TransferEncoding)
+	}
+}
+
+func getScene(t *testing.T, s *Server, id string) Scene {
+	t.Helper()
+	status, body := call(t, s, "GET", "/scenes/"+id, header(s.Key()), nil)
+	if status != 200 {
+		t.Fatalf("GET /scenes/%s: got %d %q", id, status, body)
+	}
+	var scene Scene
+	if err := json.Unmarshal([]byte(body), &scene); err != nil {
+		t.Fatal(err)
+	}
+	return scene
+}
+
+func versionNumbers(scene Scene) []int {
+	var out []int
+	for _, v := range scene.Versions {
+		out = append(out, v.VersionNumber)
+	}
+	return out
+}
+
+func TestCreateSceneAnswers201WithNewIDAndVersionOne(t *testing.T) {
+	s := New(t)
+	status, id := call(t, s, "POST", "/scenes", header(s.Key()), nil)
+	if status != 201 || len(id) != 36 {
+		t.Fatalf("POST /scenes: got %d %q, want 201 and a UUID", status, id)
+	}
+	if _, again := call(t, s, "POST", "/scenes", header(s.Key()), nil); again == id {
+		t.Errorf("two scenes got the same id %q", id)
+	}
+	scene := getScene(t, s, id)
+	if scene.ID != id || scene.SDKFacingID != id || len(scene.Versions) != 1 || scene.Versions[0].VersionNumber != 1 || scene.Versions[0].ID == 0 {
+		t.Errorf("scene %+v, want id %s with version 1", scene, id)
+	}
+	if status, body := call(t, s, "POST", "/scenes", header(s.ExpiredKey()), nil); status != 401 || body != "Key expired." {
+		t.Errorf("expired key: got %d %q", status, body)
+	}
+}
+
+func TestAddVersionAppendsNextNumberAtOnce(t *testing.T) {
+	s := New(t)
+	s.AddScene(Scene{ID: "scene-a", Versions: []Version{{ID: 5, VersionNumber: 1}, {ID: 9, VersionNumber: 3}, {ID: 7, VersionNumber: 2}}})
+	if status, body := call(t, s, "POST", "/scenes/scene-a", header(s.Key()), nil); status != 201 || body != "" {
+		t.Fatalf("POST /scenes/scene-a: got %d %q, want 201 empty", status, body)
+	}
+	scene := getScene(t, s, "scene-a")
+	if got := versionNumbers(scene); len(got) != 4 || got[3] != 4 || scene.Versions[3].ID == 0 {
+		t.Errorf("versions %+v, want 4 appended", scene.Versions)
+	}
+	if status, body := call(t, s, "POST", "/scenes/unknown", header(s.Key()), nil); status != 401 || body != "" {
+		t.Errorf("unknown scene: got %d %q, want 401 empty", status, body)
+	}
+}
+
+func TestSetNextUploadHidesVersionsForSomePolls(t *testing.T) {
+	s := New(t)
+	s.AddScene(Scene{ID: "scene-a", Versions: []Version{{ID: 5, VersionNumber: 1}}})
+	s.AddScene(Scene{ID: "scene-b", Versions: []Version{{ID: 6, VersionNumber: 1}}})
+	s.SetNextUpload("scene-a", 2, Version{ID: 50, VersionNumber: 2}, Version{ID: 51, VersionNumber: 3})
+
+	if got := versionNumbers(getScene(t, s, "scene-a")); len(got) != 1 {
+		t.Fatalf("before the POST: versions %v", got)
+	}
+	call(t, s, "POST", "/scenes/scene-b", header(s.Key()), nil)
+	if got := versionNumbers(getScene(t, s, "scene-b")); len(got) != 2 {
+		t.Errorf("another scene's POST must use the default: versions %v", got)
+	}
+	call(t, s, "POST", "/scenes/scene-a", header(s.Key()), nil)
+	for poll := 1; poll <= 2; poll++ {
+		if got := versionNumbers(getScene(t, s, "scene-a")); len(got) != 1 {
+			t.Fatalf("poll %d: versions %v, want still hidden", poll, got)
+		}
+	}
+	scene := getScene(t, s, "scene-a")
+	if got := versionNumbers(scene); len(got) != 3 || got[1] != 2 || got[2] != 3 || scene.Versions[2].ID != 51 {
+		t.Fatalf("third poll: versions %+v, want 2 and 3 visible", scene.Versions)
+	}
+
+	call(t, s, "POST", "/scenes/scene-a", header(s.Key()), nil)
+	if got := versionNumbers(getScene(t, s, "scene-a")); len(got) != 4 || got[3] != 4 {
+		t.Errorf("a planned upload applies once: versions %v", got)
 	}
 }

@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -191,6 +194,86 @@ func TestAuthVerifyAcrossTheProcessBoundary(t *testing.T) {
 			t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
 		}
 	})
+}
+
+func copyFixture(t *testing.T, name string) string {
+	t.Helper()
+	src := filepath.Join("testdata", name)
+	dst := t.TempDir()
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, e.Name()), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dst
+}
+
+func TestSceneUploadInterruptedAfterTheBodyWasSent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Interrupt cannot be sent to a process on Windows")
+	}
+	fake := fakegateway.New(t)
+	fake.Delay(0)
+	fake.Delay(10 * time.Second)
+	sceneDir := copyFixture(t, "scene-glb")
+	dir, env := authEnvironment(t, fake, fake.Key())
+
+	cmd := exec.Command(os.Args[0], "scene", "upload", "--scene-dir", sceneDir, "--scene-name", "S")
+	cmd.Dir = dir
+	cmd.Env = append(append(os.Environ(), isolatedEnvironment(t)...), env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+
+	received := false
+	for deadline := time.Now().Add(10 * time.Second); !received && time.Now().Before(deadline); {
+		for _, r := range fake.Requests() {
+			received = received || (r.Method == http.MethodPost && r.Complete)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !received {
+		_ = cmd.Process.Kill()
+		<-exited
+		t.Fatalf("the fake never received the whole POST (stderr %q)", stderr.String())
+	}
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-exited:
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			t.Errorf("exit = %v, want exit code 1", err)
+		}
+	case <-time.After(2 * time.Second):
+		_ = cmd.Process.Kill()
+		<-exited
+		t.Fatal("the CLI did not exit within two seconds of the interrupt")
+	}
+	if want := "The upload may still have completed."; !strings.Contains(stderr.String(), want) {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(sceneDir, "settings.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("settings.json exists (stat err %v), want none", err)
+	}
 }
 
 func TestTimeoutAcrossTheProcessBoundary(t *testing.T) {
