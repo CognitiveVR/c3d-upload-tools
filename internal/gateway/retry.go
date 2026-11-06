@@ -1,0 +1,85 @@
+package gateway
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	maxAttempts          = 3
+	baseRetryDelay       = time.Second
+	maxRetryAfterSeconds = 60
+)
+
+// withRetry runs a GET attempt up to maxAttempts times while it fails with
+// 429, a 5xx other than 501 and 505, or a network error.
+func (c *Client) withRetry(ctx context.Context, path string, attempt func() (*Response, error)) (*Response, error) {
+	for n := 1; ; n++ {
+		resp, err := attempt()
+		if n == maxAttempts || !retryable(resp, err) {
+			return resp, err
+		}
+		var retryAfter string
+		if resp != nil {
+			retryAfter = resp.header.Get("Retry-After")
+		}
+		delay := c.retryDelay(n, retryAfter)
+		c.log.Debug("GET %s failed (%v), retrying in %v", path, describeFailure(resp, err), delay)
+		if err := c.sleep(ctx, delay); err != nil {
+			return nil, newTransportError(http.MethodGet, path, c.host, err, false, true)
+		}
+	}
+}
+
+func retryable(resp *Response, err error) bool {
+	if err != nil {
+		var gerr *Error
+		return errors.As(err, &gerr) && gerr.Kind == Network
+	}
+	return retryableStatus(resp.StatusCode)
+}
+
+func retryableStatus(status int) bool {
+	switch status {
+	case http.StatusNotImplemented, http.StatusHTTPVersionNotSupported:
+		return false
+	case http.StatusTooManyRequests:
+		return true
+	}
+	return status >= 500 && status <= 599
+}
+
+// retryDelay honors Retry-After in seconds, capped at one minute; otherwise
+// it doubles the base delay per attempt and adds up to 50 percent jitter.
+func (c *Client) retryDelay(attempt int, retryAfter string) time.Duration {
+	if seconds, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && seconds >= 0 {
+		return time.Duration(min(seconds, maxRetryAfterSeconds)) * time.Second
+	}
+	delay := baseRetryDelay << (attempt - 1)
+	return delay + time.Duration(c.random()*0.5*float64(delay))
+}
+
+func describeFailure(resp *Response, err error) any {
+	if err != nil {
+		return err
+	}
+	return "status " + strconv.Itoa(resp.StatusCode)
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}

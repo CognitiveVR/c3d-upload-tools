@@ -1,5 +1,6 @@
 .DS_Store
 *object*.json
+!internal/**/testdata/*.json
 
 # Auto-generated during scene uploads
 **/settings.json
@@ -14,3 +15,7 @@
 .env.prod
 .env.upload2.dev
 .env*
+# Go build output
+/dist/
+/cognitive3d-cli-upload
+coverage.out

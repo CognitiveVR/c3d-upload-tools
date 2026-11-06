@@ -1,0 +1,6 @@
+---
+exclude_paths:
+  - "**/*_test.go"
+  - "testdata/**"
+  - "internal/fakegateway/**"
+  - "C3DUploadTools/**"
