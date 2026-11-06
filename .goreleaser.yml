@@ -82,6 +82,7 @@ release:
 
 homebrew_casks:
   - name: cognitive3d-cli-upload
+    skip_upload: auto
     binaries:
       - cognitive3d-cli-upload
     repository:
