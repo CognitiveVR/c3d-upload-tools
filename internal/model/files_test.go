@@ -208,7 +208,7 @@ func TestTextures(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "sub.png"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	keep, skipped := Textures(dir, []string{"screenshot.png", "settings.json", "cvr_object_thumbnail.png"})
+	keep, skipped := Textures(dir, []string{"scene.glb", "scene.gltf", "scene.bin", "screenshot.png", "settings.json", "cvr_object_thumbnail.png"})
 	if want := []string{"a.jpg", "b.PNG", "c.jpeg", "d.WEBP"}; !reflect.DeepEqual(keep, want) {
 		t.Errorf("keep = %v, want %v", keep, want)
 	}
@@ -217,8 +217,19 @@ func TestTextures(t *testing.T) {
 	}
 }
 
+func TestTexturesSkipsUnselectedModelFiles(t *testing.T) {
+	dir := mkDir(t, "cube.glb", "other.glb", "extra.bin", "a.png")
+	keep, skipped := Textures(dir, []string{"cube.glb"})
+	if want := []string{"a.png"}; !reflect.DeepEqual(keep, want) {
+		t.Errorf("keep = %v, want %v", keep, want)
+	}
+	if want := []string{"extra.bin", "other.glb"}; !reflect.DeepEqual(skipped, want) {
+		t.Errorf("skipped = %v, want %v", skipped, want)
+	}
+}
+
 func TestTexturesFixture(t *testing.T) {
-	keep, skipped := Textures(filepath.Join("..", "..", "testdata", "scene-gltf"), []string{"screenshot.png"})
+	keep, skipped := Textures(filepath.Join("..", "..", "testdata", "scene-gltf"), []string{"scene.gltf", "scene.bin", "screenshot.png"})
 	if want := []string{"texture1.png", "texture2.png", "texture3.png"}; !reflect.DeepEqual(keep, want) {
 		t.Errorf("keep = %v, want %v", keep, want)
 	}

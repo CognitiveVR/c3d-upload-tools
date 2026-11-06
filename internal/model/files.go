@@ -207,8 +207,11 @@ func GLBObjectBaseName(objectName string) string {
 
 // Textures splits the other files in dir into the texture files to upload
 // (.png, .jpg, .jpeg, .webp, matched case-insensitively) and the ones to skip.
-// Model files and the names in exclude appear in neither list. Both lists are
-// file names, sorted. An unreadable directory yields two empty lists.
+// The names in exclude (the selected model files and files callers handle
+// themselves) appear in neither list; any other file, including an unselected
+// .glb, .gltf or .bin, is skipped. Both lists are file names, sorted.
+// Textures cannot report a directory read error and returns two empty lists
+// for one, so callers must run Resolve on the same directory first.
 func Textures(dir string, exclude []string) (keep []string, skipped []string) {
 	names, err := listFiles(dir)
 	if err != nil {
@@ -222,7 +225,6 @@ func Textures(dir string, exclude []string) (keep []string, skipped []string) {
 		switch {
 		case textureExtensions[ext]:
 			keep = append(keep, name)
-		case isModelExt(ext):
 		default:
 			skipped = append(skipped, name)
 		}
