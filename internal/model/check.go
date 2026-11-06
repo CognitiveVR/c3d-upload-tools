@@ -75,13 +75,17 @@ func checkGLTF(path, dir string, uploaded []string, mode Mode) ([]Finding, error
 	}
 
 	var findings []Finding
+	reported := map[string]bool{}
 	for i, b := range doc.Buffers {
 		if b.URI == "" {
 			continue
 		}
 		name, f := resolveURI(fmt.Sprintf("buffers[%d]", i), b.URI, true, dir, uploaded, mode)
 		if f != nil {
-			findings = append(findings, *f)
+			if !reported[b.URI] {
+				reported[b.URI] = true
+				findings = append(findings, *f)
+			}
 			continue
 		}
 		if b.ByteLength == nil {
@@ -99,7 +103,8 @@ func checkGLTF(path, dir string, uploaded []string, mode Mode) ([]Finding, error
 		if img.URI == "" {
 			continue
 		}
-		if _, f := resolveURI(fmt.Sprintf("images[%d]", i), img.URI, false, dir, uploaded, mode); f != nil {
+		if _, f := resolveURI(fmt.Sprintf("images[%d]", i), img.URI, false, dir, uploaded, mode); f != nil && !reported[img.URI] {
+			reported[img.URI] = true
 			findings = append(findings, *f)
 		}
 	}

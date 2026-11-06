@@ -54,6 +54,8 @@ func TestCheckGLTFURIs(t *testing.T) {
 		{"scene buffer must be scene.bin", `{"buffers":[{"uri":"other.bin","byteLength":4}]}`, map[string]int{"other.bin": 4}, []string{"scene.gltf", "other.bin"}, SceneMode, Error, []string{"the gateway stores every .bin as scene.bin"}},
 		{"skipped texture", `{"images":[{"uri":"tex.ktx2"}]}`, map[string]int{"tex.ktx2": 3}, []string{"obj.gltf"}, NamedMode, Error, []string{"tex.ktx2", "not an accepted texture type", ".png .jpg .jpeg .webp"}},
 		{"byteLength mismatch", `{"buffers":[{"uri":"obj.bin","byteLength":10}]}`, map[string]int{"obj.bin": 4}, []string{"obj.gltf", "obj.bin"}, NamedMode, Error, []string{"10 bytes", "4 bytes"}},
+		{"in directory but not uploaded", `{"buffers":[{"uri":"other.bin","byteLength":4}]}`, map[string]int{"other.bin": 4}, []string{"cube.gltf", "cube.bin"}, NamedMode, Error, []string{"other.bin is in the directory but is not part of the upload"}},
+		{"duplicate uri reported once", `{"images":[{"uri":"gone.png"},{"uri":"gone.png"}]}`, nil, []string{"cube.gltf"}, NamedMode, Error, []string{"gone.png", "missing"}},
 		{"data uri", `{"images":[{"uri":"data:image/png;base64,AAAA"}]}`, nil, []string{"obj.gltf"}, NamedMode, Warning, []string{"data:"}},
 	}
 	for _, tc := range cases {
@@ -150,6 +152,7 @@ func TestCheckGLB(t *testing.T) {
 		{"length mismatch", glbBytes(glbMagic, 2, 99, 4, glbChunkJSON, short), []string{"99 bytes", "24 bytes"}},
 		{"first chunk not JSON", glbBytes(glbMagic, 2, 24, 4, 0x004E4942, short), []string{"not JSON"}},
 		{"JSON chunk over limit", glbBytes(glbMagic, 2, 24, 9<<20, glbChunkJSON, short), []string{"JSON chunk is 9437184 bytes", "8 MB limit"}},
+		{"declared length smaller than file", glbBytes(glbMagic, 2, 20, 4, glbChunkJSON, short), []string{"20 bytes", "24 bytes"}},
 		{"chunk past end", glbBytes(glbMagic, 2, 24, 400, glbChunkJSON, short), []string{"truncated"}},
 		{"header only", glbBytes(glbMagic, 2, 12, 0, 0, nil)[:12], []string{"no JSON chunk"}},
 		{"too short for header", []byte("glTF"), []string{"truncated"}},
