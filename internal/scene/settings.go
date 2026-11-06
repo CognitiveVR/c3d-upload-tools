@@ -73,6 +73,14 @@ func BuildSettings(existing *Settings, sceneName, sdkVersion string) ([]byte, Se
 		if out.Scale == 0 {
 			out.Scale = 1
 		}
+		out.Extra = make(map[string]json.RawMessage, len(existing.Extra))
+		for k, v := range existing.Extra {
+			switch k {
+			case "scale", "sceneName", "sdkVersion":
+			default:
+				out.Extra[k] = v
+			}
+		}
 	}
 	if sceneName != "" {
 		out.SceneName = sceneName

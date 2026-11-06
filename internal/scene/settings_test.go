@@ -1,6 +1,7 @@
 package scene
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -104,6 +105,86 @@ func TestWriteSettingsWritesReturnedBytes(t *testing.T) {
 	}
 	if string(onDisk) != string(data) {
 		t.Fatalf("on disk %q, built %q", onDisk, data)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("entries = %v, %v", entries, err)
+	}
+}
+
+func TestBuildSettingsDoesNotEscapeHTMLInName(t *testing.T) {
+	data, _, err := BuildSettings(nil, "A&B <x>", testSDKVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"sceneName": "A&B <x>"`) {
+		t.Fatalf("data = %q", data)
+	}
+}
+
+func TestBuildSettingsDropsReservedExtraKeys(t *testing.T) {
+	extra := map[string]json.RawMessage{
+		"sceneName": json.RawMessage(`"Stale"`),
+		"keep":      json.RawMessage(`1`),
+	}
+	data, got, err := BuildSettings(&Settings{Extra: extra}, "New", testSDKVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(data), `"sceneName"`); n != 1 {
+		t.Fatalf("sceneName appears %d times in %q", n, data)
+	}
+	if !strings.Contains(string(data), `"sceneName": "New"`) || len(got.Extra) != 1 {
+		t.Fatalf("data = %q, settings = %+v", data, got)
+	}
+	if _, ok := extra["sceneName"]; !ok {
+		t.Fatal("input Extra map was modified")
+	}
+}
+
+func TestReadSettingsRejectsBadFields(t *testing.T) {
+	cases := map[string]string{
+		`{"scale":"x"}`: `"scale"`,
+		`null`:          "settings.json",
+	}
+	for body, want := range cases {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := ReadSettings(dir)
+		if err == nil || !strings.Contains(err.Error(), "settings.json") || !strings.Contains(err.Error(), want) {
+			t.Fatalf("body %s: err = %v", body, err)
+		}
+	}
+}
+
+func TestZeroScaleOnDiskBecomesOne(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"scale":0,"sceneName":"S"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	existing, err := ReadSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, got, err := BuildSettings(existing, "", testSDKVersion)
+	if err != nil || got.Scale != 1 {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestWriteSettingsOverwritesExisting(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteSettings(dir, []byte("new\n")); err != nil {
+		t.Fatal(err)
+	}
+	onDisk, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if err != nil || string(onDisk) != "new\n" {
+		t.Fatalf("on disk %q, %v", onDisk, err)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 {
