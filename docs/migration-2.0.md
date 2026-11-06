@@ -19,7 +19,8 @@ Version 2.0 replaces the bash scripts and the PowerShell module with the `cognit
 | `Upload-C3DObject -ObjectDirectory D -ObjectFilename F [-SceneId ID]` | `cognitive3d-cli-upload object upload --object-dir D --object-filename F [--scene-id ID]` |
 | `Upload-C3DObjectManifest [-SceneId ID]` | `cognitive3d-cli-upload object manifest upload [--scene-id ID]` |
 | `Get-C3DObjects [-SceneId ID]` | `cognitive3d-cli-upload object list [--scene-id ID]` |
-| `Get-C3DObjects -OutputFile F` | `cognitive3d-cli-upload object list --write-list`, or redirect stdout with `--format json` |
+| `Get-C3DObjects -OutputFile F` | `cognitive3d-cli-upload object list --write-list`, which writes the fixed name `<scene id>_object_list.json`; to choose a path, redirect stdout with `--format json > F` |
+| `Upload-C3DObject -AutoUploadManifest` (on by default in 1.x) | `cognitive3d-cli-upload object upload --upload-manifest` (off by default in 2.0) |
 | `Get-C3DObjects -FormatAsManifest` | `cognitive3d-cli-upload object list --write-manifest` |
 | any module function with `-Environment E` or `-DryRun` | `--env E` or `--dry-run` |
 
@@ -40,7 +41,7 @@ Legacy flag spellings such as `--scene_id`, `--scene_dir` and `--dry_run` are ac
 - `sdkVersion` in `settings.json` becomes `cli-go-v<version>`.
 - A model that references a texture the CLI would not upload is rejected instead of uploaded broken.
 - Scene `settings.json` is written into the scene directory only after the upload succeeds.
-- Size thresholds replace the old 100 MB per-file limit: a file of 500 MB or more and a total of 2 GiB or more produce a warning, and a total of 3 GiB or more is refused (exit 4).
+- Size thresholds replace the old 100 MB per-file limit: a file of 500 MB or more and a total of 2 GiB or more produce a warning, and a total over 3 GiB is refused (exit 4).
 - Symlinks in an upload directory are not uploaded.
 - A new scene version is attributed by reading the latest version before the upload and waiting for the next one to appear. If it cannot be told apart from another concurrent upload, the CLI exits 1 and names no version.
 - `ego upload` takes a directory of one model plus its images and an optional `ego.json`; `ego list` shows each slot's `files` count and `optimized` flag; `--wait` polls for up to 120 seconds and reports `optimized`, which small models may never become.

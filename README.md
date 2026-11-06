@@ -71,13 +71,13 @@ Upload a dynamic object. The directory holds `<name>.glb` (or `<name>.gltf` plus
 cognitive3d-cli-upload object upload --scene-id <scene-id> --object-dir ./my-object --object-filename cube
 ```
 
-Upload the manifest so the objects appear in the dashboard:
+Pass `--manifest <path>` to merge into a different manifest file, and `--upload-manifest` to upload the manifest right after the object. Otherwise upload the manifest as a separate step so the objects appear in the dashboard:
 
 ```bash
 cognitive3d-cli-upload object manifest upload --scene-id <scene-id>
 ```
 
-List the objects of the latest version (add `--write-manifest` to save the list as a manifest file):
+List the objects of the latest version. `--write-manifest` saves the list as `<scene id>_object_manifest.json`, replacing that file, and `--write-list` saves the raw list as `<scene id>_object_list.json`:
 
 ```bash
 cognitive3d-cli-upload object list --scene-id <scene-id>
@@ -95,7 +95,19 @@ Every upload command accepts `--dry-run`, which validates the files and prints t
 cognitive3d-cli-upload scene upload --scene-dir ./my-scene --scene-name "My Scene" --dry-run
 ```
 
-Other commands: `scene list`, `scene show`, `scene screenshot`, `ego list`, `ego delete`, `version` and `completion`. Run any command with `--help` for its flags.
+Replace the screenshot of an existing version with `--file` (the latest version unless `--version` is given):
+
+```bash
+cognitive3d-cli-upload scene screenshot --scene-id <scene-id> --file screenshot.png
+```
+
+Empty an egocentric slot, reverting session replay to the bundled model; `--yes` skips the confirmation prompt:
+
+```bash
+cognitive3d-cli-upload ego delete --scene-id <scene-id> --slot head --yes
+```
+
+Other commands: `scene list`, `scene show`, `ego list`, `version` and `completion`. Run any command with `--help` for its flags.
 
 ## What goes in each directory
 
@@ -159,7 +171,7 @@ With `--format json`, a command prints exactly one JSON object or array on stdou
 
 ## Scene versions
 
-Each `scene upload` to an existing scene creates a new version. The CLI reads the latest version number before the upload and waits for the next one to appear, and prints that number as the new version. If more than one new version appears while the upload runs, it cannot tell which one is its own, so it lists the candidate numbers, prints no version number, and exits 1; check with `scene show`.
+Each `scene upload` to an existing scene creates a new version. The CLI reads the latest version number before the upload and waits for the next one to appear, and prints that number as the new version. If more than one new version appears while the upload runs, it cannot tell which one is its own, so it lists the candidate numbers, prints no version number, and exits 1; check with `scene show`. If the new version is not visible within 30 seconds, the command also exits 1 and prints the `scene show` command to check; `settings.json` has already been written by then.
 
 Objects, manifests and egos belong to a version. After a new version, upload them again; the CLI warns about this each time. Commands that take `--version` use the latest version when it is omitted.
 
