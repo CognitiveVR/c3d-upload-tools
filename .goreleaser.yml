@@ -1,0 +1,95 @@
+version: 2
+
+project_name: cognitive3d-cli-upload
+
+builds:
+  - id: cognitive3d-cli-upload
+    main: .
+    binary: cognitive3d-cli-upload
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/cognitivevr/c3d-upload-tools/internal/version.Version={{.Version}} -X github.com/cognitivevr/c3d-upload-tools/internal/version.Commit={{.ShortCommit}} -X github.com/cognitivevr/c3d-upload-tools/internal/version.Date={{.Date}}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    hooks:
+      post:
+        - cmd: ./scripts/sign-macos.sh {{ .Os }} {{ .Path }}
+          output: true
+
+archives:
+  - id: cognitive3d-cli-upload
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - docs/migration-2.0.md
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: git
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+  groups:
+    - title: 'New Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Other Changes'
+      order: 999
+
+release:
+  github:
+    owner: CognitiveVR
+    name: c3d-upload-tools
+  draft: false
+  prerelease: auto
+
+homebrew_casks:
+  - name: cognitive3d-cli-upload
+    binaries:
+      - cognitive3d-cli-upload
+    repository:
+      owner: CognitiveVR
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://cognitive3d.com
+    description: "Upload scenes, dynamic objects and egocentric models to Cognitive3D from the command line"
+    commit_msg_template: "Update cognitive3d-cli-upload cask to {{ .Tag }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
