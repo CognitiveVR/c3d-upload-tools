@@ -42,11 +42,48 @@ func Stat(dir, name string) (File, error) {
 	return File{Name: name, Path: path, Size: info.Size()}, nil
 }
 
-// Part builds a multipart part under field that streams f from disk.
+// Part builds a multipart part under field that streams f from disk. Open
+// refuses the file if it was replaced by a link or a non-regular entry.
 func Part(field string, f File) gateway.Part {
 	path := f.Path
 	return gateway.Part{
 		Field: field, Filename: f.Name, ContentType: octetStream, Size: f.Size,
-		Open: func() (io.ReadCloser, error) { return os.Open(path) },
+		Open: func() (io.ReadCloser, error) { return OpenRegular(path) },
 	}
+}
+
+// OpenRegular opens path and confirms that the opened file is the regular
+// file now at path, not a link. A missing file returns an error wrapping
+// fs.ErrNotExist.
+func OpenRegular(path string) (*os.File, error) {
+	before, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() {
+		return nil, replacedError(path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	opened, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	current, err := os.Lstat(path)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	if !current.Mode().IsRegular() || !os.SameFile(opened, current) {
+		_ = f.Close()
+		return nil, replacedError(path)
+	}
+	return f, nil
+}
+
+func replacedError(path string) error {
+	return fmt.Errorf("%s was replaced or is a link; it must be a regular file", path)
 }

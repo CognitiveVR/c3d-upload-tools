@@ -116,6 +116,39 @@ func TestSceneScreenshotRejectsBadFilesBeforeAnyRequest(t *testing.T) {
 	}
 }
 
+func TestSceneScreenshotUploadsTheFileItCheckedWhenThePathIsSwappedForALink(t *testing.T) {
+	fake := startFake(t)
+	projectified := addListScenes(fake)
+	body := append(append([]byte{}, pngSignature...), []byte("checked")...)
+	file := writeFile(t, "shot.png", body)
+	other := writeFile(t, "other.png", append(append([]byte{}, pngSignature...), []byte("swapped in")...))
+	swapped := make(chan error, 1)
+	fake.OnRoute("GET /v0/scenes/{sceneId}", func() {
+		if err := os.Remove(file); err != nil {
+			swapped <- err
+			return
+		}
+		swapped <- os.Symlink(other, file)
+	})
+
+	got := runCommand(t, "scene", "screenshot", "--scene-id", projectified, "--file", file)
+	select {
+	case err := <-swapped:
+		if err != nil {
+			t.Skipf("cannot swap the file for a symlink here: %v", err)
+		}
+	default:
+		t.Fatalf("the scene was never looked up: exit %d, stderr %q", got.code, got.stderr)
+	}
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	sent := postsTo(fake)
+	if len(sent) != 1 || len(sent[0].Parts) != 1 || !bytes.Equal(sent[0].Parts[0].Body, body) {
+		t.Fatalf("POSTs = %+v, want the checked bytes", sent)
+	}
+}
+
 func TestSceneScreenshotRequiresFileAndSceneID(t *testing.T) {
 	startFake(t)
 	if got := runCommand(t, "scene", "screenshot", "--scene-id", "x"); got.code != 4 || !strings.Contains(got.stderr, "--file") {

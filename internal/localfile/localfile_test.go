@@ -56,3 +56,59 @@ func TestStatRejections(t *testing.T) {
 		}
 	}
 }
+
+func TestPartRefusesAFileSwappedForALinkAfterStat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.bin")
+	if err := os.WriteFile(path, []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(dir, "other.bin")
+	if err := os.WriteFile(other, []byte("xyz"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Stat(dir, "a.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(other, path); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+	rc, err := Part("file", f).Open()
+	if err == nil {
+		_ = rc.Close()
+		t.Fatal("opened a file that became a link")
+	}
+	if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("error %q", err)
+	}
+}
+
+func TestOpenRegular(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.png")
+	if err := os.WriteFile(path, []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := OpenRegular(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	if _, err := OpenRegular(dir); err == nil || !strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("directory: got %v", err)
+	}
+	if _, err := OpenRegular(filepath.Join(dir, "missing")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("missing: got %v", err)
+	}
+	link := filepath.Join(dir, "link.png")
+	if err := os.Symlink(path, link); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+	if _, err := OpenRegular(link); err == nil || !strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("symlink: got %v", err)
+	}
+}

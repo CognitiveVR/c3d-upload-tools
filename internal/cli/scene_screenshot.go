@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/localfile"
 	"github.com/cognitivevr/c3d-upload-tools/v2/internal/scene"
 )
 
@@ -47,10 +48,11 @@ func runSceneScreenshot(cmd *cobra.Command, rt *runtime) error {
 	if err != nil {
 		return err
 	}
-	size, err := checkPNG(file)
+	screenshot, size, err := checkPNG(file)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = screenshot.Close() }()
 
 	ctx := cmd.Context()
 	if err := preflight(ctx, rt); err != nil {
@@ -76,7 +78,12 @@ func runSceneScreenshot(cmd *cobra.Command, rt *runtime) error {
 
 	part := gateway.Part{
 		Field: "screenshot", Filename: "screenshot.png", ContentType: "application/octet-stream", Size: size,
-		Open: func() (io.ReadCloser, error) { return os.Open(file) },
+		Open: func() (io.ReadCloser, error) {
+			if _, err := screenshot.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
+			return screenshot, nil
+		},
 	}
 	query := url.Values{"version": {strconv.Itoa(chosen.Number)}}
 	if _, err := client.PostMultipart(ctx, "/scenes/"+url.PathEscape(sceneID)+"/screenshot", query, []gateway.Part{part}, nil); err != nil {
@@ -104,24 +111,30 @@ func unknownVersionMessage(info scene.Info, sceneID string, wanted int) string {
 	return fmt.Sprintf("scene %s has no version %d; its versions are %s", sceneID, wanted, joinNumbers(numbers))
 }
 
-// checkPNG returns the size of file once it is known to be a regular file
-// that starts with the PNG signature.
-func checkPNG(file string) (int64, error) {
+// checkPNG opens file once it is known to be a regular file that starts with
+// the PNG signature, and returns it with its size; the upload reads the same
+// open file.
+func checkPNG(file string) (*os.File, int64, error) {
 	info, err := os.Lstat(file)
 	if err != nil {
-		return 0, usageErrorf("cannot use screenshot %s: %v", file, err)
+		return nil, 0, usageErrorf("cannot use screenshot %s: %v", file, err)
 	}
 	if !info.Mode().IsRegular() {
-		return 0, usageErrorf("screenshot %s is not a PNG: it is not a regular file", file)
+		return nil, 0, usageErrorf("screenshot %s is not a PNG: it is not a regular file", file)
 	}
-	f, err := os.Open(file)
+	f, err := localfile.OpenRegular(file)
 	if err != nil {
-		return 0, usageErrorf("cannot use screenshot %s: %v", file, err)
+		return nil, 0, usageErrorf("cannot use screenshot %s: %v", file, err)
 	}
-	defer func() { _ = f.Close() }()
+	opened, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, 0, usageErrorf("cannot use screenshot %s: %v", file, err)
+	}
 	head := make([]byte, len(pngSignature))
 	if _, err := io.ReadFull(f, head); err != nil || !bytes.Equal(head, pngSignature) {
-		return 0, usageErrorf("screenshot %s is not a PNG: it does not start with the PNG signature", file)
+		_ = f.Close()
+		return nil, 0, usageErrorf("screenshot %s is not a PNG: it does not start with the PNG signature", file)
 	}
-	return info.Size(), nil
+	return f, opened.Size(), nil
 }
