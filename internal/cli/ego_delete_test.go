@@ -100,10 +100,28 @@ func TestEgoDeleteInteractivePromptNamesTheVersionAndHonorsTheAnswer(t *testing.
 			if n := len(deletesTo(fake)); (n == 1) != tc.deleted || n > 1 {
 				t.Errorf("%d DELETEs, want deleted=%v", n, tc.deleted)
 			}
-			if aborted := strings.Contains(got.stderr, "Aborted.\n"); aborted == tc.deleted {
-				t.Errorf("stderr = %q, want Aborted. only when not deleted", got.stderr)
+			if aborted := strings.Contains(got.stderr, "[INFO] Aborted; nothing was deleted\n"); aborted == tc.deleted {
+				t.Errorf("stderr = %q, want the abort logged only when not deleted", got.stderr)
 			}
 		})
+	}
+}
+
+func TestEgoDeleteDeclinedInJSONModePrintsTheResultWithDeletedFalse(t *testing.T) {
+	fake := uploadedHead(t)
+	got := runWithInput(t, true, "n\n", "ego", "delete", "--slot", "head", "--scene-id", egoSceneID, "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	want := map[string]any{"sceneId": egoSceneID, "versionNumber": 2.0, "slot": "head", "deleted": false, "existed": nil}
+	if result := decodeOne(t, got.stdout); !reflect.DeepEqual(result, want) {
+		t.Errorf("result = %v, want %v", result, want)
+	}
+	if !strings.Contains(got.stderr, `{"level":"info","message":"Aborted; nothing was deleted"}`) {
+		t.Errorf("stderr = %q, want the abort as a JSON log record", got.stderr)
+	}
+	if n := len(deletesTo(fake)); n != 0 {
+		t.Errorf("%d DELETEs, want 0", n)
 	}
 }
 

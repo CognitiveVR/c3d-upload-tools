@@ -288,12 +288,14 @@ func newEgoDeleteCmd(rt *runtime) *cobra.Command {
 	return del
 }
 
+// egoDeleteResult has Existed nil, encoded as null, when the delete was
+// declined and the slot was not looked at.
 type egoDeleteResult struct {
 	SceneID       string `json:"sceneId"`
 	VersionNumber int    `json:"versionNumber"`
 	Slot          string `json:"slot"`
 	Deleted       bool   `json:"deleted"`
-	Existed       bool   `json:"existed"`
+	Existed       *bool  `json:"existed"`
 }
 
 func runEgoDelete(cmd *cobra.Command, rt *runtime) error {
@@ -332,8 +334,13 @@ func runEgoDelete(cmd *cobra.Command, rt *runtime) error {
 			return err
 		}
 		if !ok {
-			_, err := io.WriteString(rt.streams.Stderr, "Aborted.\n")
-			return err
+			rt.log.Info("Aborted; nothing was deleted")
+			if rt.settings.Format == formatJSON {
+				return json.NewEncoder(rt.streams.Stdout).Encode(egoDeleteResult{
+					SceneID: sceneID, VersionNumber: chosen.Number, Slot: slot, Deleted: false,
+				})
+			}
+			return nil
 		}
 	}
 
@@ -343,7 +350,7 @@ func runEgoDelete(cmd *cobra.Command, rt *runtime) error {
 	}
 	if rt.settings.Format == formatJSON {
 		return json.NewEncoder(rt.streams.Stdout).Encode(egoDeleteResult{
-			SceneID: sceneID, VersionNumber: chosen.Number, Slot: slot, Deleted: true, Existed: deleted.Existed,
+			SceneID: sceneID, VersionNumber: chosen.Number, Slot: slot, Deleted: true, Existed: &deleted.Existed,
 		})
 	}
 	if deleted.Existed {
