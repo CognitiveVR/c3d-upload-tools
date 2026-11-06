@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/cognitivevr/c3d-upload-tools/internal/localfile"
 )
 
 // copyFixture copies testdata/<name> into a fresh temporary directory.
@@ -227,8 +229,8 @@ func TestCheckSizesWarnsAtTwoGibibytesAndRefusesAboveThree(t *testing.T) {
 func TestCheckSizesWarnsPerFileAtFiveHundredMegabytes(t *testing.T) {
 	plan := &LocalPlan{
 		TotalBytes: 900 * 1000 * 1000,
-		models:     []localFile{{name: "scene.glb", size: 500 * 1000 * 1000}},
-		textures:   []localFile{{name: "small.png", size: 400 * 1000 * 1000}},
+		models:     []localfile.File{{Name: "scene.glb", Size: 500 * 1000 * 1000}},
+		textures:   []localfile.File{{Name: "small.png", Size: 400 * 1000 * 1000}},
 	}
 	if err := checkSizes(plan); err != nil {
 		t.Fatal(err)

@@ -9,13 +9,13 @@ import (
 	"strings"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/internal/localfile"
 	"github.com/cognitivevr/c3d-upload-tools/internal/model"
 )
 
 const (
 	screenshotFileName = "screenshot.png"
 	modelBaseName      = "scene"
-	octetStream        = "application/octet-stream"
 )
 
 // LocalPlan is everything a scene upload sends except settings.json, read
@@ -32,15 +32,9 @@ type LocalPlan struct {
 	TotalBytes int64
 	Warnings   []string
 
-	models     []localFile
-	textures   []localFile
-	screenshot localFile
-}
-
-type localFile struct {
-	name string
-	path string
-	size int64
+	models     []localfile.File
+	textures   []localfile.File
+	screenshot localfile.File
 }
 
 // UploadPlan is a LocalPlan with its settings.json built: Parts are in the
@@ -81,18 +75,18 @@ func Plan(dir string) (*LocalPlan, error) {
 
 	var modelNames []string
 	for _, path := range files.Paths {
-		f, err := statFile(abs, filepath.Base(path))
+		f, err := localfile.Stat(abs, filepath.Base(path))
 		if err != nil {
 			return nil, err
 		}
 		p.models = append(p.models, f)
-		modelNames = append(modelNames, f.name)
+		modelNames = append(modelNames, f.Name)
 	}
 
 	if p.screenshot, err = findScreenshot(abs); err != nil {
 		return nil, err
 	}
-	p.Screenshot = p.screenshot.path
+	p.Screenshot = p.screenshot.Path
 
 	if p.Existing, err = ReadSettings(abs); err != nil {
 		return nil, err
@@ -105,7 +99,7 @@ func Plan(dir string) (*LocalPlan, error) {
 			return nil, fmt.Errorf("found %s beside %s: that name is reserved for an image the gateway extracts from the .glb (%s_<n>.<ext>); rename or remove it",
 				name, modelNames[0], modelBaseName)
 		}
-		f, err := statFile(abs, name)
+		f, err := localfile.Stat(abs, name)
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +126,7 @@ func Plan(dir string) (*LocalPlan, error) {
 	}
 
 	for _, f := range p.files() {
-		p.TotalBytes += f.size
+		p.TotalBytes += f.Size
 	}
 	if err := checkSizes(p); err != nil {
 		return nil, err
@@ -141,60 +135,42 @@ func Plan(dir string) (*LocalPlan, error) {
 }
 
 // files lists every file the upload sends, screenshot last.
-func (p *LocalPlan) files() []localFile {
-	out := append(append([]localFile{}, p.models...), p.textures...)
-	if p.screenshot.name != "" {
+func (p *LocalPlan) files() []localfile.File {
+	out := append(append([]localfile.File{}, p.models...), p.textures...)
+	if p.screenshot.Name != "" {
 		out = append(out, p.screenshot)
 	}
 	return out
 }
 
-func statFile(dir, name string) (localFile, error) {
-	if err := model.SafeSegment(name); err != nil {
-		return localFile{}, fmt.Errorf("cannot upload %q: %w", name, err)
-	}
-	path := filepath.Join(dir, name)
-	info, err := os.Lstat(path)
-	if err != nil {
-		return localFile{}, err
-	}
-	switch {
-	case info.Mode()&os.ModeSymlink != 0:
-		return localFile{}, fmt.Errorf("%s is a symbolic link; it must be a regular file", name)
-	case !info.Mode().IsRegular():
-		return localFile{}, fmt.Errorf("%s is not a regular file", name)
-	}
-	return localFile{name: name, path: path, size: info.Size()}, nil
-}
-
 // findScreenshot matches screenshot.png exactly, so that a differently cased
 // file is reported the same way on every file system. Like every other part,
 // it must be a regular file, not a link.
-func findScreenshot(dir string) (localFile, error) {
+func findScreenshot(dir string) (localfile.File, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return localFile{}, err
+		return localfile.File{}, err
 	}
 	var near []string
 	for _, e := range entries {
 		switch {
 		case e.Name() == screenshotFileName:
-			return statFile(dir, screenshotFileName)
+			return localfile.Stat(dir, screenshotFileName)
 		case strings.EqualFold(e.Name(), screenshotFileName):
 			near = append(near, e.Name())
 		}
 	}
 	if len(near) > 0 {
-		return localFile{}, fmt.Errorf("%s is missing from %s: found %s, but the name must be exactly %s", screenshotFileName, dir, strings.Join(near, ", "), screenshotFileName)
+		return localfile.File{}, fmt.Errorf("%s is missing from %s: found %s, but the name must be exactly %s", screenshotFileName, dir, strings.Join(near, ", "), screenshotFileName)
 	}
-	return localFile{}, fmt.Errorf("%s is missing from %s: a scene upload needs it as the scene's screenshot", screenshotFileName, dir)
+	return localfile.File{}, fmt.Errorf("%s is missing from %s: a scene upload needs it as the scene's screenshot", screenshotFileName, dir)
 }
 
 // checkSizes applies the size thresholds of model.CheckSizes to the plan.
 func checkSizes(p *LocalPlan) error {
 	var sized []model.SizedFile
 	for _, f := range p.files() {
-		sized = append(sized, model.SizedFile{Name: f.name, Bytes: f.size})
+		sized = append(sized, model.SizedFile{Name: f.Name, Bytes: f.Size})
 	}
 	warnings, err := model.CheckSizes(sized, p.TotalBytes)
 	p.Warnings = append(p.Warnings, warnings...)
@@ -210,21 +186,13 @@ func Finalize(local *LocalPlan, sceneName, sdkVersion string) (*UploadPlan, erro
 		return nil, err
 	}
 	var parts []gateway.Part
-	for _, f := range append(append([]localFile{}, local.models...), local.textures...) {
-		parts = append(parts, filePart("file", f))
+	for _, f := range append(append([]localfile.File{}, local.models...), local.textures...) {
+		parts = append(parts, localfile.Part("file", f))
 	}
 	parts = append(parts, gateway.Part{
 		Field: "file", Filename: settingsFileName, ContentType: "application/json", Size: int64(len(data)),
 		Open: func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil },
 	})
-	parts = append(parts, filePart("screenshot", local.screenshot))
+	parts = append(parts, localfile.Part("screenshot", local.screenshot))
 	return &UploadPlan{Local: local, SceneName: settings.SceneName, Parts: parts, SettingsBytes: data}, nil
-}
-
-func filePart(field string, f localFile) gateway.Part {
-	path := f.path
-	return gateway.Part{
-		Field: field, Filename: f.name, ContentType: octetStream, Size: f.size,
-		Open: func() (io.ReadCloser, error) { return os.Open(path) },
-	}
 }
