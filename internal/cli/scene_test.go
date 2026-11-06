@@ -383,7 +383,7 @@ func TestSceneUploadLocalValidationExitsFourWithoutRequests(t *testing.T) {
 func TestSceneUploadModelCheckPrintsEveryFinding(t *testing.T) {
 	startFake(t)
 	dir := sceneDir(t, "scene-gltf")
-	gltf := `{"buffers":[{"uri":"scene.bin","byteLength":1}],"images":[{"uri":"gone.png"},{"uri":"data:image/png;base64,AA=="}]}`
+	gltf := `{"buffers":[{"uri":"scene.bin","byteLength":99999}],"images":[{"uri":"gone.png"},{"uri":"data:image/png;base64,AA=="}]}`
 	if err := os.WriteFile(filepath.Join(dir, "scene.gltf"), []byte(gltf), 0o644); err != nil {
 		t.Fatal(err)
 	}

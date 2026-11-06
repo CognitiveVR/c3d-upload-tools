@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -30,8 +31,10 @@ const (
 	glbChunkJSON    = 0x4E4F534A
 	glbHeaderBytes  = 12
 	glbChunkHeader  = 8
-	maxGLBJSONBytes = 8 << 20
+	maxGLBJSONBytes = 64 << 20
 )
+
+var utf8BOM = []byte("\xef\xbb\xbf")
 
 type gltfDocument struct {
 	Buffers []gltfBuffer `json:"buffers"`
@@ -69,12 +72,16 @@ func checkGLTF(path, dir string, uploaded []string, mode Mode) ([]Finding, error
 	if err != nil {
 		return nil, err
 	}
+	var findings []Finding
+	if bytes.HasPrefix(data, utf8BOM) {
+		findings = append(findings, errorf("%s starts with a UTF-8 byte order mark, which glTF forbids; remove it and re-save it as UTF-8 without a byte order mark", filepath.Base(path)))
+		data = data[len(utf8BOM):]
+	}
 	var doc gltfDocument
 	if err := json.Unmarshal(data, &doc); err != nil {
-		return []Finding{errorf("%s is not a valid glTF JSON file: %v", filepath.Base(path), err)}, nil
+		return append(findings, errorf("%s is not a valid glTF JSON file: %v", filepath.Base(path), err)), nil
 	}
 
-	var findings []Finding
 	reported := map[string]bool{}
 	for i, b := range doc.Buffers {
 		if b.URI == "" {
@@ -95,8 +102,12 @@ func checkGLTF(path, dir string, uploaded []string, mode Mode) ([]Finding, error
 		if err != nil {
 			return findings, err
 		}
-		if info.Size() != *b.ByteLength {
+		switch {
+		case info.Size() < *b.ByteLength:
 			findings = append(findings, errorf("buffers[%d] declares byteLength %d bytes but %s is %d bytes", i, *b.ByteLength, name, info.Size()))
+		case info.Size() > *b.ByteLength:
+			findings = append(findings, Finding{Severity: Warning, Message: fmt.Sprintf(
+				"buffers[%d] declares byteLength %d bytes but %s is %d bytes; the bytes past byteLength are uploaded but unused", i, *b.ByteLength, name, info.Size())})
 		}
 	}
 	for i, img := range doc.Images {
@@ -216,7 +227,7 @@ func checkGLB(path string) ([]Finding, error) {
 		return append(findings, errorf("%s: the first chunk is not JSON", base)), nil
 	}
 	if chunkLength > maxGLBJSONBytes {
-		return append(findings, errorf("%s: JSON chunk is %d bytes, over the 8 MB limit", base, chunkLength)), nil
+		return append(findings, errorf("%s: JSON chunk is %d bytes, over the 64 MB limit", base, chunkLength)), nil
 	}
 	if int64(glbHeaderBytes+glbChunkHeader)+int64(chunkLength) > size {
 		return append(findings, errorf("%s is truncated: the JSON chunk extends past the end of the file", base)), nil

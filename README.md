@@ -129,6 +129,8 @@ Other commands: `scene list`, `scene show`, `ego list`, `version` and `completio
 
 The CLI warns about any file of 500 MB or more and about an upload of 2 GiB or more, and refuses an upload over 3 GiB, the gateway's limit per request. A large upload can legitimately take a long time because the gateway converts every file before it answers; there is no client-side response timeout unless you set `--timeout`.
 
+The model check refuses a `.gltf` that starts with a UTF-8 byte order mark, which glTF forbids, and a `.bin` shorter than the `byteLength` its `.gltf` declares. A `.bin` longer than its `byteLength` is a warning: the extra bytes are uploaded but unused. The JSON chunk of a `.glb` may be at most 64 MB.
+
 ## Configuration
 
 Every setting is resolved in this order, first match wins:
