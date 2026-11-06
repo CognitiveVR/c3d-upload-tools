@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
 )
 
 const (
@@ -70,11 +71,23 @@ func run(ctx context.Context, root *cobra.Command, rt *runtime, args []string, s
 	if err == nil {
 		return 0
 	}
-	return report(rt, streams, err)
+	return report(rt, streams, args, err)
 }
 
-// report presents err on stderr and returns the exit code.
-func report(rt *runtime, streams IO, err error) int {
+// report presents err on stderr and returns the exit code. Before the
+// logger exists, args decide whether the record is JSON.
+func report(rt *runtime, streams IO, args []string, err error) int {
+	var log *ui.Logger
+	if rt != nil {
+		log = rt.log
+	}
+	jsonMode := log != nil && rt.settings.Format == formatJSON
+	if log == nil {
+		jsonMode = formatFromArgs(args) == formatJSON
+		if jsonMode {
+			log = ui.New(streams.Stderr, ui.Options{JSON: true})
+		}
+	}
 	code, kind, status, message, hint := exitFailure, "error", 0, err.Error(), ""
 	var gerr *gateway.Error
 	var coded *codedError
@@ -82,7 +95,7 @@ func report(rt *runtime, streams IO, err error) int {
 	switch {
 	case errors.As(err, &gerr):
 		code, kind, status, message = gateway.ExitCode(err), gerr.Kind.String(), gerr.StatusCode, gerr.UserMessage()
-		if rt != nil && rt.settings.Format == formatJSON {
+		if jsonMode {
 			message, hint = gerr.MessageAndHint()
 		}
 	case errors.As(err, &coded):
@@ -91,14 +104,30 @@ func report(rt *runtime, streams IO, err error) int {
 		code, kind = exitUsage, "usage"
 	}
 	switch {
-	case rt == nil || rt.log == nil:
+	case jsonMode:
+		log.ErrorRecord(kind, message, hint, status)
+	case log == nil:
 		_, _ = fmt.Fprintf(streams.Stderr, "%s: %s\n", binaryName, message)
-	case rt.settings.Format == formatJSON:
-		rt.log.ErrorRecord(kind, message, hint, status)
 	default:
-		rt.log.Error("%s", message)
+		log.Error("%s", message)
 	}
 	return code
+}
+
+// formatFromArgs is the last --format value in args before a "--", or empty.
+func formatFromArgs(args []string) string {
+	format := ""
+	for i, arg := range args {
+		switch {
+		case arg == "--":
+			return format
+		case arg == "--"+formatFlag && i+1 < len(args):
+			format = args[i+1]
+		case strings.HasPrefix(arg, "--"+formatFlag+"="):
+			format = strings.TrimPrefix(arg, "--"+formatFlag+"=")
+		}
+	}
+	return format
 }
 
 func newRootCmd(streams IO, rt *runtime) *cobra.Command {

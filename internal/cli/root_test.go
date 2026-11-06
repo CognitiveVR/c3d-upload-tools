@@ -3,6 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,5 +116,30 @@ func TestFormatIsValidatedWhenSubcommandHasOwnPersistentPreRun(t *testing.T) {
 	}
 	if !hookRan || !bodyRan {
 		t.Errorf("stub hook ran=%v body ran=%v, want both true", hookRan, bodyRan)
+	}
+}
+
+func TestErrorBeforeTheLoggerHonoursFormatJSON(t *testing.T) {
+	for _, formatArgs := range [][]string{{"--format", "json"}, {"--format=json"}} {
+		isolate(t)
+		t.Setenv("C3D_ENV", "bad")
+		got := runCommand(t, append([]string{"auth", "verify"}, formatArgs...)...)
+		if got.code != 4 || got.stdout != "" {
+			t.Fatalf("%v: exit %d, stdout %q", formatArgs, got.code, got.stdout)
+		}
+		lines := strings.Split(strings.TrimRight(got.stderr, "\n"), "\n")
+		var record map[string]any
+		if len(lines) != 1 || json.Unmarshal([]byte(lines[0]), &record) != nil {
+			t.Fatalf("%v: stderr is not one JSON record: %q", formatArgs, got.stderr)
+		}
+		if record["level"] != "error" || record["error"] != "usage" || !strings.Contains(fmt.Sprint(record["message"]), "bad") {
+			t.Errorf("%v: record = %v", formatArgs, record)
+		}
+	}
+
+	isolate(t)
+	t.Setenv("C3D_ENV", "bad")
+	if got := runCommand(t, "auth", "verify"); !strings.HasPrefix(got.stderr, binaryName+": ") {
+		t.Errorf("text mode stderr = %q, want the plain prefix", got.stderr)
 	}
 }
