@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -121,9 +122,19 @@ func (l *Logger) emit(lv level, text string, rec *jsonRecord) {
 		if l.color {
 			tag = "[\x1b[" + levelColors[lv] + "m" + levelTags[lv] + "\x1b[0m]"
 		}
-		line = []byte("[" + l.now().Format(timestampLayout) + "] " + tag + " " + Printable(text) + "\n")
+		line = []byte("[" + l.now().Format(timestampLayout) + "] " + tag + " " + printableLines(text) + "\n")
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	_, _ = l.w.Write(line)
+}
+
+// printableLines applies Printable to each line, keeping the newlines that
+// separate them.
+func printableLines(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		lines[i] = Printable(line)
+	}
+	return strings.Join(lines, "\n")
 }

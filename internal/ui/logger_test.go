@@ -220,3 +220,11 @@ func TestTextModeReplacesControlCharactersInTheMessageOnly(t *testing.T) {
 		t.Errorf("record = %q (err %v)", buf.String(), err)
 	}
 }
+
+func TestTextModeKeepsNewlinesBetweenLinesButSanitizesEach(t *testing.T) {
+	var buf bytes.Buffer
+	New(&buf, Options{}).Error("first \x1b[31m\n\nsecond \x1b[0m\rend")
+	if !strings.HasSuffix(buf.String(), "] first \uFFFD[31m\n\nsecond \uFFFD[0m\uFFFDend\n") {
+		t.Errorf("line = %q", buf.String())
+	}
+}

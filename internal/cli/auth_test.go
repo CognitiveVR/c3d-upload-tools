@@ -92,7 +92,7 @@ func TestAuthVerifyExpiredKeyPrintsRotationGuidanceAndExitsTwo(t *testing.T) {
 	if got.stdout != "" {
 		t.Errorf("stdout = %q, want empty", got.stdout)
 	}
-	for _, want := range []string{"Your developer API key has expired.", "Manage developer key"} {
+	for _, want := range []string{"Your developer API key has expired.\n\nTo fix this issue:\n  1. Log into", "\n  3. Generate a new developer API key\n", "Manage developer key"} {
 		if !strings.Contains(got.stderr, want) {
 			t.Errorf("stderr missing %q: %q", want, got.stderr)
 		}
