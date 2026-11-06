@@ -18,7 +18,8 @@ All notable changes to this project are documented in this file. The format foll
   poll, retry and `Retry-After` by their own time limit.
 - `go install github.com/cognitivevr/c3d-upload-tools/v2@latest` as an alternative to the release
   binaries.
-- `scene upload` checks that `settings.json` can be written before it sends anything (exit 4).
+- `scene upload` checks that the scene directory is writable before it sends anything (exit 4);
+  on Windows a read-only `settings.json` also blocks it.
 - After a new scene version appears, one confirming poll catches a concurrent upload.
 
 ### Changed

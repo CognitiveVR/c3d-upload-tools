@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -336,18 +337,25 @@ func TestCheckSettingsWritableRefusesAReadOnlyDirectory(t *testing.T) {
 	}
 }
 
-func TestCheckSettingsWritableRefusesAReadOnlySettingsFile(t *testing.T) {
+// A read-only settings.json blocks the upload only on Windows, where the
+// rename cannot replace it; elsewhere the write replaces it.
+func TestCheckSettingsWritableReadOnlySettingsFile(t *testing.T) {
 	dir := copyFixture(t, "scene-glb")
 	path := filepath.Join(dir, "settings.json")
 	if err := os.WriteFile(path, []byte(`{"sceneName":"X"}`), 0o444); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
-	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
-		_ = f.Close()
-		t.Skip("a read-only file still opens for writing here")
-	}
 	err := CheckSettingsWritable(dir)
+	if runtime.GOOS != "windows" {
+		if err != nil {
+			t.Fatalf("err = %v, want a read-only settings.json accepted", err)
+		}
+		if err := WriteSettings(dir, []byte("{}\n")); err != nil {
+			t.Fatalf("WriteSettings over a read-only settings.json: %v", err)
+		}
+		return
+	}
 	if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "the upload was not started") {
 		t.Fatalf("err = %v, want settings.json named and the upload not started", err)
 	}

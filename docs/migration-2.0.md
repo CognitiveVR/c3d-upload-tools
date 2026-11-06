@@ -40,7 +40,7 @@ Legacy flag spellings such as `--scene_id`, `--scene_dir` and `--dry_run` are ac
 - Dry run is offline and keyless: it makes no network calls and needs no API key.
 - `sdkVersion` in `settings.json` becomes `cli-go-v<version>`.
 - A model that references a texture the CLI would not upload is rejected instead of uploaded broken.
-- Scene `settings.json` is written into the scene directory only after the upload succeeds. The upload checks first that the directory and an existing `settings.json` are writable and exits 4 without sending anything if not; a write that still fails afterwards is a warning, and the command exits 0.
+- Scene `settings.json` is written into the scene directory only after the upload succeeds. The upload checks first that the directory is writable, and on Windows that an existing `settings.json` is not read-only, and exits 4 without sending anything if not; a write that still fails afterwards is a warning, and the command exits 0.
 - A scene's separate model files must be named exactly `scene.gltf` and `scene.bin`; the legacy tools also accepted case variants such as `scene.BIN`.
 - `desktop.ini`, `Thumbs.db` and hidden files are skipped silently in every upload directory, including an ego directory.
 - A `.env` that is not a regular file, such as a Python virtualenv directory, is ignored, as the legacy scripts did.
