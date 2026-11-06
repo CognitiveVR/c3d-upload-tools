@@ -124,7 +124,9 @@ done_step() {
 
 # check_dry_run: a dry run prints the request it would send, with a path.
 check_dry_run() {
-  done_step "(dry run: $(field .path))"
+  local request_path
+  request_path=$(field .path)
+  done_step "(dry run: $request_path)"
 }
 
 # SciFiHelmet as a scene directory: scene.gltf + scene.bin, no settings.json.
@@ -132,7 +134,8 @@ helmet="$work/helmet"
 mkdir "$helmet"
 cp "$assets"/SciFiHelmet/* "$helmet"/
 rm -f "$helmet/settings.json" "$helmet/README.md"
-if [ -f "$helmet/SciFiHelmet.gltf" ]; then
+if [ -f "$helmet/SciFiHelmet.gltf" ] || [ -f "$helmet/SciFiHelmet.bin" ]; then
+  [ -f "$helmet/SciFiHelmet.gltf" ] && [ -f "$helmet/SciFiHelmet.bin" ] || fail "SciFiHelmet.gltf and SciFiHelmet.bin must both exist"
   mv -f "$helmet/SciFiHelmet.gltf" "$helmet/scene.gltf"
   mv -f "$helmet/SciFiHelmet.bin" "$helmet/scene.bin"
 fi
@@ -162,7 +165,8 @@ done_step "project=$(printf '%s' "$OUT" | jq -r '.projectName // "?"') environme
 run_cli scene upload --scene-dir "$assets/scene-test-glb" --scene-name "$scene_name"
 scene_id=$(field .sceneId)
 [ "$(printf '%s' "$OUT" | jq -r '.created')" = "true" ] || fail "expected a new scene, got: $OUT"
-done_step "scene=$scene_id version=$(field .versionNumber)"
+version=$(field .versionNumber)
+done_step "scene=$scene_id version=$version"
 
 run_cli scene upload --scene-dir "$helmet" --scene-id "$scene_id"
 version=$(field .versionNumber)
@@ -170,10 +174,16 @@ version=$(field .versionNumber)
 done_step "scene=$scene_id version=$version"
 
 run_cli object upload --scene-id "$scene_id" --object-dir "$assets/object-test" --object-filename cube
-done_step "object=$(field .objectId) mesh=$(field .mesh) version=$(field .versionNumber)"
+object_id=$(field .objectId)
+mesh=$(field .mesh)
+version=$(field .versionNumber)
+done_step "object=$object_id mesh=$mesh version=$version"
 
 run_cli object upload --scene-id "$scene_id" --object-dir "$assets/object-test-glb" --object-filename lantern
-done_step "object=$(field .objectId) mesh=$(field .mesh) version=$(field .versionNumber)"
+object_id=$(field .objectId)
+mesh=$(field .mesh)
+version=$(field .versionNumber)
+done_step "object=$object_id mesh=$mesh version=$version"
 
 manifest="${scene_id}_object_manifest.json"
 cube_scaled='[.objects[] | select(.mesh == "cube" and .scaleCustom == [2,2,2])] | length == 1'
@@ -184,15 +194,21 @@ jq -e "$cube_scaled" "$manifest" >/dev/null || fail "cube scaleCustom edit did n
 done_step "cube scaleCustom=[2,2,2]"
 
 run_cli object manifest upload --scene-id "$scene_id"
-done_step "objects=$(field .objectCount) version=$(field .versionNumber)"
+objects=$(field .objectCount)
+version=$(field .versionNumber)
+done_step "objects=$objects version=$version"
 
+rm -f "$manifest"
 run_cli object list --scene-id "$scene_id" --write-manifest
 listed=$(printf '%s' "$OUT" | jq 'length')
 jq -e "$cube_scaled" "$manifest" >/dev/null || fail "round trip lost the cube scaleCustom [2,2,2]: $(jq -c '.objects[] | select(.mesh == "cube")' "$manifest" || true)"
 done_step "round trip kept cube scaleCustom=[2,2,2] (listed $listed objects)"
 
 run_cli ego upload --scene-id "$scene_id" --ego-dir "$assets/testdata/ego-head" --slot head --wait
-done_step "slot=$(field .slot) files=$(field .fileCount) optimized=$(printf '%s' "$OUT" | jq -r '.optimized')"
+slot=$(field .slot)
+files=$(field .fileCount)
+optimized=$(printf '%s' "$OUT" | jq -r '.optimized')
+done_step "slot=$slot files=$files optimized=$optimized"
 
 run_cli ego list --scene-id "$scene_id"
 printf '%s' "$OUT" | jq -e '.egos | map(select(.slot == "head")) | length == 1' >/dev/null || fail "head slot missing from: $OUT"
