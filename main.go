@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/cli"
+	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
 )
 
 func main() {
@@ -15,13 +16,8 @@ func main() {
 		Stdin:       os.Stdin,
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
-		Interactive: isTerminal(os.Stdin) && isTerminal(os.Stderr),
+		Interactive: ui.IsTerminal(os.Stdin) && ui.IsTerminal(os.Stderr),
 	})
 	stop()
 	os.Exit(code)
-}
-
-func isTerminal(f *os.File) bool {
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
