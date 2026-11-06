@@ -98,6 +98,33 @@ func TestReadSettingsRefusesALinkOrADirectory(t *testing.T) {
 	}
 }
 
+func TestReadSettingsRefusesALinkSwappedInAfterTheCheck(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"sceneName":"X"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "elsewhere.json")
+	if err := os.WriteFile(target, []byte(`{"sceneName":"Elsewhere"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	saved := openSettings
+	t.Cleanup(func() { openSettings = saved })
+	openSettings = func(p string) (*os.File, error) {
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, p); err != nil {
+			t.Skipf("cannot create a symlink here: %v", err)
+		}
+		return saved(p)
+	}
+	got, err := ReadSettings(dir)
+	if err == nil || !strings.Contains(err.Error(), "settings.json") || !strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("got %+v, err = %v, want the swapped link refused", got, err)
+	}
+}
+
 func TestReadSettingsSkipsAByteOrderMark(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte("\xef\xbb\xbf{\"sceneName\":\"BOM\",\"scale\":2}"), 0o644); err != nil {

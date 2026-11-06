@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,6 +18,8 @@ import (
 const settingsFileName = "settings.json"
 
 var utf8BOM = []byte("\xef\xbb\xbf")
+
+var openSettings = localfile.OpenRegular
 
 // ErrNoSceneName reports that neither the caller nor an existing settings.json supplied a scene name.
 var ErrNoSceneName = errors.New("scene name is required: pass --scene-name or add sceneName to settings.json")
@@ -40,7 +43,12 @@ func ReadSettings(dir string) (*Settings, error) {
 		}
 		return nil, err
 	}
-	raw, err := os.ReadFile(path)
+	f, err := openSettings(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	raw, err := io.ReadAll(f)
+	_ = f.Close()
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
