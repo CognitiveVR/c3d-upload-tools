@@ -79,9 +79,9 @@ cd "$work"
 if [ "$dry_run_only" -eq 1 ]; then
   steps=(
     "scene upload (new scene)"
-    "scene upload (SciFiHelmet as a new version)"
-    "object upload cube"
-    "object upload lantern"
+    "scene upload (textured glTF scene as a new version)"
+    "object upload cube (gltf + bin)"
+    "object upload box (glb)"
     "ego upload head (gltf + bin)"
     "ego upload controller_left (glb)"
   )
@@ -90,9 +90,9 @@ else
   steps=(
     "auth verify"
     "scene upload (new scene)"
-    "scene upload (SciFiHelmet as a new version)"
-    "object upload cube"
-    "object upload lantern"
+    "scene upload (textured glTF scene as a new version)"
+    "object upload cube (gltf + bin)"
+    "object upload box (glb)"
     "edit manifest"
     "object manifest upload"
     "object list --write-manifest"
@@ -150,29 +150,23 @@ check_dry_run() {
   done_step "(dry run: $request_path)"
 }
 
-# SciFiHelmet as a scene directory: scene.gltf + scene.bin, no settings.json.
-helmet="$work/helmet"
-mkdir "$helmet"
-cp "$assets"/SciFiHelmet/* "$helmet"/
-rm -f "$helmet/settings.json" "$helmet/README.md"
-if [ -f "$helmet/SciFiHelmet.gltf" ] || [ -f "$helmet/SciFiHelmet.bin" ]; then
-  [ -f "$helmet/SciFiHelmet.gltf" ] && [ -f "$helmet/SciFiHelmet.bin" ] || fail "SciFiHelmet.gltf and SciFiHelmet.bin must both exist"
-  mv -f "$helmet/SciFiHelmet.gltf" "$helmet/scene.gltf"
-  mv -f "$helmet/SciFiHelmet.bin" "$helmet/scene.bin"
-fi
-jq '.buffers[0].uri = "scene.bin"' "$helmet/scene.gltf" >"$helmet/scene.gltf.tmp"
-mv "$helmet/scene.gltf.tmp" "$helmet/scene.gltf"
+# The textured glTF scene as a new version: a copy, so a settings.json written by
+# the upload never lands in testdata.
+textured="$work/textured"
+mkdir "$textured"
+cp "$assets"/testdata/scene-gltf/* "$textured"/
+rm -f "$textured/settings.json"
 
 scene_name="cli-smoke $(date -u +%Y%m%dT%H%M%SZ)"
 
 if [ "$dry_run_only" -eq 1 ]; then
-  run_cli scene upload --scene-dir "$assets/scene-test-glb" --scene-name "$scene_name" --dry-run
+  run_cli scene upload --scene-dir "$assets/testdata/scene-glb" --scene-name "$scene_name" --dry-run
   check_dry_run
-  run_cli scene upload --scene-dir "$helmet" --scene-id "$scene_id" --dry-run
+  run_cli scene upload --scene-dir "$textured" --scene-id "$scene_id" --dry-run
   check_dry_run
-  run_cli object upload --scene-id "$scene_id" --object-dir "$assets/object-test" --object-filename cube --dry-run
+  run_cli object upload --scene-id "$scene_id" --object-dir "$assets/testdata/object-gltf" --object-filename cube --dry-run
   check_dry_run
-  run_cli object upload --scene-id "$scene_id" --object-dir "$assets/object-test-glb" --object-filename lantern --dry-run
+  run_cli object upload --scene-id "$scene_id" --object-dir "$assets/testdata/object-glb" --object-filename box --dry-run
   check_dry_run
   run_cli ego upload --scene-id "$scene_id" --ego-dir "$assets/testdata/ego-head" --slot head --dry-run
   check_dry_run
@@ -185,24 +179,24 @@ fi
 run_cli auth verify
 done_step "project=$(printf '%s' "$OUT" | jq -r '.projectName // "?"') environment=$(printf '%s' "$OUT" | jq -r '.environment // "?"')"
 
-run_cli scene upload --scene-dir "$assets/scene-test-glb" --scene-name "$scene_name"
+run_cli scene upload --scene-dir "$assets/testdata/scene-glb" --scene-name "$scene_name"
 scene_id=$(field .sceneId)
 [ "$(printf '%s' "$OUT" | jq -r '.created')" = "true" ] || fail "expected a new scene, got: $OUT"
 version=$(field .versionNumber)
 done_step "scene=$scene_id version=$version"
 
-run_cli scene upload --scene-dir "$helmet" --scene-id "$scene_id"
+run_cli scene upload --scene-dir "$textured" --scene-id "$scene_id"
 version=$(field .versionNumber)
 [ "$version" = "2" ] || fail "expected versionNumber 2, got $version"
 done_step "scene=$scene_id version=$version"
 
-run_cli object upload --scene-id "$scene_id" --object-dir "$assets/object-test" --object-filename cube
+run_cli object upload --scene-id "$scene_id" --object-dir "$assets/testdata/object-gltf" --object-filename cube
 object_id=$(field .objectId)
 mesh=$(field .mesh)
 version=$(field .versionNumber)
 done_step "object=$object_id mesh=$mesh version=$version"
 
-run_cli object upload --scene-id "$scene_id" --object-dir "$assets/object-test-glb" --object-filename lantern
+run_cli object upload --scene-id "$scene_id" --object-dir "$assets/testdata/object-glb" --object-filename box
 object_id=$(field .objectId)
 mesh=$(field .mesh)
 version=$(field .versionNumber)
