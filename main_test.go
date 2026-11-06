@@ -80,7 +80,7 @@ func TestVersionPrintsSemverAndExitsZero(t *testing.T) {
 	if res.exitCode != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr %q)", res.exitCode, res.stderr)
 	}
-	if want := "cognitive3d-cli-upload 0.0.0-dev\n"; res.stdout != want {
+	if want := "cognitive3d-cli-upload 0.0.0-dev (commit unknown, built unknown)\n"; res.stdout != want {
 		t.Errorf("stdout = %q, want %q", res.stdout, want)
 	}
 

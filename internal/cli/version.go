@@ -32,7 +32,7 @@ func newVersionCmd(streams IO) *cobra.Command {
 			if format == formatJSON {
 				return json.NewEncoder(streams.Stdout).Encode(info)
 			}
-			_, err := fmt.Fprintf(streams.Stdout, "%s %s\n", binaryName, info.Version)
+			_, err := fmt.Fprintf(streams.Stdout, "%s %s (commit %s, built %s)\n", binaryName, info.Version, info.Commit, info.Date)
 			return err
 		},
 	}
