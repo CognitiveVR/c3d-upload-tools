@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
 )
 
 type authResult struct {
@@ -112,7 +113,7 @@ func printAuthResult(rt *runtime, result authResult, sceneID string) error {
 		expiry = result.KeyExpiresAt.Format(time.RFC3339)
 	}
 	_, err := fmt.Fprintf(out, "Environment: %s\nProject: %s\nOrganization: %s\nKey expires: %s\n",
-		result.Environment, result.ProjectName, result.OrganizationName, expiry)
+		result.Environment, ui.Printable(result.ProjectName), ui.Printable(result.OrganizationName), expiry)
 	if err == nil && result.SceneReachable != nil && *result.SceneReachable {
 		_, err = fmt.Fprintf(out, "Scene %s: reachable\n", sceneID)
 	}

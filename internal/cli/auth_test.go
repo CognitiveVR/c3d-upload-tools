@@ -82,6 +82,21 @@ func TestAuthVerifyPrintsKeyExpiryAsRFC3339(t *testing.T) {
 	}
 }
 
+func TestAuthVerifyTextEscapesControlCharactersInNames(t *testing.T) {
+	fake := startFake(t)
+	fake.SetUser(fakegateway.User{ProjectName: "Red\x1b[31mProject", OrganizationName: "Org\x1b]0;title\x07"})
+	got := runCommand(t, "auth", "verify")
+	if got.code != 0 {
+		t.Fatalf("exit code = %d (stderr %q)", got.code, got.stderr)
+	}
+	if strings.ContainsAny(got.stdout, "\x1b\x07") {
+		t.Errorf("stdout carries a control character: %q", got.stdout)
+	}
+	if !strings.Contains(got.stdout, "Project: Red�[31mProject\n") {
+		t.Errorf("stdout = %q, want the escape replaced", got.stdout)
+	}
+}
+
 func TestAuthVerifyExpiredKeyPrintsRotationGuidanceAndExitsTwo(t *testing.T) {
 	fake := startFake(t)
 	t.Setenv("C3D_DEVELOPER_API_KEY", fake.ExpiredKey())
