@@ -16,8 +16,9 @@ import (
 const (
 	binaryName = "cognitive3d-cli-upload"
 
-	exitFailure = 1
-	exitUsage   = 4
+	exitFailure  = 1
+	exitNotFound = 3
+	exitUsage    = 4
 )
 
 type IO struct {
