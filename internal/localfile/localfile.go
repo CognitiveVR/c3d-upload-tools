@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/model"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/model"
 )
 
 const octetStream = "application/octet-stream"

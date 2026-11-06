@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
 )
 
 // UploadResult describes a completed upload. Model is the model file's base

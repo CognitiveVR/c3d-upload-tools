@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
 )
 
 const egoSceneID = "ego-scene"

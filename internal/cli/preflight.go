@@ -4,7 +4,7 @@ import (
 	"context"
 	"regexp"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/config"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/config"
 )
 
 // preflight checks that a key is configured and accepted by the gateway, then

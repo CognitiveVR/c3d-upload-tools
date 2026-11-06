@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
-	"github.com/cognitivevr/c3d-upload-tools/internal/version"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/version"
 )
 
 const (

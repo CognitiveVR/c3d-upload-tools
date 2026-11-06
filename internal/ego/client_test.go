@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
 )
 
 const egoSceneID = "ego-scene"

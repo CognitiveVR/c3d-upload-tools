@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/manifest"
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/manifest"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
 )
 
 var uuidV4 = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)

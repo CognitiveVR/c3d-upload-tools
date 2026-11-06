@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/config"
-	"github.com/cognitivevr/c3d-upload-tools/internal/dotenv"
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/config"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/dotenv"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
 )
 
 // skipRuntimeAnnotation marks commands that need no configuration, so a bad

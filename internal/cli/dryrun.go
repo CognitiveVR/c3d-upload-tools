@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
 )
 
 // dryRunVersion stands in for a version number a dry run cannot know because

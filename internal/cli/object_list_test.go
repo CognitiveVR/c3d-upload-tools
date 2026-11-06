@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/manifest"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/manifest"
 )
 
 // seedObjects uploads the cube's files and a two-entry manifest to version 2,

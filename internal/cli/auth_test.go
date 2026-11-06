@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
 )
 
 const testSceneUUID = "0b1f6c3e-2a4d-4e8b-9c7a-5d3e1f2a4b6c"

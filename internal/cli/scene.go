@@ -13,12 +13,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/ego"
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/object"
-	"github.com/cognitivevr/c3d-upload-tools/internal/scene"
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
-	"github.com/cognitivevr/c3d-upload-tools/internal/version"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ego"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/object"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/scene"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/version"
 )
 
 const (

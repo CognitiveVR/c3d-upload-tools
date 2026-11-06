@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/manifest"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/manifest"
 )
 
 // writeManifestFile saves a manifest with the given ids, each mesh named "mesh-<id>"

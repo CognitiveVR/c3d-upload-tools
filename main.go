@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/cli"
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/cli"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
 )
 
 func main() {

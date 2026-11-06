@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
 )
 
 func finalizedPlan(t *testing.T, fixture, name string) *UploadPlan {

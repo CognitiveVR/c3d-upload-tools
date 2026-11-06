@@ -9,9 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/manifest"
-	"github.com/cognitivevr/c3d-upload-tools/internal/object"
-	"github.com/cognitivevr/c3d-upload-tools/internal/scene"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/manifest"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/object"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/scene"
 )
 
 const (

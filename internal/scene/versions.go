@@ -10,7 +10,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
 )
 
 // DefaultVersionWait is how long an upload waits for its new version to

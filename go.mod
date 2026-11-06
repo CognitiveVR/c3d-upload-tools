@@ -1,4 +1,4 @@
-module github.com/cognitivevr/c3d-upload-tools
+module github.com/cognitivevr/c3d-upload-tools/v2
 
 go 1.25
 

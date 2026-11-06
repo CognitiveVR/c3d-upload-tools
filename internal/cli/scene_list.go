@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/scene"
-	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/scene"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/ui"
 )
 
 func newSceneListCmd(rt *runtime) *cobra.Command {

@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/localfile"
-	"github.com/cognitivevr/c3d-upload-tools/internal/model"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/localfile"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/model"
 )
 
 const (

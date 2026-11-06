@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/manifest"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/manifest"
 )
 
 func listFake(t *testing.T) *fakegateway.Server {

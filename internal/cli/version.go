@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/version"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/version"
 )
 
 const (

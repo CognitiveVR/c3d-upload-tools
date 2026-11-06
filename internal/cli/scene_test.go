@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
-	"github.com/cognitivevr/c3d-upload-tools/internal/scene"
-	"github.com/cognitivevr/c3d-upload-tools/internal/version"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/fakegateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/scene"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/version"
 )
 
 var testdataDir = func() string {

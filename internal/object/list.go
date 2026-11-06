@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
 )
 
 // List reads the objects of one scene version and returns the gateway's JSON

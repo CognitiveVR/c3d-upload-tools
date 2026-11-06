@@ -18,7 +18,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/cognitivevr/c3d-upload-tools/internal/version.Version={{.Version}} -X github.com/cognitivevr/c3d-upload-tools/internal/version.Commit={{.ShortCommit}} -X github.com/cognitivevr/c3d-upload-tools/internal/version.Date={{.Date}}
+      - -s -w -X github.com/cognitivevr/c3d-upload-tools/v2/internal/version.Version={{.Version}} -X github.com/cognitivevr/c3d-upload-tools/v2/internal/version.Commit={{.ShortCommit}} -X github.com/cognitivevr/c3d-upload-tools/v2/internal/version.Date={{.Date}}
     mod_timestamp: '{{ .CommitTimestamp }}'
     hooks:
       post:

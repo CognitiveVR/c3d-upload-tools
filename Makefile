@@ -4,7 +4,7 @@ BINARY_NAME = cognitive3d-cli-upload
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null | sed "s/^v//" | grep . || echo "0.0.0-dev")
 COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE = $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-PKG = github.com/cognitivevr/c3d-upload-tools/internal/version
+PKG = github.com/cognitivevr/c3d-upload-tools/v2/internal/version
 LDFLAGS = -ldflags "-s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)"
 
 .PHONY: help build clean test lint fmt vet install-hooks

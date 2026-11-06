@@ -45,6 +45,12 @@ make build
 ./cognitive3d-cli-upload version
 ```
 
+Or install it with `go install`. The binary is then named `c3d-upload-tools`, after the module, and `version` reports `0.0.0-dev`, because `go install` skips the release build flags:
+
+```bash
+go install github.com/cognitivevr/c3d-upload-tools/v2@latest
+```
+
 ## Quick start
 
 Create a developer API key in the Cognitive3D dashboard under Settings, "Manage developer key", and export it:

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cognitivevr/c3d-upload-tools/internal/localfile"
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/localfile"
 )
 
 // copyFixture copies testdata/<name> into a fresh temporary directory.
