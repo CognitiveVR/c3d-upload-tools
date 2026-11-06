@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -82,16 +83,7 @@ func versionParam(r *http.Request) int {
 }
 
 func fileType(name string) string {
-	switch ext := strings.ToLower(path.Ext(name)); {
-	case name == "cvr_object_thumbnail.png":
-		return "thumbnail"
-	case ext == ".gltf" || ext == ".glb":
-		return "model"
-	case ext == ".bin":
-		return "buffer"
-	default:
-		return "texture"
-	}
+	return strings.TrimPrefix(strings.ToLower(path.Ext(name)), ".")
 }
 
 // uploadObject records the uploaded file names under the scene, version and
@@ -103,8 +95,15 @@ func (s *Server) uploadObject(w http.ResponseWriter, r *http.Request) {
 	if known {
 		key := meshKey{versionKey{r.PathValue("sceneId"), versionParam(r)}, r.PathValue("meshName")}
 		for _, p := range rec.Parts {
-			if p.Filename != "" {
-				s.objectFiles[key] = append(s.objectFiles[key], objectFile{Name: p.Filename, Type: fileType(p.Filename)})
+			if p.Filename == "" {
+				continue
+			}
+			file := objectFile{Name: p.Filename, Type: fileType(p.Filename)}
+			files := s.objectFiles[key]
+			if i := slices.IndexFunc(files, func(f objectFile) bool { return f.Name == file.Name }); i >= 0 {
+				files[i] = file
+			} else {
+				s.objectFiles[key] = append(files, file)
 			}
 		}
 	}

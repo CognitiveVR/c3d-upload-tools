@@ -60,6 +60,7 @@ func TestObjectListFollowsManifestPostsAndPerVersionFiles(t *testing.T) {
 		t.Fatalf("rows before any manifest: %v", rows)
 	}
 	manifest := `{"objects":[{"id":"c1","mesh":"cube","name":"Cube","scaleCustom":[2,3,4],"initialPosition":[1,2,3],"initialRotation":[0,0,0,1]},{"id":"s1","mesh":"sphere","name":"Sphere"}]}`
+	postObjectFile(t, s, "scene-a", "cube", 1, "cube.gltf")
 	for _, version := range []int{1, 2} {
 		if status, body := postManifest(t, s, "scene-a", version, manifest); status != 201 || body != "" {
 			t.Fatalf("manifest v%d: %d %q", version, status, body)
@@ -69,8 +70,9 @@ func TestObjectListFollowsManifestPostsAndPerVersionFiles(t *testing.T) {
 	if len(rows) != 2 || rows[0]["sdkId"] != "c1" || rows[0]["meshName"] != "cube" || rows[0]["scaleCustomY"] != 3.0 || rows[0]["initialPositionZ"] != 3.0 || rows[0]["versionId"] != 11.0 {
 		t.Fatalf("rows = %v", rows)
 	}
-	if files, _ := rows[0]["files"].([]any); len(files) != 2 {
-		t.Errorf("cube files in version 1 = %v", rows[0]["files"])
+	files, _ := rows[0]["files"].([]any)
+	if len(files) != 2 || files[0].(map[string]any)["type"] != "gltf" || files[1].(map[string]any)["type"] != "bin" {
+		t.Errorf("cube files in version 1 = %v, want gltf and bin once each", rows[0]["files"])
 	}
 	if files, ok := rows[1]["files"].([]any); !ok || len(files) != 0 {
 		t.Errorf("sphere files = %v, want an empty array", rows[1]["files"])

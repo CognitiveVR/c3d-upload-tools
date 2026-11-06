@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -63,27 +64,54 @@ func runObjectList(cmd *cobra.Command, rt *runtime) error {
 	if err != nil {
 		return err
 	}
+	var reshaped *manifest.Manifest
+	if writeManifest {
+		if reshaped, err = manifest.FromObjectList(raw); err != nil {
+			return err
+		}
+	}
 	if _, err := rt.streams.Stdout.Write(pretty); err != nil {
 		return err
 	}
 
 	if writeList {
 		file := sceneID + "_object_list.json"
-		if err := os.WriteFile(file, pretty, 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", file, err)
+		if err := writeFileAtomic(file, pretty); err != nil {
+			return err
 		}
 		rt.log.Info("Wrote the object list to %s", file)
 	}
 	if writeManifest {
-		m, err := manifest.FromObjectList(raw)
-		if err != nil {
-			return err
-		}
 		file := manifest.DefaultPath(sceneID)
-		if err := m.Save(file); err != nil {
+		if err := reshaped.Save(file); err != nil {
 			return err
 		}
-		rt.log.Info("Wrote %d objects to %s", len(m.Objects), file)
+		rt.log.Info("Wrote %d objects to %s", len(reshaped.Objects), file)
+	}
+	return nil
+}
+
+// writeFileAtomic writes data through a temporary file in the same directory
+// and a rename, and never leaves the temporary file behind.
+func writeFileAtomic(file string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(file), "."+filepath.Base(file)+"-*.tmp")
+	if err != nil {
+		return fmt.Errorf("write %s: %w", file, err)
+	}
+	tmpName := tmp.Name()
+	_, err = tmp.Write(data)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(tmpName, 0o644)
+	}
+	if err == nil {
+		err = os.Rename(tmpName, file)
+	}
+	if err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("write %s: %w", file, err)
 	}
 	return nil
 }

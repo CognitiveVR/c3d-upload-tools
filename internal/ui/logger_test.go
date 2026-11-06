@@ -204,3 +204,19 @@ func TestConcurrentWritesDoNotInterleave(t *testing.T) {
 		}
 	}
 }
+
+func TestTextModeReplacesControlCharactersInTheMessageOnly(t *testing.T) {
+	var buf bytes.Buffer
+	New(&buf, Options{}).Warn("bad \x1b[31m\tname")
+	line := buf.String()
+	if strings.Contains(line, "\x1b") || strings.Contains(line, "\t") || !strings.HasSuffix(line, "] bad \uFFFD[31m\uFFFDname\n") {
+		t.Errorf("line = %q", line)
+	}
+
+	buf.Reset()
+	New(&buf, Options{JSON: true}).Warn("bad \x1b[31m\tname")
+	var rec struct{ Message string }
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil || rec.Message != "bad \x1b[31m\tname" {
+		t.Errorf("record = %q (err %v)", buf.String(), err)
+	}
+}

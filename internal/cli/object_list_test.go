@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -162,5 +163,62 @@ func TestObjectListRequiresASceneID(t *testing.T) {
 	got := runCommand(t, "object", "list")
 	if got.code != 4 || requestCount(fake) != 0 {
 		t.Errorf("exit %d, %d requests, stderr %q", got.code, requestCount(fake), got.stderr)
+	}
+}
+
+func TestObjectListWriteListAndWriteManifestTogether(t *testing.T) {
+	fake := startFake(t)
+	seedObjects(t, fake)
+	got := runCommand(t, "object", "list", "--scene-id", objectSceneID, "--write-list", "--write-manifest")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	list, err := os.ReadFile(objectSceneID + "_object_list.json")
+	if err != nil || string(list) != got.stdout {
+		t.Errorf("list file = %q (err %v), stdout %q", list, err, got.stdout)
+	}
+	m := loadManifest(t, objectManifestPath())
+	if len(m.Objects) != 2 || m.Objects[0].ID != "cube" || m.Objects[1].ID != "other" {
+		t.Errorf("manifest = %+v", m.Objects)
+	}
+	entries, _ := os.ReadDir(".")
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("temporary file left behind: %s", e.Name())
+		}
+	}
+}
+
+func TestObjectListReshapeFailureWritesNothing(t *testing.T) {
+	fake := startFake(t)
+	fake.FailWith(http.StatusOK, "")
+	fake.FailWith(http.StatusOK, `{"id":"obj-scene","versions":[{"id":21,"versionNumber":2}]}`)
+	fake.FailWith(http.StatusOK, `[{"sdkId":"a","meshName":"m","scaleCustomX":1,"scaleCustomY":null,"scaleCustomZ":1}]`)
+	got := runCommand(t, "object", "list", "--scene-id", objectSceneID, "--write-list", "--write-manifest")
+	if got.code == 0 || got.stdout != "" || !strings.Contains(got.stderr, "scaleCustom") {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if entries, _ := os.ReadDir("."); len(entries) != 0 {
+		t.Errorf("files written: %v", entries)
+	}
+}
+
+func TestObjectListAndManifestUploadWithAnExpiredKeyExitTwoBeforeAnySceneRequest(t *testing.T) {
+	for _, args := range [][]string{
+		{"object", "list", "--scene-id", objectSceneID},
+		{"object", "manifest", "upload", "--scene-id", objectSceneID},
+	} {
+		fake := startFake(t)
+		t.Setenv("C3D_DEVELOPER_API_KEY", fake.ExpiredKey())
+		writeManifestFile(t, objectManifestPath(), "cube")
+		got := runCommand(t, args...)
+		if got.code != 2 || got.stdout != "" {
+			t.Errorf("%v: exit %d, stdout %q, stderr %q", args, got.code, got.stdout, got.stderr)
+		}
+		for _, r := range fake.Requests() {
+			if strings.HasPrefix(r.Path, "/v0/scenes") || strings.HasPrefix(r.Path, "/v0/versions") || strings.HasPrefix(r.Path, "/v0/objects") {
+				t.Errorf("%v: request to %s", args, r.Path)
+			}
+		}
 	}
 }

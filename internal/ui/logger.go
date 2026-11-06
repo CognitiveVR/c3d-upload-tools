@@ -121,7 +121,7 @@ func (l *Logger) emit(lv level, text string, rec *jsonRecord) {
 		if l.color {
 			tag = "[\x1b[" + levelColors[lv] + "m" + levelTags[lv] + "\x1b[0m]"
 		}
-		line = []byte("[" + l.now().Format(timestampLayout) + "] " + tag + " " + text + "\n")
+		line = []byte("[" + l.now().Format(timestampLayout) + "] " + tag + " " + Printable(text) + "\n")
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()

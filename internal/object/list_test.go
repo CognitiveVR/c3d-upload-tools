@@ -71,7 +71,7 @@ func TestIndentUsesTwoSpacesAndEndsWithANewline(t *testing.T) {
 }
 
 func TestWithoutFilesSkipsObjectsThatHaveFiles(t *testing.T) {
-	raw := []byte(`[{"sdkId":"a","meshName":"m","files":[{"name":"m.glb","type":"model"}]},{"sdkId":"b","meshName":"n","files":[]},{"sdkId":"c","meshName":"o"}]`)
+	raw := []byte(`[{"sdkId":"a","meshName":"m","files":[{"name":"m.glb","type":"glb"}]},{"sdkId":"b","meshName":"n","files":[]},{"sdkId":"c","meshName":"o"}]`)
 	got, err := WithoutFiles(raw)
 	if err != nil || len(got) != 2 || got[0].SDKID != "b" || got[1].SDKID != "c" {
 		t.Errorf("got %+v, %v", got, err)
