@@ -26,7 +26,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - The Go binary replaces the bash scripts and the PowerShell module. See the
   [migration guide](docs/migration-2.0.md).
-- An error status answered after an upload's body was sent names the command to check whether it
+- A server error (5xx) answered after an upload's body was sent names the command to check whether it
   landed, instead of saying to try again later.
 - A `settings.json` write that fails after the gateway accepted the scene is a warning (exit 0).
 - `object manifest upload` exits 0 when only the follow-up object listing fails, with

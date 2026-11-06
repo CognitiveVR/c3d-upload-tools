@@ -188,7 +188,7 @@ func (e *Error) MessageAndHint() (message, hint string) {
 		if hint := e.uploadCheckHint(); hint != "" {
 			return "The connection was lost while waiting for the gateway's answer. The upload may still have completed.", hint
 		}
-	case ServerError, ClientError:
+	case ServerError:
 		return e.message(), e.uploadCheckHint()
 	}
 	return e.message(), ""
@@ -196,6 +196,7 @@ func (e *Error) MessageAndHint() (message, hint string) {
 
 // uploadCheckHint names the command that shows whether a sent upload landed,
 // or returns empty when the body was not sent or the route is not an upload.
+// Only server and transport failures use it: a 4xx means nothing was created.
 func (e *Error) uploadCheckHint() string {
 	check, retry := checkCommand(e.method, e.path)
 	if !e.BodySent || check == "" {
