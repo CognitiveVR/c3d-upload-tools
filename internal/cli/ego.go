@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/ego"
+	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
 	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
 )
 
@@ -138,6 +139,11 @@ func runEgoUpload(cmd *cobra.Command, rt *runtime) error {
 		if err != nil {
 			if printErr := printEgoUploadResult(rt, result); printErr != nil {
 				return printErr
+			}
+			if cause := ctx.Err(); cause != nil {
+				return &codedError{code: exitFailure, kind: gateway.Interrupted.String(), message: fmt.Sprintf(
+					"The model was uploaded; waiting for optimization was cut off (%v). Check with: %s ego list --scene-id %s",
+					cause, binaryName, sceneID)}
 			}
 			return err
 		}

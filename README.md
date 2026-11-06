@@ -181,7 +181,7 @@ Objects, manifests and egos belong to a version. After a new version, upload the
 
 `ego upload` fills one slot (`head`, `controller_left`, `controller_right` or a custom key) from a directory of a model, its `.png`, `.jpg` and `.webp` images and an optional `ego.json`. `ego list` shows each slot with its file count and whether it is optimized, and `ego delete` empties a slot so session replay falls back to the bundled model.
 
-`--wait` polls every 5 seconds for up to 120 seconds and reports whether the gateway marked the model optimized. Running out of time is not an error: small models may never be marked optimized, so a `false` answer is normal for them. `--timeout` bounds the whole command, including the wait, so a long `--wait` needs a longer `--timeout` or none.
+`--wait` polls every 5 seconds for up to 120 seconds and reports whether the gateway marked the model optimized. Running out of time is not an error: small models may never be marked optimized, so a `false` answer is normal for them. `--timeout` bounds the whole command, including the wait, so a long `--wait` needs a longer `--timeout` or none. When `--timeout` or Ctrl-C cuts the wait short, the model is already uploaded; the command exits 1 and names `ego list --scene-id <id>` to check on it.
 
 ## Troubleshooting
 

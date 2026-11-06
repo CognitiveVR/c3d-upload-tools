@@ -163,6 +163,24 @@ func TestEgoUploadWaitTimeoutWarnsAndExitsZero(t *testing.T) {
 	}
 }
 
+func TestEgoUploadWaitCutOffByTimeoutSaysTheModelWasUploaded(t *testing.T) {
+	fake := startFake(t)
+	egoScene(fake)
+	fastWait(t, time.Minute)
+	got := egoUpload(t, "head", "--wait", "--timeout", "1s")
+	if got.code != 1 {
+		t.Fatalf("exit %d, want 1 (stderr %q)", got.code, got.stderr)
+	}
+	want := "The model was uploaded; waiting for optimization was cut off (context deadline exceeded). Check with: " +
+		binaryName + " ego list --scene-id " + egoSceneID
+	if !strings.Contains(got.stderr, want) {
+		t.Errorf("stderr = %q, want it to contain %q", got.stderr, want)
+	}
+	if want := "Slot: head\n"; !strings.HasPrefix(got.stdout, want) {
+		t.Errorf("stdout = %q, want the upload result", got.stdout)
+	}
+}
+
 func TestOptimizationPendingMessageNamesTheTimeoutInSeconds(t *testing.T) {
 	want := "Optimization still pending after 120 seconds; small models are never marked optimized."
 	if got := optimizationPendingMessage(120 * time.Second); got != want {
