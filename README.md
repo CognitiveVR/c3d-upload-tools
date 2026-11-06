@@ -121,7 +121,7 @@ Other commands: `scene list`, `scene show`, `ego list`, `version` and `completio
 
 | Command | Required files | Optional files |
 | --- | --- | --- |
-| `scene upload` | One `.glb` of any name, or `scene.gltf` plus `scene.bin`; `screenshot.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`), `settings.json` |
+| `scene upload` | One `.glb` of any name, or `scene.gltf` plus `scene.bin`, named exactly so in lower case; `screenshot.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`), `settings.json` |
 | `object upload` | `<name>.glb`, or `<name>.gltf` plus `<name>.bin`; `cvr_object_thumbnail.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`) |
 | `ego upload` | The model and its `.bin` files | `.png`, `.jpg` and `.webp` images, one `ego.json` |
 

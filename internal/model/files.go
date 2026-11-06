@@ -105,6 +105,10 @@ func Resolve(dir string, mode Mode, baseName string) (Files, error) {
 		if !isModelExt(ext) {
 			continue
 		}
+		if mode == SceneMode && ext != ".glb" && strings.EqualFold(name, baseName+ext) && name != baseName+ext {
+			return Files{}, fmt.Errorf("found %s; a scene's model files must be named exactly %s.gltf and %s.bin, so rename it to %s",
+				name, baseName, baseName, baseName+ext)
+		}
 		if mode != AnyMode {
 			wantsBase := ext != ".glb" || mode == NamedMode
 			if wantsBase && stem != baseName {
