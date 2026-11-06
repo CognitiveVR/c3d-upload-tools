@@ -77,6 +77,41 @@ func TestReadSettingsMissing(t *testing.T) {
 	}
 }
 
+func TestReadSettingsRefusesALinkOrADirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "settings.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadSettings(dir); err == nil || !strings.Contains(err.Error(), "settings.json is not a regular file") {
+		t.Fatalf("directory: err = %v", err)
+	}
+	dir = t.TempDir()
+	target := filepath.Join(t.TempDir(), "real.json")
+	if err := os.WriteFile(target, []byte(`{"sceneName":"X"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "settings.json")); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+	if _, err := ReadSettings(dir); err == nil || !strings.Contains(err.Error(), "settings.json is a symbolic link; it must be a regular file") {
+		t.Fatalf("symlink: err = %v", err)
+	}
+}
+
+func TestReadSettingsSkipsAByteOrderMark(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte("\xef\xbb\xbf{\"sceneName\":\"BOM\",\"scale\":2}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SceneName != "BOM" || got.Scale != 2 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestReadSettingsMalformed(t *testing.T) {
 	for _, body := range []string{"{not json", "[1,2]", `"text"`, ""} {
 		dir := t.TempDir()

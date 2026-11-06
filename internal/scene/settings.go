@@ -6,12 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/localfile"
 )
 
 const settingsFileName = "settings.json"
+
+var utf8BOM = []byte("\xef\xbb\xbf")
 
 // ErrNoSceneName reports that neither the caller nor an existing settings.json supplied a scene name.
 var ErrNoSceneName = errors.New("scene name is required: pass --scene-name or add sceneName to settings.json")
@@ -25,16 +30,21 @@ type Settings struct {
 	Extra      map[string]json.RawMessage
 }
 
-// ReadSettings reads dir/settings.json. It returns nil, nil when the file does not exist.
+// ReadSettings reads dir/settings.json, which must be a regular file, not a
+// link. It returns nil, nil when the file does not exist.
 func ReadSettings(dir string) (*Settings, error) {
 	path := filepath.Join(dir, settingsFileName)
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+	if _, err := localfile.Stat(dir, settingsFileName); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
 	}
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	raw = bytes.TrimPrefix(raw, utf8BOM)
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
 		if err == nil {
