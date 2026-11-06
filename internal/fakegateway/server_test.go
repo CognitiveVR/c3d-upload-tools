@@ -88,7 +88,7 @@ func TestSceneScopedRoutesAcceptExpiredKey(t *testing.T) {
 		method, path string
 		want         int
 	}{{"GET", "/scenes/scene-a", 200}, {"POST", "/scenes/scene-a", 201}, {"POST", "/objects/scene-a", 201}, {"POST", "/objects/scene-a/cube", 200}} {
-		status, _ := call(t, s, route.method, route.path, header(s.ExpiredKey()), nil)
+		status, _ := call(t, s, route.method, route.path, header(s.ExpiredKey()), strings.NewReader(`{"objects":[]}`))
 		if status != route.want {
 			t.Errorf("%s %s with expired key: got %d, want %d", route.method, route.path, status, route.want)
 		}

@@ -36,7 +36,7 @@ func newObjectCmd(rt *runtime) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newObjectUploadCmd(rt))
+	cmd.AddCommand(newObjectUploadCmd(rt), newObjectManifestCmd(rt), newObjectListCmd(rt))
 	return cmd
 }
 

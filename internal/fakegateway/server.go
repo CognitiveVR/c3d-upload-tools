@@ -90,6 +90,9 @@ type Server struct {
 	nextVersionID int
 	planned       map[string]pendingVersions
 	hidden        map[string]*pendingVersions
+	objectFiles   map[meshKey][]objectFile
+	objectRows    map[versionKey][]objectRow
+	nextObjectID  int
 }
 
 // pendingVersions are versions a POST adds, left out of the next polls GET
@@ -116,6 +119,7 @@ func (s *Server) routes() []route {
 		{"POST /v0/scenes/{sceneId}/screenshot", acceptExpired, s.replaceScreenshot},
 		{"POST /v0/objects/{sceneId}/{meshName}", acceptExpired, s.uploadObject},
 		{"POST /v0/objects/{sceneId}", acceptExpired, s.uploadManifest},
+		{"GET /v0/versions/{versionId}/objects", acceptExpired, s.listObjects},
 		{"/", acceptExpired, s.empty},
 	}
 }
@@ -130,6 +134,8 @@ func New(t testing.TB) *Server {
 		nextVersionID: 1000,
 		planned:       map[string]pendingVersions{},
 		hidden:        map[string]*pendingVersions{},
+		objectFiles:   map[meshKey][]objectFile{},
+		objectRows:    map[versionKey][]objectRow{},
 	}
 	mux := http.NewServeMux()
 	for _, rt := range s.routes() {
@@ -205,7 +211,7 @@ func (s *Server) SetUser(u User) {
 
 func (s *Server) serve(rt route) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.record(r)
+		r = withRecorded(r, s.record(r))
 		delay, fail := s.next()
 		if delay > 0 {
 			timer := time.NewTimer(delay)
@@ -245,7 +251,7 @@ func (s *Server) next() (time.Duration, *failure) {
 	return delay, fail
 }
 
-func (s *Server) record(r *http.Request) {
+func (s *Server) record(r *http.Request) Recorded {
 	rec := Recorded{
 		Method: r.Method, Path: r.URL.Path, RawPath: r.URL.EscapedPath(), Query: r.URL.Query(), Header: r.Header.Clone(),
 		ContentLength: r.ContentLength, TransferEncoding: append([]string(nil), r.TransferEncoding...),
@@ -267,6 +273,7 @@ func (s *Server) record(r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.requests = append(s.requests, rec)
+	return rec
 }
 
 type countingBody struct {
@@ -455,29 +462,6 @@ func (s *Server) replaceScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-}
-
-// uploadObject answers 200 with an empty body for a known scene and 401 with
-// an empty body for an unknown one.
-func (s *Server) uploadObject(w http.ResponseWriter, r *http.Request) {
-	s.answerForScene(w, r, http.StatusOK)
-}
-
-// uploadManifest answers 201 with an empty body for a known scene and 401
-// with an empty body for an unknown one.
-func (s *Server) uploadManifest(w http.ResponseWriter, r *http.Request) {
-	s.answerForScene(w, r, http.StatusCreated)
-}
-
-func (s *Server) answerForScene(w http.ResponseWriter, r *http.Request, status int) {
-	s.mu.Lock()
-	known := s.findSceneLocked(r.PathValue("sceneId")) != nil
-	s.mu.Unlock()
-	if !known {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	w.WriteHeader(status)
 }
 
 func (s *Server) findSceneLocked(id string) *Scene {
