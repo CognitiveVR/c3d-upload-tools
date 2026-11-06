@@ -15,7 +15,7 @@ Upload 3D scenes and dynamic objects to the Cognitive3D platform with ease. Cros
 
 Version 2.0 replaces both the bash scripts and the PowerShell module with a single Go binary, `cognitive3d-cli-upload`. The 1.x tools keep working until then, and everything below this section describes them.
 
-Planned commands (only `version` exists today):
+Planned commands (only `version` and `auth verify` exist today):
 
 - `auth verify`: preflight the developer API key and report project, organization and key expiry.
 - `scene upload`: create a scene or a new version from a directory.

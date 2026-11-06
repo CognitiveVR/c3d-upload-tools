@@ -14,6 +14,7 @@ func testIO() IO {
 }
 
 func TestLegacyUnderscoreFlagsAreAccepted(t *testing.T) {
+	isolate(t)
 	cases := []struct {
 		args []string
 		want int
@@ -49,6 +50,7 @@ func TestLegacyUnderscoreFlagsAreAccepted(t *testing.T) {
 }
 
 func TestExecuteStopsWhenContextIsCancelled(t *testing.T) {
+	isolate(t)
 	streams := testIO()
 	root := newRootCmd(streams)
 	started := make(chan struct{})
@@ -85,6 +87,7 @@ func TestNormalizeFlagReplacesUnderscores(t *testing.T) {
 }
 
 func TestFormatIsValidatedWhenSubcommandHasOwnPersistentPreRun(t *testing.T) {
+	isolate(t)
 	streams := testIO()
 	root := newRootCmd(streams)
 	hookRan, bodyRan := false, false

@@ -8,6 +8,9 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
 )
 
 const subprocessEnv = "C3D_UPLOAD_TEST_SUBPROCESS"
@@ -28,8 +31,16 @@ type cliResult struct {
 
 func runCLI(t *testing.T, args ...string) cliResult {
 	t.Helper()
+	return runCLIWith(t, "", nil, args...)
+}
+
+// runCLIWith runs the CLI in dir (the current directory when empty) with extra
+// appended to the environment.
+func runCLIWith(t *testing.T, dir string, extra []string, args ...string) cliResult {
+	t.Helper()
 	cmd := exec.Command(os.Args[0], args...)
-	cmd.Env = append(os.Environ(), subprocessEnv+"=1")
+	cmd.Dir = dir
+	cmd.Env = append(append(os.Environ(), subprocessEnv+"=1"), extra...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -83,5 +94,94 @@ func TestUnknownCommandAndFlagExitFourWithOneLine(t *testing.T) {
 		if n := len(strings.Split(strings.TrimRight(res.stderr, "\n"), "\n")); n != 1 {
 			t.Errorf("%v: stderr has %d lines, want 1: %q", args, n, res.stderr)
 		}
+	}
+}
+
+func authEnvironment(t *testing.T, fake *fakegateway.Server, key string) (string, []string) {
+	t.Helper()
+	home := t.TempDir()
+	env := []string{
+		"HOME=" + home, "USERPROFILE=" + home, "NO_COLOR=1",
+		"C3D_UPLOAD_GATEWAY_URL=" + fake.URL(),
+		"C3D_DEVELOPER_API_KEY=" + key,
+		"C3D_SCENE_ID=", "C3D_ENV=", "C3D_DEFAULT_ENVIRONMENT=",
+	}
+	return t.TempDir(), env
+}
+
+const processSceneUUID = "0b1f6c3e-2a4d-4e8b-9c7a-5d3e1f2a4b6c"
+
+func TestAuthVerifyAcrossTheProcessBoundary(t *testing.T) {
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "p12-" + processSceneUUID, SDKFacingID: processSceneUUID, SceneName: "S"})
+
+	t.Run("valid key", func(t *testing.T) {
+		dir, env := authEnvironment(t, fake, fake.Key())
+		res := runCLIWith(t, dir, env, "auth", "verify")
+		want := "Environment: prod\nProject: Fake Project\nOrganization: Fake Organization\nKey expires: never\n"
+		if res.exitCode != 0 || res.stdout != want {
+			t.Errorf("exit %d, stdout %q, want 0 and %q (stderr %q)", res.exitCode, res.stdout, want, res.stderr)
+		}
+		if !strings.Contains(res.stderr, "[WARN]") || !strings.Contains(res.stderr, "not a Cognitive3D host") {
+			t.Errorf("stderr should warn about the foreign host: %q", res.stderr)
+		}
+	})
+
+	t.Run("expired key", func(t *testing.T) {
+		dir, env := authEnvironment(t, fake, fake.ExpiredKey())
+		res := runCLIWith(t, dir, env, "auth", "verify")
+		if res.exitCode != 2 || res.stdout != "" || !strings.Contains(res.stderr, "Your developer API key has expired.") {
+			t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
+		}
+	})
+
+	t.Run("unknown scene", func(t *testing.T) {
+		dir, env := authEnvironment(t, fake, fake.Key())
+		id := "11111111-2222-4333-8444-555555555555"
+		res := runCLIWith(t, dir, env, "auth", "verify", "--scene-id", id)
+		if res.exitCode != 3 || strings.Contains(res.stdout, "reachable") ||
+			!strings.Contains(res.stderr, "Scene "+id+" is not reachable with this key") {
+			t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
+		}
+	})
+
+	t.Run("projectified scene", func(t *testing.T) {
+		dir, env := authEnvironment(t, fake, fake.Key())
+		id := "p12-" + processSceneUUID
+		res := runCLIWith(t, dir, env, "auth", "verify", "--scene-id", id)
+		if res.exitCode != 0 || !strings.HasSuffix(res.stdout, "Scene "+id+": reachable\n") {
+			t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
+		}
+	})
+
+	t.Run("json", func(t *testing.T) {
+		dir, env := authEnvironment(t, fake, fake.Key())
+		res := runCLIWith(t, dir, env, "auth", "verify", "--format", "json")
+		var got map[string]any
+		if err := json.Unmarshal([]byte(res.stdout), &got); err != nil || res.exitCode != 0 {
+			t.Fatalf("exit %d, stdout %q (err %v), stderr %q", res.exitCode, res.stdout, err, res.stderr)
+		}
+		if got["projectName"] != "Fake Project" || got["keyExpiresAt"] != nil || got["sceneReachable"] != nil {
+			t.Errorf("unexpected JSON: %v", got)
+		}
+	})
+
+	t.Run("no key", func(t *testing.T) {
+		dir, env := authEnvironment(t, fake, "")
+		res := runCLIWith(t, dir, env, "auth", "verify")
+		want := "C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key"
+		if res.exitCode != 4 || res.stdout != "" || !strings.Contains(res.stderr, want) {
+			t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
+		}
+	})
+}
+
+func TestTimeoutAcrossTheProcessBoundary(t *testing.T) {
+	fake := fakegateway.New(t)
+	fake.Delay(3 * time.Second)
+	dir, env := authEnvironment(t, fake, fake.Key())
+	res := runCLIWith(t, dir, env, "auth", "verify", "--timeout", "1s")
+	if res.exitCode != 1 || res.stdout != "" || !strings.Contains(res.stderr, "Could not reach") {
+		t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
 	}
 }

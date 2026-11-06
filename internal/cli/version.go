@@ -17,8 +17,9 @@ const (
 
 func newVersionCmd(streams IO) *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
-		Short: "Print version, commit and build date",
+		Use:         "version",
+		Short:       "Print version, commit and build date",
+		Annotations: map[string]string{skipRuntimeAnnotation: "true"},
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return usageErrorf("unexpected argument %q", args[0])

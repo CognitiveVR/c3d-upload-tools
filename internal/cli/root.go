@@ -9,6 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
 )
 
 const (
@@ -41,22 +43,66 @@ func Execute(ctx context.Context, args []string, streams IO) int {
 	return run(ctx, newRootCmd(streams), args, streams)
 }
 
+// codedError is a failure with its own exit code and machine-readable kind,
+// for outcomes the command words itself.
+type codedError struct {
+	code       int
+	kind       string
+	statusCode int
+	message    string
+}
+
+func (e *codedError) Error() string { return e.message }
+
+func noArgs(_ *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return usageErrorf("unexpected argument %q", args[0])
+	}
+	return nil
+}
+
 func run(ctx context.Context, root *cobra.Command, args []string, streams IO) int {
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)
+	rt := runtimeOf(root)
+	if rt != nil {
+		rt.release()
+		runtimes.Delete(root)
+	}
 	if err == nil {
 		return 0
 	}
-	_, _ = fmt.Fprintf(streams.Stderr, "%s: %v\n", binaryName, err)
+	return report(rt, streams, err)
+}
+
+// report presents err on stderr and returns the exit code.
+func report(rt *runtime, streams IO, err error) int {
+	code, kind, status, message := exitFailure, "error", 0, err.Error()
+	var gerr *gateway.Error
+	var coded *codedError
 	var usage *usageError
-	if errors.As(err, &usage) {
-		return exitUsage
+	switch {
+	case errors.As(err, &gerr):
+		code, kind, status, message = gateway.ExitCode(err), gerr.Kind.String(), gerr.StatusCode, gerr.UserMessage()
+	case errors.As(err, &coded):
+		code, kind, status, message = coded.code, coded.kind, coded.statusCode, coded.message
+	case errors.As(err, &usage):
+		code, kind = exitUsage, "usage"
 	}
-	return exitFailure
+	switch {
+	case rt == nil || rt.log == nil:
+		_, _ = fmt.Fprintf(streams.Stderr, "%s: %s\n", binaryName, message)
+	case rt.settings.Format == formatJSON:
+		rt.log.ErrorRecord(kind, message, "", status)
+	default:
+		rt.log.Error("%s", message)
+	}
+	return code
 }
 
 func newRootCmd(streams IO) *cobra.Command {
 	cobra.EnableTraverseRunHooks = true
+	rt := &runtime{streams: streams}
 	root := &cobra.Command{
 		Use:           binaryName,
 		Short:         "Upload scenes, dynamic objects and egocentric models to Cognitive3D",
@@ -68,6 +114,10 @@ func newRootCmd(streams IO) *cobra.Command {
 			if format != formatText && format != formatJSON {
 				return usageErrorf("invalid --format %q: want text or json", format)
 			}
+			return rt.prepare(cmd)
+		},
+		PersistentPostRunE: func(*cobra.Command, []string) error {
+			rt.release()
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -95,6 +145,7 @@ func newRootCmd(streams IO) *cobra.Command {
 	flags.Bool("quiet", false, "suppress informational logging")
 	flags.String("config", "", "path to the config file")
 
-	root.AddCommand(newVersionCmd(streams))
+	root.AddCommand(newVersionCmd(streams), newAuthCmd(rt))
+	runtimes.Store(root, rt)
 	return root
 }
