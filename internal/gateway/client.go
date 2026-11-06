@@ -131,7 +131,8 @@ func (c *Client) User(ctx context.Context) (User, error) {
 	return u, err
 }
 
-// Get retries 502, 503, 504 and transport errors; out may be nil.
+// Get retries 429, a 5xx other than 501 and 505, and transport errors; out
+// may be nil.
 func (c *Client) Get(ctx context.Context, path string, query url.Values, out any) error {
 	resp, err := c.withRetry(ctx, path, func() (*Response, error) {
 		return c.attempt(ctx, c.apiHTTP, http.MethodGet, path, query, nil, 0, "")
