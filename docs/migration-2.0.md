@@ -50,7 +50,7 @@ Legacy flag spellings such as `--scene_id`, `--scene_dir` and `--dry_run` are ac
 
 Persistent flags on every command: `--env`, `--gateway-url`, `--api-key`, `--format text|json`, `--timeout`, `--verbose`, `--quiet` and `--config`. Upload commands add `--dry-run`.
 
-The binary reads `C3D_DEVELOPER_API_KEY`, `C3D_SCENE_ID`, `C3D_DEFAULT_ENVIRONMENT`, `C3D_ENV`, `C3D_UPLOAD_GATEWAY_URL` and `NO_COLOR`. `--scene-id` falls back to `C3D_SCENE_ID` wherever it appears.
+The binary reads `C3D_DEVELOPER_API_KEY`, `C3D_SCENE_ID`, `C3D_DEFAULT_ENVIRONMENT`, `C3D_ENV`, `C3D_UPLOAD_GATEWAY_URL` and `NO_COLOR`. `--scene-id` falls back to `C3D_SCENE_ID` wherever it appears, so `scene upload` with a scene id from the environment, `.env` or the config file adds a new version to that scene and logs that it does. `--gateway-url` and `C3D_UPLOAD_GATEWAY_URL` include the API version path, for example `https://data.c3ddev.com/v0`.
 
 ## Exit codes
 
@@ -58,6 +58,6 @@ The binary reads `C3D_DEVELOPER_API_KEY`, `C3D_SCENE_ID`, `C3D_DEFAULT_ENVIRONME
 | --- | --- |
 | 0 | Success |
 | 1 | General failure |
-| 2 | Authentication failure |
+| 2 | Authentication failure: invalid or expired key, or 403 |
 | 3 | Not found or not accessible |
-| 4 | Validation or usage error |
+| 4 | Validation or usage error, including no API key configured |

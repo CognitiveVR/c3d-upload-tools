@@ -165,11 +165,11 @@ With `--format json`, a command prints exactly one JSON object or array on stdou
 | --- | --- |
 | 0 | Success. |
 | 1 | General failure: server error, network error, interrupted upload, ambiguous scene version. |
-| 2 | Authentication failure: missing, invalid or expired key, or 403. |
+| 2 | Authentication failure: invalid or expired key, or 403. |
 | 3 | Not found: the scene or resource does not exist or is outside the key's project. |
-| 4 | Validation or usage error: bad flags, a missing file, a model that fails the checks, an upload over 3 GiB. |
+| 4 | Validation or usage error: no API key configured, bad flags, a missing file, a model that fails the checks, an upload over 3 GiB. |
 
-`--timeout <duration>` (for example `--timeout 2h`) bounds a whole command. Ctrl-C cancels it cleanly.
+`--timeout <duration>` (for example `--timeout 2h`) bounds a whole command; a negative value is a usage error. Ctrl-C cancels it cleanly.
 
 ## Scene versions
 
@@ -187,7 +187,7 @@ Objects, manifests and egos belong to a version. After a new version, upload the
 
 Expired key (exit 2): the CLI prints the rotation steps. Open the dashboard, go to Settings, "Manage developer key", generate a new key and update `C3D_DEVELOPER_API_KEY`. Run `cognitive3d-cli-upload auth verify` to confirm it.
 
-"The upload may still have completed": the connection dropped, or the command timed out or was interrupted, after the files were sent. The gateway may have finished the job. Check with `cognitive3d-cli-upload scene show --scene-id <scene-id>` (or `object list`) before retrying, because a retry creates another version.
+"The upload may still have completed": the connection dropped, or the command timed out or was interrupted, after the files were sent. The gateway may have finished the job. Check with the command the message names before retrying: `cognitive3d-cli-upload scene list` after a scene upload, because a retry creates another version; `object list --scene-id <scene-id>` or `ego list --scene-id <scene-id>` after an object or ego upload, which a retry replaces with the same content.
 
 Scene not found (exit 3): the gateway answers an unknown scene and a scene from another project the same way. Both the plain id and the `p<projectId>-<uuid>` form are accepted. Run `cognitive3d-cli-upload scene list` to see the scenes this key can reach, and `auth verify --scene-id <id>` to test one id. Check that the key belongs to the right project and `--env`.
 
