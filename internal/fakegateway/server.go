@@ -112,6 +112,7 @@ func (s *Server) routes() []route {
 		{"POST /v0/scenes", rejectExpired, s.createScene},
 		{"GET /v0/scenes/{sceneId}", acceptExpired, s.getScene},
 		{"POST /v0/scenes/{sceneId}", acceptExpired, s.addVersion},
+		{"POST /v0/scenes/{sceneId}/screenshot", acceptExpired, s.replaceScreenshot},
 		{"/", acceptExpired, s.empty},
 	}
 }
@@ -438,6 +439,19 @@ func (s *Server) addVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+// replaceScreenshot answers 200 with an empty body for a known scene and 401
+// with an empty body for an unknown one.
+func (s *Server) replaceScreenshot(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	known := s.findSceneLocked(r.PathValue("sceneId")) != nil
+	s.mu.Unlock()
+	if !known {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) findSceneLocked(id string) *Scene {

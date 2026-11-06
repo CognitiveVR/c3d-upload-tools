@@ -552,3 +552,285 @@ func TestJoinNumbers(t *testing.T) {
 		}
 	}
 }
+
+func writeFile(t *testing.T, name string, data []byte) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func getsTo(fake *fakegateway.Server, prefix string) int {
+	n := 0
+	for _, r := range fake.Requests() {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.Path, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+func addListScenes(fake *fakegateway.Server) string {
+	projectified := "p12-" + testSceneUUID
+	fake.AddScene(fakegateway.Scene{ID: projectified, SDKFacingID: testSceneUUID, SceneName: "Lobby",
+		Versions: []fakegateway.Version{
+			{ID: 11, VersionNumber: 3, SDKVersion: "cli-go-v1.3.0"},
+			{ID: 10, VersionNumber: 1, SDKVersion: "1.0.0"},
+			{ID: 12, VersionNumber: 2, SDKVersion: "1.2.0"},
+		}})
+	fake.AddScene(fakegateway.Scene{ID: "plain-scene", SDKFacingID: "plain-scene", SceneName: "Plain"})
+	return projectified
+}
+
+func TestSceneListTextShowsGatewayIDOnlyForProjectifiedScenes(t *testing.T) {
+	fake := startFake(t)
+	addListScenes(fake)
+	got := runCommand(t, "scene", "list")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	lines := strings.Split(strings.TrimRight(got.stdout, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("stdout = %q, want a header and two rows", got.stdout)
+	}
+	if g := strings.Join(strings.Fields(lines[0]), " "); g != "ID GATEWAY ID NAME LATEST SDK VERSION" {
+		t.Errorf("header = %q", lines[0])
+	}
+	if g := strings.Join(strings.Fields(lines[1]), " "); g != testSceneUUID+" p12-"+testSceneUUID+" Lobby 3 cli-go-v1.3.0" {
+		t.Errorf("projectified row = %q", lines[1])
+	}
+	if g := strings.Join(strings.Fields(lines[2]), " "); g != "plain-scene Plain" {
+		t.Errorf("plain row = %q, want no gateway id, latest or sdk version", lines[2])
+	}
+	if getsTo(fake, "/v0/apiKeys/verify") != 1 {
+		t.Errorf("list should preflight once: %+v", fake.Requests())
+	}
+}
+
+func TestSceneListJSONPrintsTheArrayWithStringIDs(t *testing.T) {
+	fake := startFake(t)
+	projectified := addListScenes(fake)
+	got := runCommand(t, "scene", "list", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	var scenes []struct {
+		ID          string `json:"id"`
+		SDKFacingID string `json:"sdkFacingId"`
+		SceneName   string `json:"sceneName"`
+		Versions    []struct {
+			ID            int64  `json:"id"`
+			VersionNumber int    `json:"versionNumber"`
+			SDKVersion    string `json:"sdkVersion"`
+		} `json:"versions"`
+	}
+	if err := json.Unmarshal([]byte(got.stdout), &scenes); err != nil {
+		t.Fatalf("stdout is not a JSON array: %v: %q", err, got.stdout)
+	}
+	if len(scenes) != 2 || scenes[0].ID != projectified || scenes[0].SDKFacingID != testSceneUUID || len(scenes[0].Versions) != 3 || scenes[1].Versions == nil {
+		t.Errorf("scenes = %+v", scenes)
+	}
+}
+
+func TestSceneListWithAnExpiredKeyExitsTwo(t *testing.T) {
+	fake := startFake(t)
+	t.Setenv("C3D_DEVELOPER_API_KEY", fake.ExpiredKey())
+	got := runCommand(t, "scene", "list")
+	if got.code != 2 || got.stdout != "" || !strings.Contains(got.stderr, "Your developer API key has expired.") {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+}
+
+func TestSceneShowTextSortsVersionsNewestFirst(t *testing.T) {
+	fake := startFake(t)
+	projectified := addListScenes(fake)
+	got := runCommand(t, "scene", "show", "--scene-id", projectified)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	lines := strings.Split(strings.TrimRight(got.stdout, "\n"), "\n")
+	want := []string{
+		"Scene: Lobby",
+		"ID: " + testSceneUUID,
+		"Gateway ID: " + projectified,
+		"VERSION VERSION ID SDK VERSION",
+		"3 11 cli-go-v1.3.0",
+		"2 12 1.2.0",
+		"1 10 1.0.0",
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("stdout = %q", got.stdout)
+	}
+	for i, w := range want {
+		if g := strings.Join(strings.Fields(lines[i]), " "); g != w {
+			t.Errorf("line %d = %q, want %q", i, g, w)
+		}
+	}
+}
+
+func TestSceneShowOmitsGatewayIDWhenItMatches(t *testing.T) {
+	fake := startFake(t)
+	addListScenes(fake)
+	got := runCommand(t, "scene", "show", "--scene-id", "plain-scene")
+	if got.code != 0 || strings.Contains(got.stdout, "Gateway ID") {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+}
+
+func TestSceneShowJSONSortsVersionsNewestFirst(t *testing.T) {
+	fake := startFake(t)
+	projectified := addListScenes(fake)
+	t.Setenv("C3D_SCENE_ID", projectified)
+	got := runCommand(t, "scene", "show", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	var info scene.Info
+	if err := json.Unmarshal([]byte(got.stdout), &info); err != nil {
+		t.Fatalf("stdout: %v: %q", err, got.stdout)
+	}
+	if info.ID != projectified || info.SDKFacingID != testSceneUUID || info.SceneName != "Lobby" ||
+		len(info.Versions) != 3 || info.Versions[0].Number != 3 || info.Versions[2].Number != 1 {
+		t.Errorf("info = %+v", info)
+	}
+}
+
+func TestSceneShowWithoutAnIDIsAUsageError(t *testing.T) {
+	startFake(t)
+	got := runCommand(t, "scene", "show")
+	if got.code != 4 || got.stdout != "" || !strings.Contains(got.stderr, "--scene-id") {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+}
+
+func TestSceneShowUnknownSceneAfterPreflightExitsThree(t *testing.T) {
+	fake := startFake(t)
+	got := runCommand(t, "scene", "show", "--scene-id", testSceneUUID)
+	if got.code != 3 || got.stdout != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if !strings.Contains(got.stderr, testSceneUUID) || strings.Contains(got.stderr, "expired") {
+		t.Errorf("stderr = %q, want the scene-not-accessible message", got.stderr)
+	}
+	if getsTo(fake, "/v0/apiKeys/verify") != 1 {
+		t.Errorf("show should preflight first: %+v", fake.Requests())
+	}
+}
+
+func TestSceneScreenshotPostsOnePartToTheLatestVersion(t *testing.T) {
+	fake := startFake(t)
+	projectified := addListScenes(fake)
+	body := append(append([]byte{}, pngSignature...), []byte("image-bytes")...)
+	file := writeFile(t, "shot.png", body)
+
+	got := runCommand(t, "scene", "screenshot", "--scene-id", projectified, "--file", file)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if got.stdout != "" || !strings.Contains(got.stderr, "[INFO] Screenshot replaced for version 3") {
+		t.Errorf("stdout %q, stderr %q", got.stdout, got.stderr)
+	}
+	sent := postsTo(fake)
+	if len(sent) != 1 || sent[0].Path != "/v0/scenes/"+projectified+"/screenshot" || sent[0].Query.Get("version") != "3" {
+		t.Fatalf("POSTs = %+v", sent)
+	}
+	if len(sent[0].Parts) != 1 {
+		t.Fatalf("parts = %+v", sent[0].Parts)
+	}
+	part := sent[0].Parts[0]
+	if part.Field != "screenshot" || part.Filename != "screenshot.png" || part.ContentType != "application/octet-stream" ||
+		part.Size != int64(len(body)) || !bytes.Equal(part.Body, body) {
+		t.Errorf("part = %+v", part)
+	}
+}
+
+func TestSceneScreenshotVersionFlagAndJSONOutput(t *testing.T) {
+	fake := startFake(t)
+	projectified := addListScenes(fake)
+	file := writeFile(t, "shot.png", pngSignature)
+	got := runCommand(t, "scene", "screenshot", "--scene-id", projectified, "--file", file, "--version", "2", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	want := fmt.Sprintf(`{"sceneId":%q,"versionNumber":2,"screenshotReplaced":true}`, projectified)
+	if strings.TrimSpace(got.stdout) != want {
+		t.Errorf("stdout = %q, want %q", got.stdout, want)
+	}
+	if sent := postsTo(fake); len(sent) != 1 || sent[0].Query.Get("version") != "2" {
+		t.Errorf("POSTs = %+v", sent)
+	}
+}
+
+func TestSceneScreenshotUnknownVersionNamesTheKnownOnes(t *testing.T) {
+	fake := startFake(t)
+	projectified := addListScenes(fake)
+	file := writeFile(t, "shot.png", pngSignature)
+	got := runCommand(t, "scene", "screenshot", "--scene-id", projectified, "--file", file, "--version", "9")
+	if got.code != 3 || !strings.Contains(got.stderr, "version 9") || !strings.Contains(got.stderr, "3, 2 and 1") {
+		t.Errorf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if len(postsTo(fake)) != 0 {
+		t.Error("nothing should be posted")
+	}
+}
+
+func TestSceneScreenshotSceneWithoutVersionsExitsThree(t *testing.T) {
+	fake := startFake(t)
+	addListScenes(fake)
+	file := writeFile(t, "shot.png", pngSignature)
+	got := runCommand(t, "scene", "screenshot", "--scene-id", "plain-scene", "--file", file)
+	if got.code != 3 || !strings.Contains(got.stderr, "no versions") || len(postsTo(fake)) != 0 {
+		t.Errorf("exit %d, stderr %q", got.code, got.stderr)
+	}
+}
+
+func TestSceneScreenshotUnknownSceneExitsThree(t *testing.T) {
+	startFake(t)
+	file := writeFile(t, "shot.png", pngSignature)
+	got := runCommand(t, "scene", "screenshot", "--scene-id", testSceneUUID, "--file", file)
+	if got.code != 3 {
+		t.Errorf("exit %d, stderr %q", got.code, got.stderr)
+	}
+}
+
+func TestSceneScreenshotRejectsBadFilesBeforeAnyRequest(t *testing.T) {
+	fake := startFake(t)
+	addListScenes(fake)
+	dir := t.TempDir()
+	link := filepath.Join(dir, "link.png")
+	target := writeFile(t, "real.png", pngSignature)
+	cases := map[string]string{
+		"not a png":   writeFile(t, "shot.png", []byte("GIF89a not a png")),
+		"too short":   writeFile(t, "short.png", pngSignature[:4]),
+		"missing":     filepath.Join(dir, "missing.png"),
+		"a directory": dir,
+	}
+	if os.Symlink(target, link) == nil {
+		cases["a symlink"] = link
+	}
+	for name, file := range cases {
+		got := runCommand(t, "scene", "screenshot", "--scene-id", "plain-scene", "--file", file)
+		if got.code != 4 || got.stdout != "" || !strings.Contains(got.stderr, file) {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q", name, got.code, got.stdout, got.stderr)
+		}
+	}
+	if got := runCommand(t, "scene", "screenshot", "--scene-id", "plain-scene", "--file", writeFile(t, "x.png", []byte("nope"))); !strings.Contains(got.stderr, "not a PNG") {
+		t.Errorf("stderr = %q, want it to say the file is not a PNG", got.stderr)
+	}
+	if len(fake.Requests()) != 0 {
+		t.Errorf("requests = %+v, want none", fake.Requests())
+	}
+}
+
+func TestSceneScreenshotRequiresFileAndSceneID(t *testing.T) {
+	startFake(t)
+	if got := runCommand(t, "scene", "screenshot", "--scene-id", "x"); got.code != 4 || !strings.Contains(got.stderr, "--file") {
+		t.Errorf("no file: exit %d, stderr %q", got.code, got.stderr)
+	}
+	file := writeFile(t, "shot.png", pngSignature)
+	if got := runCommand(t, "scene", "screenshot", "--file", file); got.code != 4 || !strings.Contains(got.stderr, "--scene-id") {
+		t.Errorf("no scene id: exit %d, stderr %q", got.code, got.stderr)
+	}
+}

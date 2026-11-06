@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"time"
 
@@ -18,17 +19,17 @@ var pollInterval = 500 * time.Millisecond
 
 // Version is one scene version. ID is the integer id other routes take.
 type Version struct {
-	Number     int
-	ID         int64
-	SDKVersion string
+	Number     int    `json:"versionNumber"`
+	ID         int64  `json:"id"`
+	SDKVersion string `json:"sdkVersion"`
 }
 
 // Info is one scene as GET /scenes/{sceneId} describes it.
 type Info struct {
-	ID          string
-	SDKFacingID string
-	SceneName   string
-	Versions    []Version
+	ID          string    `json:"id"`
+	SDKFacingID string    `json:"sdkFacingId"`
+	SceneName   string    `json:"sceneName"`
+	Versions    []Version `json:"versions"`
 }
 
 type wireScene struct {
@@ -51,11 +52,36 @@ func Describe(ctx context.Context, client *gateway.Client, sceneID string) (Info
 	if err := client.Get(ctx, "/scenes/"+url.PathEscape(sceneID), nil, &wire); err != nil {
 		return Info{}, err
 	}
-	info := Info{ID: wire.ID, SDKFacingID: wire.SDKFacingID, SceneName: wire.SceneName}
-	for _, v := range wire.Versions {
+	return wire.info(), nil
+}
+
+// List reads every scene the key can reach, in the order the gateway returns
+// them. Each scene carries a non-nil Versions list.
+func List(ctx context.Context, client *gateway.Client) ([]Info, error) {
+	var wire []wireScene
+	if err := client.Get(ctx, "/scenes", nil, &wire); err != nil {
+		return nil, err
+	}
+	scenes := make([]Info, len(wire))
+	for i, w := range wire {
+		scenes[i] = w.info()
+	}
+	return scenes, nil
+}
+
+func (w wireScene) info() Info {
+	info := Info{ID: w.ID, SDKFacingID: w.SDKFacingID, SceneName: w.SceneName, Versions: []Version{}}
+	for _, v := range w.Versions {
 		info.Versions = append(info.Versions, Version{Number: v.VersionNumber, ID: v.ID, SDKVersion: v.SDKVersion})
 	}
-	return info, nil
+	return info
+}
+
+// NewestFirst returns a copy of versions sorted by descending number.
+func NewestFirst(versions []Version) []Version {
+	sorted := slices.Clone(versions)
+	slices.SortFunc(sorted, func(a, b Version) int { return b.Number - a.Number })
+	return sorted
 }
 
 // LatestVersion is the version with the highest number, wherever it sits in

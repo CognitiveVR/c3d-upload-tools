@@ -141,3 +141,31 @@ func TestWaitForVersionStopsOnALookupFailure(t *testing.T) {
 		t.Errorf("err = %v, want VersionNotVisibleError caused by SceneNotAccessible", err)
 	}
 }
+
+func TestNewestFirstSortsByNumberWithoutChangingTheInput(t *testing.T) {
+	versions := []Version{{Number: 2}, {Number: 10}, {Number: 1}}
+	got := NewestFirst(versions)
+	if len(got) != 3 || got[0].Number != 10 || got[1].Number != 2 || got[2].Number != 1 {
+		t.Errorf("sorted = %+v", got)
+	}
+	if versions[0].Number != 2 {
+		t.Errorf("input was reordered: %+v", versions)
+	}
+}
+
+func TestListKeepsGatewayOrderAndStringIDs(t *testing.T) {
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "p12-" + testSceneID, SDKFacingID: testSceneID, SceneName: "A",
+		Versions: []fakegateway.Version{{ID: 5, VersionNumber: 1}}})
+	fake.AddScene(fakegateway.Scene{ID: "plain", SDKFacingID: "plain", SceneName: "B"})
+	got, err := List(context.Background(), newClient(t, fake))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "p12-"+testSceneID || got[0].SDKFacingID != testSceneID || got[1].SceneName != "B" {
+		t.Errorf("scenes = %+v", got)
+	}
+	if got[1].Versions == nil {
+		t.Error("a scene without versions should carry an empty, not nil, list")
+	}
+}
