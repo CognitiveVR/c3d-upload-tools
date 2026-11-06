@@ -6,10 +6,10 @@
 2. Run the live smoke test against dev on macOS and on Windows, and keep the outputs:
 
    ```bash
-   C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY=... scripts/smoke-dev.sh
+   C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<item>/credential')" scripts/smoke-dev.sh
    ```
 
-   On Windows run it from Git Bash with the Windows binary: `COGNITIVE3D_CLI=./cognitive3d-cli-upload.exe`. It leaves the scene it creates on dev for inspection.
+   Take the key from a command substitution like this, or from a variable already exported in the shell, never as a literal on the command line, so it stays out of shell history. On Windows run it from Git Bash with the Windows binary: `COGNITIVE3D_CLI=./cognitive3d-cli-upload.exe`. It leaves the scene it creates on dev for inspection.
 3. Open the `develop` to `main` pull request with both smoke outputs attached. CI must be green.
 4. Merge the pull request.
 

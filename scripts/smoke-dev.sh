@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Live smoke test of cognitive3d-cli-upload against the dev gateway.
-# Usage: C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY=... scripts/smoke-dev.sh
+# Usage: C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<item>/credential')" scripts/smoke-dev.sh
 #        scripts/smoke-dev.sh --dry-run-only   (no key, no network)
+# Take the key from a command substitution or an exported variable, never a
+# literal on the command line.
 set -euo pipefail
 
 usage() {
