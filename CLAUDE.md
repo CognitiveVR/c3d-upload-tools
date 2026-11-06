@@ -38,8 +38,8 @@ internal/ui/          stderr logger (text and JSON), progress, terminal detectio
 internal/version/     build info and the sdkVersion string
 internal/fakegateway/ in-process httptest gateway for tests
 testdata/             small fixtures: scene-glb, scene-gltf, object-gltf, ego-head
-scripts/              sign-macos.sh
-docs/                 migration-2.0.md
+scripts/              sign-macos.sh, smoke-dev.sh (live smoke test, needs a dev key)
+docs/                 migration-2.0.md, release-checklist.md
 ```
 
 The release pipeline is `.goreleaser.yml` plus `.github/workflows/`. The plan and the decision table live outside this repo, in `cvr/c3d-agentic-scratch/matt/refactor-cli-upload-tools/plan.md`.
