@@ -301,3 +301,54 @@ func TestFinalizeWithoutAnyNameIsErrNoSceneName(t *testing.T) {
 		t.Errorf("err = %v, want ErrNoSceneName", err)
 	}
 }
+
+func TestCheckSettingsWritableLeavesNothingBehind(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	before, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckSettingsWritable(dir); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "settings.json", `{"sceneName":"X"}`)
+	if err := CheckSettingsWritable(dir); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSettings(t, dir); string(got) != `{"sceneName":"X"}` {
+		t.Errorf("settings.json = %q, want it untouched", got)
+	}
+	after, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before)+1 {
+		t.Errorf("directory has %d entries, want %d", len(after), len(before)+1)
+	}
+}
+
+func TestCheckSettingsWritableRefusesAReadOnlyDirectory(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	makeReadOnly(t, dir)
+	err := CheckSettingsWritable(dir)
+	if err == nil || !strings.Contains(err.Error(), dir) || !strings.Contains(err.Error(), "the upload was not started") {
+		t.Fatalf("err = %v, want the directory named and the upload not started", err)
+	}
+}
+
+func TestCheckSettingsWritableRefusesAReadOnlySettingsFile(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	path := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"sceneName":"X"}`), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
+	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
+		_ = f.Close()
+		t.Skip("a read-only file still opens for writing here")
+	}
+	err := CheckSettingsWritable(dir)
+	if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "the upload was not started") {
+		t.Fatalf("err = %v, want settings.json named and the upload not started", err)
+	}
+}

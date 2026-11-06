@@ -41,7 +41,8 @@ func UploadPath(sceneID string) string {
 // Upload sends plan as a new scene (sceneID empty) or as a new version of
 // sceneID, whose latest version before the upload was previousLatest. Once
 // the gateway accepts it, settings.json is written into the scene directory
-// and Upload waits for the new version to appear. Any error after the gateway
+// (a failure is only a warning) and Upload waits for the new version to
+// appear. Any error after the gateway
 // accepted the upload comes back with the Result filled in as far as it is
 // known, so callers can still report the scene id.
 func Upload(ctx context.Context, client *gateway.Client, plan *UploadPlan, sceneID string, previousLatest int, log *ui.Logger, progress *ui.Progress) (Result, error) {
@@ -64,7 +65,7 @@ func Upload(ctx context.Context, client *gateway.Client, plan *UploadPlan, scene
 		result.SceneID = id
 	}
 	if err := WriteSettings(plan.Local.Dir, plan.SettingsBytes); err != nil {
-		return result, fmt.Errorf("the gateway accepted the upload as scene %s, but settings.json could not be written to %s: %w",
+		log.Warn("The gateway accepted the upload as scene %s, but settings.json could not be written to %s: %v",
 			result.SceneID, plan.Local.Dir, err)
 	}
 	log.Info("Uploaded to scene %s; waiting for the new version to appear", result.SceneID)

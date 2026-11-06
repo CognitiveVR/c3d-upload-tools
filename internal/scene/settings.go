@@ -168,6 +168,29 @@ func marshalNoEscape(v any) ([]byte, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
+// CheckSettingsWritable confirms, without changing settings.json, that
+// WriteSettings can create a file in dir and that an existing settings.json
+// opens for writing.
+func CheckSettingsWritable(dir string) error {
+	probe, err := os.CreateTemp(dir, ".settings-*")
+	if err != nil {
+		return fmt.Errorf("cannot write %s into %s, so the upload was not started: %w", settingsFileName, dir, err)
+	}
+	_ = probe.Close()
+	if err := os.Remove(probe.Name()); err != nil {
+		return fmt.Errorf("cannot write %s into %s, so the upload was not started: %w", settingsFileName, dir, err)
+	}
+	path := filepath.Join(dir, settingsFileName)
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%s is not writable, so the upload was not started: %w", path, err)
+	}
+	return f.Close()
+}
+
 // WriteSettings writes data to dir/settings.json through a temporary file in
 // dir followed by a rename, and never leaves the temporary file behind.
 func WriteSettings(dir string, data []byte) error {

@@ -543,20 +543,42 @@ func makeReadOnly(t *testing.T, dir string) {
 	}
 }
 
-func TestSceneUploadSettingsWriteFailurePrintsTheNewSceneID(t *testing.T) {
-	startFake(t)
+func TestSceneUploadReadOnlyDirectoryExitsFourBeforeAnyRequest(t *testing.T) {
+	fake := startFake(t)
 	dir := sceneDir(t, "scene-glb")
 	makeReadOnly(t, dir)
 	got := runCommand(t, "scene", "upload", "--scene-dir", dir, "--scene-name", "S")
-	if got.code != 1 {
-		t.Fatalf("exit %d, want 1 (stderr %q)", got.code, got.stderr)
+	if got.code != 4 || got.stdout != "" {
+		t.Fatalf("exit %d, stdout %q, want 4 and nothing (stderr %q)", got.code, got.stdout, got.stderr)
 	}
-	id := strings.TrimSuffix(got.stdout, "\n")
-	if len(id) != 36 || got.stdout != id+"\n" {
-		t.Fatalf("stdout = %q, want the new scene id and a newline", got.stdout)
+	if !strings.Contains(got.stderr, dir) || !strings.Contains(got.stderr, "the upload was not started") {
+		t.Errorf("stderr = %q, want the directory named and the upload not started", got.stderr)
 	}
-	if !strings.Contains(got.stderr, "scene "+id) || !strings.Contains(got.stderr, "settings.json could not be written") {
-		t.Errorf("stderr = %q, want the scene id and settings.json named", got.stderr)
+	if n := len(fake.Requests()); n != 0 {
+		t.Errorf("fake received %d requests, want 0", n)
+	}
+}
+
+// A dry run never probes the directory for writing, so it works in a
+// read-only directory and leaves it unchanged.
+func TestSceneUploadDryRunInAReadOnlyDirectoryWritesNothing(t *testing.T) {
+	startFake(t)
+	dir := sceneDir(t, "scene-glb")
+	before, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	makeReadOnly(t, dir)
+	got := runCommand(t, "scene", "upload", "--scene-dir", dir, "--scene-name", "S", "--dry-run")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	after, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("directory has %d entries after the dry run, %d before", len(after), len(before))
 	}
 }
 

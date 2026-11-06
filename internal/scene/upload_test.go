@@ -172,22 +172,22 @@ func makeReadOnly(t *testing.T, dir string) {
 	}
 }
 
-func TestUploadSettingsWriteFailureKeepsTheNewSceneID(t *testing.T) {
+func TestUploadSettingsWriteFailureWarnsAndStillWaitsForTheVersion(t *testing.T) {
 	fastPolling(t)
 	fake := fakegateway.New(t)
 	plan := finalizedPlan(t, "scene-glb", "S")
 	makeReadOnly(t, plan.Local.Dir)
-	log, _ := testLogger()
+	log, logs := testLogger()
 
 	result, err := Upload(context.Background(), newClient(t, fake), plan, "", 0, log, nil)
-	if err == nil {
-		t.Fatal("Upload succeeded in a read-only directory")
+	if err != nil {
+		t.Fatalf("err = %v, want the upload reported as done", err)
 	}
-	if result.SceneID == "" || !result.Created {
-		t.Fatalf("result = %+v, want the new scene id", result)
+	if result.SceneID == "" || !result.Created || result.VersionNumber != 1 {
+		t.Fatalf("result = %+v, want the new scene and its version", result)
 	}
-	if msg := err.Error(); !strings.Contains(msg, result.SceneID) || !strings.Contains(msg, "settings.json could not be written") {
-		t.Errorf("err = %q, want the scene id and settings.json named", msg)
+	if msg := logs.String(); !strings.Contains(msg, "[WARN]") || !strings.Contains(msg, result.SceneID) || !strings.Contains(msg, "settings.json could not be written") {
+		t.Errorf("logs = %q, want a warning naming the scene id and settings.json", msg)
 	}
 	assertNoSettings(t, plan.Local.Dir)
 }

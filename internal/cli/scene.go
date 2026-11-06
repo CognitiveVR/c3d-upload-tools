@@ -110,6 +110,9 @@ func runSceneUpload(cmd *cobra.Command, rt *runtime) error {
 		return printSceneDryRun(rt, plan, scene.UploadPath(sceneID))
 	}
 
+	if err := scene.CheckSettingsWritable(local.Dir); err != nil {
+		return planFailure(rt, err)
+	}
 	ctx := cmd.Context()
 	if err := preflight(ctx, rt); err != nil {
 		return err
