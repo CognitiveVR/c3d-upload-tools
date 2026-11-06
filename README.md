@@ -11,6 +11,35 @@ Upload 3D scenes and dynamic objects to the Cognitive3D platform with ease. Cros
 - **Developer-Friendly**: Progress tracking, detailed help, dry-run mode, and comprehensive error guidance
 - **Production-Ready**: Enterprise-grade PowerShell module with type safety and comprehensive validation
 
+## 2.0 preview
+
+Version 2.0 replaces both the bash scripts and the PowerShell module with a single Go binary, `cognitive3d-cli-upload`. The 1.x tools keep working until then, and everything below this section describes them.
+
+Planned commands (only `version` exists today):
+
+- `auth verify`: preflight the developer API key and report project, organization and key expiry.
+- `scene upload`: create a scene or a new version from a directory.
+- `scene screenshot`: replace the screenshot of an existing version.
+- `scene list`: list the key's scenes with their versions.
+- `scene show`: show one scene with its versions, latest first.
+- `object upload`: upload one dynamic object's files and merge it into the local manifest file.
+- `object manifest upload`: upload the local manifest file.
+- `object list`: list the objects of the latest (or a given) version.
+- `ego upload`: upload or replace one egocentric model slot.
+- `ego list`: show the slots of a version.
+- `ego delete`: remove a slot, reverting session replay to the bundled model.
+- `version`: print version, commit and build date.
+- `completion`: shell completion for bash, zsh, fish and PowerShell.
+
+Build from source today with Go 1.25 or newer:
+
+```bash
+make build
+./cognitive3d-cli-upload version
+```
+
+The mapping from 1.x invocations to the new commands is outlined in [docs/migration-2.0.md](docs/migration-2.0.md).
+
 ## Quick Start
 
 ### 1. Get Your API Key

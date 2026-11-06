@@ -10,15 +10,18 @@
         "cobra",
         "ddev",
         "dependabot",
+        "fakegateway",
         "globoff",
         "gltf",
         "gofmt",
         "golangci",
         "goreleaser",
         "govulncheck",
+        "httptest",
         "Nopper",
         "Pavlovic",
         "pflag",
+        "testdata",
         "visualstudio"
     ],
     "ignorePaths": [

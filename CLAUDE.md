@@ -2,6 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Go CLI (2.0)
+
+The bash and PowerShell sections below describe the 1.x tools. The Go CLI `cognitive3d-cli-upload` replaces both in 2.0; only the `version` command exists so far.
+
+- `make build`: build the binary for the current platform
+- `make test`: run the tests with the race detector
+- `make lint`: run golangci-lint
+
+Package map (entries marked planned are not present yet):
+
+```text
+main.go               wires cli.Execute(); maps errors to exit codes
+internal/cli/         cobra commands; one file per noun (root, auth, scene, object, ego, version)
+internal/version/     build info and the sdkVersion string
+internal/config/      planned: settings, precedence resolution, environments, YAML file
+internal/dotenv/      planned: bash-compatible .env parser
+internal/gateway/     planned: client, request builders, error mapping, retry for GET, multipart streaming
+internal/model/       planned: model-file rule (glb vs gltf+bin), reserved converter names, glTF/GLB checks
+internal/scene/       planned: scene directory plan, settings.json, upload orchestration, version lookup
+internal/object/      planned: object directory plan, upload, manifest file merge
+internal/manifest/    planned: manifest types, validation, list-to-manifest reshape
+internal/ego/         planned: ego file plan, upload, list, delete, wait
+internal/ui/          planned: stderr logger (text and JSON), progress, TTY and NO_COLOR detection
+internal/fakegateway/ planned: httptest server implementing the gateway contract for tests
+testdata/             planned: small fixtures
+scripts/              planned: sign-macos.sh, smoke-dev.sh
+docs/                 migration-2.0.md; release-checklist.md is planned
+```
+
 ## Commands
 
 ### Testing
