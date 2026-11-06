@@ -317,3 +317,37 @@ func TestRootWithoutSubcommandNeverReadsConfiguration(t *testing.T) {
 		t.Errorf("exit %d, stderr %q, want a plain unknown-command usage error", got.code, got.stderr)
 	}
 }
+
+func TestHelpCompletionAndGroupsNeverReadConfiguration(t *testing.T) {
+	isolate(t)
+	dir := filepath.Join(os.Getenv("HOME"), ".cognitive3d")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "upload.yaml"), []byte("production: [unclosed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("C3D_ENV", "staging")
+	for _, args := range [][]string{
+		{"help", "scene"}, {"help"}, {"scene"}, {"object"}, {"ego"}, {"auth"}, {"object", "manifest"},
+		{"completion", "bash"}, {"__complete", "scene", ""}, {"__completeNoDesc", "scene", ""},
+	} {
+		if got := runCommand(t, args...); got.code != 0 {
+			t.Errorf("%v: exit %d, stderr %q, want 0", args, got.code, got.stderr)
+		}
+	}
+	if got := runCommand(t, "auth", "verify"); got.code != 4 {
+		t.Errorf("auth verify: exit %d, want 4 for the bad configuration", got.code)
+	}
+}
+
+func TestNegativeTimeoutIsAUsageError(t *testing.T) {
+	fake := startFake(t)
+	got := runCommand(t, "auth", "verify", "--timeout", "-5s")
+	if got.code != 4 || !strings.Contains(got.stderr, "--timeout") {
+		t.Errorf("exit %d, stderr %q, want 4 naming --timeout", got.code, got.stderr)
+	}
+	if n := len(fake.Requests()); n != 0 {
+		t.Errorf("sent %d requests, want none", n)
+	}
+}

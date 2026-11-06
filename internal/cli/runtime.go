@@ -28,12 +28,15 @@ type runtime struct {
 }
 
 func (rt *runtime) prepare(cmd *cobra.Command) error {
-	if cmd == cmd.Root() || cmd.Annotations[skipRuntimeAnnotation] != "" {
+	if needsNoRuntime(cmd) {
 		return nil
 	}
 	flags, err := flagValues(cmd)
 	if err != nil {
 		return err
+	}
+	if flags.Timeout < 0 {
+		return usageErrorf("invalid --timeout %s: it must not be negative", flags.Timeout)
 	}
 	dotenvValues, err := dotenv.LoadCurrentDirectory()
 	if err != nil {
@@ -63,6 +66,22 @@ func (rt *runtime) prepare(cmd *cobra.Command) error {
 		cmd.SetContext(ctx)
 	}
 	return nil
+}
+
+// needsNoRuntime reports commands that only print help, completions or the
+// version: groups with subcommands, cobra's help and completion commands,
+// and anything carrying skipRuntimeAnnotation.
+func needsNoRuntime(cmd *cobra.Command) bool {
+	if cmd.HasSubCommands() || cmd.Annotations[skipRuntimeAnnotation] != "" {
+		return true
+	}
+	for c := cmd; c != nil; c = c.Parent() {
+		switch c.Name() {
+		case "help", "completion", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
+			return true
+		}
+	}
+	return false
 }
 
 func (rt *runtime) release() {
