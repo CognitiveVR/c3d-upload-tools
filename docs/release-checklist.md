@@ -3,13 +3,14 @@
 ## Before tagging
 
 1. Move the `CHANGELOG.md` entries from Unreleased to a new `X.Y.Z` section with today's date.
-2. Run the live smoke test against dev on macOS and on Windows, and keep the outputs:
+2. Run the live smoke test against dev on macOS and on Windows, and once against prod on macOS, and keep the outputs:
 
    ```bash
-   C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<item>/credential')" scripts/smoke-dev.sh
+   C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<dev item>/credential')" scripts/smoke.sh
+   C3D_UPLOAD_LIVE=prod C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<prod item>/credential')" scripts/smoke.sh --env prod
    ```
 
-   Take the key from a command substitution like this, or from a variable already exported in the shell, never as a literal on the command line, so it stays out of shell history. On Windows run it from Git Bash with the Windows binary: `COGNITIVE3D_CLI=./cognitive3d-cli-upload.exe`. It leaves the scene it creates on dev for inspection.
+   Take the key from a command substitution like this, or from a variable already exported in the shell, never as a literal on the command line, so it stays out of shell history. On Windows run it from Git Bash with the Windows binary: `COGNITIVE3D_CLI=./cognitive3d-cli-upload.exe`. It leaves the scene it creates in that environment for inspection; the prod key must belong to a test project.
 3. Open the `develop` to `main` pull request with both smoke outputs attached. CI must be green.
 4. Merge the pull request.
 

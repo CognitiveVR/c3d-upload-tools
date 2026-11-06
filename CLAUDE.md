@@ -37,8 +37,8 @@ internal/ego/         ego file plan, client calls, wait for optimized
 internal/ui/          stderr logger (text and JSON), progress, terminal detection, printable-text escaping
 internal/version/     build info and the sdkVersion string
 internal/fakegateway/ in-process httptest gateway for tests
-testdata/             small fixtures: scene-glb, scene-gltf, object-gltf, ego-head
-scripts/              sign-macos.sh, smoke-dev.sh (live smoke test, needs a dev key)
+testdata/             small fixtures: scene-glb, scene-gltf, object-gltf, ego-head, ego-controller-glb
+scripts/              sign-macos.sh, smoke.sh (live smoke test against dev or prod, needs a key for that environment)
 docs/                 migration-2.0.md, release-checklist.md
 ```
 

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/cognitivevr/c3d-upload-tools/v2/internal/model"
 )
 
 func copyFixture(t *testing.T, name string) string {
@@ -105,6 +107,28 @@ func TestPlanGLTFFixture(t *testing.T) {
 	}
 	if p.TotalBytes != total || total == 0 {
 		t.Fatalf("TotalBytes = %d; parts sum to %d", p.TotalBytes, total)
+	}
+	if len(p.Warnings) != 0 {
+		t.Fatalf("warnings = %v", p.Warnings)
+	}
+}
+
+func TestPlanGLBFixture(t *testing.T) {
+	dir := copyFixture(t, "ego-controller-glb")
+	p, err := Plan(dir, "controller_left")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"file:controller.glb:application/octet-stream",
+		"file:controller_albedo.png:application/octet-stream",
+		"file:ego.json:application/json",
+	}
+	if got := partNames(p); !slices.Equal(got, want) {
+		t.Fatalf("parts = %v; want %v", got, want)
+	}
+	if p.Files.Kind != model.GLB || !p.HasManifest || !slices.Equal(p.Images, []string{"controller_albedo.png"}) {
+		t.Fatalf("plan = %+v", p)
 	}
 	if len(p.Warnings) != 0 {
 		t.Fatalf("warnings = %v", p.Warnings)

@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Live smoke test of cognitive3d-cli-upload against the dev gateway.
-# Usage: C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<item>/credential')" scripts/smoke-dev.sh
-#        scripts/smoke-dev.sh --dry-run-only   (no key, no network)
+# Live smoke test of cognitive3d-cli-upload against the dev or prod gateway.
+# Usage: C3D_UPLOAD_LIVE=1 C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<item>/credential')" scripts/smoke.sh
+#        C3D_UPLOAD_LIVE=prod C3D_DEVELOPER_API_KEY="$(op read 'op://<vault>/<item>/credential')" scripts/smoke.sh --env prod
+#        scripts/smoke.sh --dry-run-only   (no key, no network)
 # Take the key from a command substitution or an exported variable, never a
 # literal on the command line.
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/smoke-dev.sh [--dry-run-only]
+Usage: scripts/smoke.sh [--env dev|prod] [--dry-run-only]
 
-Runs every command family against the dev gateway and leaves the scene it
-creates in place. Requires C3D_DEVELOPER_API_KEY and C3D_UPLOAD_LIVE=1.
+Runs every command family against the chosen gateway (default dev) and
+leaves the scene it creates in place. Requires C3D_DEVELOPER_API_KEY for that
+environment, plus C3D_UPLOAD_LIVE=1 for dev or C3D_UPLOAD_LIVE=prod for prod.
 --dry-run-only runs only the upload steps with --dry-run and needs neither.
 COGNITIVE3D_CLI selects the binary (default ./cognitive3d-cli-upload, built
 with make build when absent).
@@ -19,32 +21,46 @@ USAGE
 }
 
 dry_run_only=0
-case "${1:-}" in
-  "") ;;
-  --dry-run-only) dry_run_only=1 ;;
-  -h | --help) usage; exit 0 ;;
-  *) usage >&2; exit 2 ;;
+env=dev
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run-only) dry_run_only=1 ;;
+    --env)
+      [ $# -ge 2 ] || { usage >&2; exit 2; }
+      env=$2
+      shift
+      ;;
+    --env=*) env=${1#--env=} ;;
+    -h | --help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+case "$env" in
+  dev) live_token=1 ;;
+  prod) live_token=prod ;;
+  *) echo "smoke: --env must be dev or prod, not $env" >&2; exit 2 ;;
 esac
 
 if [ "$dry_run_only" -eq 0 ]; then
   missing=""
   [ -n "${C3D_DEVELOPER_API_KEY:-}" ] || missing="$missing C3D_DEVELOPER_API_KEY"
-  [ "${C3D_UPLOAD_LIVE:-}" = "1" ] || missing="$missing C3D_UPLOAD_LIVE=1"
+  [ "${C3D_UPLOAD_LIVE:-}" = "$live_token" ] || missing="$missing C3D_UPLOAD_LIVE=$live_token"
   if [ -n "$missing" ]; then
-    echo "smoke-dev: refusing to run, missing:$missing" >&2
-    echo "smoke-dev: use --dry-run-only to test the script without a gateway" >&2
+    echo "smoke: refusing to run against $env, missing:$missing" >&2
+    echo "smoke: use --dry-run-only to test the script without a gateway" >&2
     exit 2
   fi
 fi
 
-command -v jq >/dev/null 2>&1 || { echo "smoke-dev: jq is required" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "smoke: jq is required" >&2; exit 2; }
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
 CLI=${COGNITIVE3D_CLI:-./cognitive3d-cli-upload}
 if [ ! -x "$CLI" ]; then
   if [ -n "${COGNITIVE3D_CLI:-}" ]; then
-    echo "smoke-dev: COGNITIVE3D_CLI=$CLI is not an executable file" >&2
+    echo "smoke: COGNITIVE3D_CLI=$CLI is not an executable file" >&2
     exit 2
   fi
   make build >&2
@@ -53,7 +69,7 @@ case "$CLI" in
   /*) ;;
   *) CLI="$repo_root/${CLI#./}" ;;
 esac
-[ -x "$CLI" ] || { echo "smoke-dev: binary $CLI not found" >&2; exit 2; }
+[ -x "$CLI" ] || { echo "smoke: binary $CLI not found" >&2; exit 2; }
 
 assets="$repo_root"
 work=$(mktemp -d)
@@ -66,7 +82,8 @@ if [ "$dry_run_only" -eq 1 ]; then
     "scene upload (SciFiHelmet as a new version)"
     "object upload cube"
     "object upload lantern"
-    "ego upload head"
+    "ego upload head (gltf + bin)"
+    "ego upload controller_left (glb)"
   )
   scene_id="00000000-0000-4000-8000-000000000000"
 else
@@ -79,9 +96,11 @@ else
     "edit manifest"
     "object manifest upload"
     "object list --write-manifest"
-    "ego upload head"
+    "ego upload head (gltf + bin)"
+    "ego upload controller_left (glb)"
     "ego list"
     "ego delete head"
+    "ego delete controller_left"
   )
   scene_id=""
 fi
@@ -103,10 +122,10 @@ fail() {
   exit 1
 }
 
-# run_cli <args...>: runs the CLI against dev with JSON output; OUT holds stdout.
+# run_cli <args...>: runs the CLI against the chosen environment with JSON output; OUT holds stdout.
 run_cli() {
   : >"$errfile"
-  if ! OUT=$("$CLI" "$@" --env dev --format json 2>"$errfile"); then
+  if ! OUT=$("$CLI" "$@" --env "$env" --format json 2>"$errfile"); then
     fail "exit code was not 0"
   fi
 }
@@ -157,7 +176,9 @@ if [ "$dry_run_only" -eq 1 ]; then
   check_dry_run
   run_cli ego upload --scene-id "$scene_id" --ego-dir "$assets/testdata/ego-head" --slot head --dry-run
   check_dry_run
-  echo "smoke-dev: dry-run-only finished; nothing was sent"
+  run_cli ego upload --scene-id "$scene_id" --ego-dir "$assets/testdata/ego-controller-glb" --slot controller_left --dry-run
+  check_dry_run
+  echo "smoke: dry-run-only finished; nothing was sent"
   exit 0
 fi
 
@@ -212,14 +233,25 @@ files=$(field .fileCount)
 optimized=$(printf '%s' "$OUT" | jq -r '.optimized')
 done_step "slot=$slot files=$files optimized=$optimized"
 
+run_cli ego upload --scene-id "$scene_id" --ego-dir "$assets/testdata/ego-controller-glb" --slot controller_left --wait
+slot=$(field .slot)
+files=$(field .fileCount)
+optimized=$(printf '%s' "$OUT" | jq -r '.optimized')
+done_step "slot=$slot files=$files optimized=$optimized"
+
 run_cli ego list --scene-id "$scene_id"
 printf '%s' "$OUT" | jq -e '.egos | map(select(.slot == "head")) | length == 1' >/dev/null || fail "head slot missing from: $OUT"
-done_step "head slot present"
+printf '%s' "$OUT" | jq -e '.egos | map(select(.slot == "controller_left")) | length == 1' >/dev/null || fail "controller_left slot missing from: $OUT"
+done_step "head and controller_left slots present"
 
 run_cli ego delete --scene-id "$scene_id" --slot head --yes
 [ "$(printf '%s' "$OUT" | jq -r '.deleted')" = "true" ] || fail "slot not deleted: $OUT"
 done_step "deleted=true"
 
+run_cli ego delete --scene-id "$scene_id" --slot controller_left --yes
+[ "$(printf '%s' "$OUT" | jq -r '.deleted')" = "true" ] || fail "slot not deleted: $OUT"
+done_step "deleted=true"
+
 echo
-echo "smoke-dev: all ${#steps[@]} steps passed"
-echo "smoke-dev: scene $scene_id (\"$scene_name\") on dev is left in place for inspection in the dashboard"
+echo "smoke: all ${#steps[@]} steps passed on $env"
+echo "smoke: scene $scene_id (\"$scene_name\") on $env is left in place for inspection in the dashboard"
