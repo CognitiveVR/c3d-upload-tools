@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -78,15 +76,15 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	manifestFile, _ := flags.GetString(manifestFlag)
 	uploadManifest, _ := flags.GetBool(uploadManifestFlag)
 	dryRun, _ := flags.GetBool(dryRunFlag)
-	wanted, _ := flags.GetInt(versionFlag)
-	versionGiven := flags.Changed(versionFlag)
 	switch {
 	case dir == "":
 		return usageErrorf("--%s is required", objectDirFlag)
 	case mesh == "":
 		return usageErrorf("--%s is required", objectFilenameFlag)
-	case versionGiven && wanted < 1:
-		return usageErrorf("invalid --%s %d: want a version number of 1 or more", versionFlag, wanted)
+	}
+	wanted, versionGiven, err := versionFlagValue(flags)
+	if err != nil {
+		return err
 	}
 	sceneID, err := requireSceneID(rt)
 	if err != nil {
@@ -224,25 +222,11 @@ type objectDryRun struct {
 
 func printObjectDryRun(rt *runtime, plan *object.UploadPlan, sceneID, id string, source object.IDSource, manifestFile, version string) error {
 	request := objectDryRun{
-		dryRunRequest: dryRunRequest{
-			DryRun: true, Method: http.MethodPost, Path: object.UploadPath(sceneID, plan.Mesh) + "?version=" + version,
-			Authorization: "APIKEY:DEVELOPER " + redactKey(rt.settings.APIKey),
-		},
-		ObjectID: id, IDSource: idSourceCode(source), ManifestPath: manifestFile,
+		dryRunRequest: newDryRunRequest(rt, http.MethodPost, object.UploadPath(sceneID, plan.Mesh)+"?version="+version, plan.Parts),
+		ObjectID:      id,
+		IDSource:      idSourceCode(source),
+		ManifestPath:  manifestFile,
 	}
-	for _, p := range plan.Parts {
-		request.Parts = append(request.Parts, dryRunPart{Field: p.Field, Filename: p.Filename, Bytes: p.Size})
-	}
-	out := rt.streams.Stdout
-	if rt.settings.Format == formatJSON {
-		return json.NewEncoder(out).Encode(request)
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\nAuthorization: %s\n", request.Method, request.Path, request.Authorization)
-	for _, p := range request.Parts {
-		fmt.Fprintf(&b, "%s  %s  %d bytes\n", p.Field, p.Filename, p.Bytes)
-	}
-	fmt.Fprintf(&b, "Object ID: %s (%s)\nManifest: %s\n", id, describeIDSource(source, manifestFile), manifestFile)
-	_, err := io.WriteString(out, b.String())
-	return err
+	extra := fmt.Sprintf("Object ID: %s (%s)\nManifest: %s\n", id, describeIDSource(source, manifestFile), manifestFile)
+	return printDryRun(rt, request.dryRunRequest, request, extra)
 }

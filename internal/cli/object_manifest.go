@@ -3,9 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -51,10 +49,9 @@ func runObjectManifestUpload(cmd *cobra.Command, rt *runtime) error {
 	flags := cmd.Flags()
 	file, _ := flags.GetString(manifestFlag)
 	dryRun, _ := flags.GetBool(dryRunFlag)
-	wanted, _ := flags.GetInt(versionFlag)
-	versionGiven := flags.Changed(versionFlag)
-	if versionGiven && wanted < 1 {
-		return usageErrorf("invalid --%s %d: want a version number of 1 or more", versionFlag, wanted)
+	wanted, versionGiven, err := versionFlagValue(flags)
+	if err != nil {
+		return err
 	}
 	sceneID, err := requireSceneID(rt)
 	if err != nil {
@@ -123,18 +120,9 @@ type manifestDryRun struct {
 
 func printManifestDryRun(rt *runtime, sceneID, version, file string, count int) error {
 	request := manifestDryRun{
-		dryRunRequest: dryRunRequest{
-			DryRun: true, Method: http.MethodPost, Path: object.ManifestPath(sceneID) + "?version=" + version,
-			Authorization: "APIKEY:DEVELOPER " + redactKey(rt.settings.APIKey),
-		},
-		ManifestPath: file, ObjectCount: count,
+		dryRunRequest: newDryRunRequest(rt, http.MethodPost, object.ManifestPath(sceneID)+"?version="+version, nil),
+		ManifestPath:  file,
+		ObjectCount:   count,
 	}
-	out := rt.streams.Stdout
-	if rt.settings.Format == formatJSON {
-		return json.NewEncoder(out).Encode(request)
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\nAuthorization: %s\nObjects: %d\nManifest: %s\n", request.Method, request.Path, request.Authorization, count, file)
-	_, err := io.WriteString(out, b.String())
-	return err
+	return printDryRun(rt, request.dryRunRequest, request, fmt.Sprintf("Objects: %d\nManifest: %s\n", count, file))
 }

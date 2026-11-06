@@ -187,8 +187,8 @@ func TestEgoUploadJSONPrintsOneObjectAfterTheWait(t *testing.T) {
 	if !reflect.DeepEqual(result, want) {
 		t.Errorf("result = %v, want %v", result, want)
 	}
-	if n := egoPolls(fake); n < 3 {
-		t.Errorf("%d polls before the result, want at least 3", n)
+	if n := egoPolls(fake); n != 3 {
+		t.Errorf("%d polls, want 3: the result follows the poll that saw the flip", n)
 	}
 }
 
@@ -210,6 +210,10 @@ func TestEgoUploadJSONOptimizedIsNullWithoutWaitAndFalseOnTimeout(t *testing.T) 
 		result := decodeOne(t, got.stdout)
 		if value, present := result["optimized"]; !present || value != tc.want {
 			t.Errorf("%v: optimized = %v (present %v), want %v", tc.args, value, present, tc.want)
+		}
+		warning := `{"level":"warn","message":"` + optimizationPendingMessage(10*time.Millisecond) + `"}`
+		if warned := strings.Contains(got.stderr, warning); warned != (tc.want == false) {
+			t.Errorf("%v: stderr = %q, want the pending warning only after a wait", tc.args, got.stderr)
 		}
 	}
 }
@@ -320,5 +324,19 @@ func TestEgoUploadCustomSlotWarnsAndUploads(t *testing.T) {
 	}
 	if sent := postsTo(fake); len(sent) != 1 || sent[0].Path != "/v0/scenes/"+egoSceneID+"/egos/left_foot" {
 		t.Errorf("POSTs = %+v", sent)
+	}
+}
+
+func TestEgoUploadVersionFlagToAnUnknownSceneExitsThree(t *testing.T) {
+	fake := startFake(t)
+	got := egoUpload(t, "head", "--version", "1")
+	if got.code != 3 || got.stdout != "" || !strings.Contains(got.stderr, "Scene "+egoSceneID+" was not found in the project this key belongs to") {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if n := getsTo(fake, "/v0/scenes/"+egoSceneID); n != 0 {
+		t.Errorf("%d scene GETs, want 0", n)
+	}
+	if sent := postsTo(fake); len(sent) != 1 {
+		t.Errorf("POSTs = %+v, want the one rejected POST", sent)
 	}
 }

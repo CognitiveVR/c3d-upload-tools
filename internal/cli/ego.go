@@ -78,15 +78,15 @@ func runEgoUpload(cmd *cobra.Command, rt *runtime) error {
 	dir, _ := flags.GetString(egoDirFlag)
 	wait, _ := flags.GetBool(waitFlag)
 	dryRun, _ := flags.GetBool(dryRunFlag)
-	wanted, _ := flags.GetInt(versionFlag)
-	versionGiven := flags.Changed(versionFlag)
 	switch {
 	case slot == "":
 		return usageErrorf("--%s is required", slotFlag)
 	case dir == "":
 		return usageErrorf("--%s is required", egoDirFlag)
-	case versionGiven && wanted < 1:
-		return usageErrorf("invalid --%s %d: want a version number of 1 or more", versionFlag, wanted)
+	}
+	wanted, versionGiven, err := versionFlagValue(flags)
+	if err != nil {
+		return err
 	}
 	if err := ego.ValidateSlot(slot); err != nil {
 		return &usageError{message: err.Error()}
@@ -179,26 +179,10 @@ type egoDryRun struct {
 
 func printEgoDryRun(rt *runtime, plan *ego.UploadPlan, sceneID, version string) error {
 	request := egoDryRun{
-		dryRunRequest: dryRunRequest{
-			DryRun: true, Method: http.MethodPost, Path: ego.SlotPath(sceneID, plan.Slot) + "?version=" + version,
-			Authorization: "APIKEY:DEVELOPER " + redactKey(rt.settings.APIKey),
-		},
-		Slot: plan.Slot,
+		dryRunRequest: newDryRunRequest(rt, http.MethodPost, ego.SlotPath(sceneID, plan.Slot)+"?version="+version, plan.Parts),
+		Slot:          plan.Slot,
 	}
-	for _, p := range plan.Parts {
-		request.Parts = append(request.Parts, dryRunPart{Field: p.Field, Filename: p.Filename, Bytes: p.Size})
-	}
-	out := rt.streams.Stdout
-	if rt.settings.Format == formatJSON {
-		return json.NewEncoder(out).Encode(request)
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\nAuthorization: %s\n", request.Method, request.Path, request.Authorization)
-	for _, p := range request.Parts {
-		fmt.Fprintf(&b, "%s  %s  %d bytes\n", p.Field, p.Filename, p.Bytes)
-	}
-	_, err := io.WriteString(out, b.String())
-	return err
+	return printDryRun(rt, request.dryRunRequest, request, "")
 }
 
 func newEgoListCmd(rt *runtime) *cobra.Command {
@@ -217,11 +201,9 @@ func newEgoListCmd(rt *runtime) *cobra.Command {
 }
 
 func runEgoList(cmd *cobra.Command, rt *runtime) error {
-	flags := cmd.Flags()
-	wanted, _ := flags.GetInt(versionFlag)
-	versionGiven := flags.Changed(versionFlag)
-	if versionGiven && wanted < 1 {
-		return usageErrorf("invalid --%s %d: want a version number of 1 or more", versionFlag, wanted)
+	wanted, versionGiven, err := versionFlagValue(cmd.Flags())
+	if err != nil {
+		return err
 	}
 	sceneID, err := requireSceneID(rt)
 	if err != nil {
@@ -314,13 +296,12 @@ func runEgoDelete(cmd *cobra.Command, rt *runtime) error {
 	flags := cmd.Flags()
 	slot, _ := flags.GetString(slotFlag)
 	yes, _ := flags.GetBool(yesFlag)
-	wanted, _ := flags.GetInt(versionFlag)
-	versionGiven := flags.Changed(versionFlag)
-	switch {
-	case slot == "":
+	if slot == "" {
 		return usageErrorf("--%s is required", slotFlag)
-	case versionGiven && wanted < 1:
-		return usageErrorf("invalid --%s %d: want a version number of 1 or more", versionFlag, wanted)
+	}
+	wanted, versionGiven, err := versionFlagValue(flags)
+	if err != nil {
+		return err
 	}
 	if err := ego.ValidateSlot(slot); err != nil {
 		return &usageError{message: err.Error()}

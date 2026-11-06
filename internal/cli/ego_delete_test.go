@@ -155,3 +155,13 @@ func TestEgoDeleteRejectsBadInputBeforeAnyRequest(t *testing.T) {
 		t.Errorf("%d requests, want 0", n)
 	}
 }
+
+func TestEgoDeleteWithAnExpiredKeyExitsTwoBeforeAnySceneRequest(t *testing.T) {
+	fake := startFake(t)
+	egoScene(fake)
+	t.Setenv("C3D_DEVELOPER_API_KEY", fake.ExpiredKey())
+	got := runCommand(t, "ego", "delete", "--slot", "head", "--scene-id", egoSceneID, "--yes")
+	if got.code != 2 || got.stdout != "" || sceneRequests(fake) != 0 {
+		t.Errorf("exit %d, stdout %q, scene requests %d, stderr %q", got.code, got.stdout, sceneRequests(fake), got.stderr)
+	}
+}

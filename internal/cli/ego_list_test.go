@@ -136,3 +136,13 @@ func TestEgoListReplacesControlCharactersFromTheGateway(t *testing.T) {
 		t.Errorf("stdout = %q", got.stdout)
 	}
 }
+
+func TestEgoListWithAnExpiredKeyExitsTwoBeforeAnySceneRequest(t *testing.T) {
+	fake := startFake(t)
+	egoScene(fake)
+	t.Setenv("C3D_DEVELOPER_API_KEY", fake.ExpiredKey())
+	got := runCommand(t, "ego", "list", "--scene-id", egoSceneID)
+	if got.code != 2 || got.stdout != "" || sceneRequests(fake) != 0 {
+		t.Errorf("exit %d, stdout %q, scene requests %d, stderr %q", got.code, got.stdout, sceneRequests(fake), got.stderr)
+	}
+}

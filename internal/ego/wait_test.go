@@ -65,3 +65,14 @@ func TestWaitOptimizedReportsAFailedPoll(t *testing.T) {
 		t.Fatalf("WaitOptimized = %v, %v; want false and the gateway error", optimized, err)
 	}
 }
+
+func TestWaitOptimizedNeverPollsFasterThanAMillisecond(t *testing.T) {
+	fake, client := egoFake(t)
+	uploadHead(t, client, 1)
+	if optimized, err := WaitOptimized(context.Background(), client, egoSceneID, "head", 1, 0, 20*time.Millisecond, nil); optimized || err != nil {
+		t.Fatalf("WaitOptimized = %v, %v; want false, nil", optimized, err)
+	}
+	if n := len(fake.Requests()) - 1; n > 21 {
+		t.Errorf("%d polls in 20 milliseconds with a zero interval, want at most 21", n)
+	}
+}

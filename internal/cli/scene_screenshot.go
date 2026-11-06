@@ -39,9 +39,9 @@ func runSceneScreenshot(cmd *cobra.Command, rt *runtime) error {
 	if file == "" {
 		return usageErrorf("--%s is required", fileFlag)
 	}
-	wanted, _ := flags.GetInt(versionFlag)
-	if flags.Changed(versionFlag) && wanted < 1 {
-		return usageErrorf("invalid --%s %d: want a version number of 1 or more", versionFlag, wanted)
+	wanted, versionGiven, err := versionFlagValue(flags)
+	if err != nil {
+		return err
 	}
 	sceneID, err := requireSceneID(rt)
 	if err != nil {
@@ -62,7 +62,7 @@ func runSceneScreenshot(cmd *cobra.Command, rt *runtime) error {
 		return err
 	}
 	var chosen scene.Version
-	if flags.Changed(versionFlag) {
+	if versionGiven {
 		var ok bool
 		if chosen, ok = scene.VersionByNumber(info, wanted); !ok {
 			return &codedError{code: exitNotFound, kind: "version_not_found", message: unknownVersionMessage(info, sceneID, wanted)}

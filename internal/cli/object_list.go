@@ -37,11 +37,11 @@ func newObjectListCmd(rt *runtime) *cobra.Command {
 
 func runObjectList(cmd *cobra.Command, rt *runtime) error {
 	flags := cmd.Flags()
-	wanted, _ := flags.GetInt(versionFlag)
 	writeManifest, _ := flags.GetBool(writeManifestFlag)
 	writeList, _ := flags.GetBool(writeListFlag)
-	if flags.Changed(versionFlag) && wanted < 1 {
-		return usageErrorf("invalid --%s %d: want a version number of 1 or more", versionFlag, wanted)
+	wanted, versionGiven, err := versionFlagValue(flags)
+	if err != nil {
+		return err
 	}
 	sceneID, err := requireSceneID(rt)
 	if err != nil {
@@ -52,7 +52,7 @@ func runObjectList(cmd *cobra.Command, rt *runtime) error {
 	if err := preflight(ctx, rt); err != nil {
 		return err
 	}
-	chosen, err := chooseVersion(ctx, rt, sceneID, wanted, flags.Changed(versionFlag))
+	chosen, err := chooseVersion(ctx, rt, sceneID, wanted, versionGiven)
 	if err != nil {
 		return err
 	}
