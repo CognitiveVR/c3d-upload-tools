@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -322,9 +323,15 @@ func runEgoDelete(cmd *cobra.Command, rt *runtime) error {
 	if err != nil {
 		return err
 	}
-	if !yes && !confirm(rt.streams, fmt.Sprintf("Delete ego slot %q from scene %s version %d? [y/N] ", slot, sceneID, chosen.Number)) {
-		_, err := io.WriteString(rt.streams.Stderr, "Aborted.\n")
-		return err
+	if !yes {
+		ok, err := confirm(ctx, rt.streams, fmt.Sprintf("Delete ego slot %q from scene %s version %d? [y/N] ", slot, sceneID, chosen.Number))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			_, err := io.WriteString(rt.streams.Stderr, "Aborted.\n")
+			return err
+		}
 	}
 
 	deleted, err := ego.Delete(ctx, rt.client(), sceneID, slot, chosen.Number)
@@ -345,15 +352,26 @@ func runEgoDelete(cmd *cobra.Command, rt *runtime) error {
 }
 
 // confirm writes prompt on stderr and reports whether the next line of stdin
-// is y or yes, in any case.
-func confirm(streams IO, prompt string) bool {
+// is y or yes, in any case. Once ctx is done it returns ctx's error without
+// waiting for the line.
+func confirm(ctx context.Context, streams IO, prompt string) (bool, error) {
 	if _, err := io.WriteString(streams.Stderr, prompt); err != nil || streams.Stdin == nil {
-		return false
+		return false, nil
 	}
-	line, _ := bufio.NewReader(streams.Stdin).ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return true
+	lines := make(chan string, 1)
+	go func() {
+		line, _ := bufio.NewReader(streams.Stdin).ReadString('\n')
+		lines <- line
+	}()
+	select {
+	case <-ctx.Done():
+		_, _ = io.WriteString(streams.Stderr, "\n")
+		return false, ctx.Err()
+	case line := <-lines:
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "y", "yes":
+			return true, nil
+		}
+		return false, nil
 	}
-	return false
 }

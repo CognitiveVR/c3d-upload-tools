@@ -3,10 +3,13 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
 )
@@ -163,5 +166,37 @@ func TestEgoDeleteWithAnExpiredKeyExitsTwoBeforeAnySceneRequest(t *testing.T) {
 	got := runCommand(t, "ego", "delete", "--slot", "head", "--scene-id", egoSceneID, "--yes")
 	if got.code != 2 || got.stdout != "" || sceneRequests(fake) != 0 {
 		t.Errorf("exit %d, stdout %q, scene requests %d, stderr %q", got.code, got.stdout, sceneRequests(fake), got.stderr)
+	}
+}
+
+type blockingReader struct{ release chan struct{} }
+
+func (r blockingReader) Read([]byte) (int, error) {
+	<-r.release
+	return 0, io.EOF
+}
+
+func TestConfirmReturnsWhenTheContextIsCancelled(t *testing.T) {
+	stdin := blockingReader{release: make(chan struct{})}
+	t.Cleanup(func() { close(stdin.release) })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stderr bytes.Buffer
+	type answer struct {
+		ok  bool
+		err error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		ok, err := confirm(ctx, IO{Stdin: stdin, Stderr: &stderr}, "Delete? [y/N] ")
+		done <- answer{ok, err}
+	}()
+	select {
+	case got := <-done:
+		if got.ok || !errors.Is(got.err, context.Canceled) {
+			t.Errorf("confirm = %v, %v; want false and context.Canceled", got.ok, got.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("confirm still blocked on stdin after the context was cancelled")
 	}
 }
