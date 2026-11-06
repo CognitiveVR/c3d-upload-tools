@@ -1,7 +1,7 @@
 GOLANGCI_LINT_VERSION ?= v2.12.2
 
 BINARY_NAME = cognitive3d-cli-upload
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.0.0-dev")
+VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null | sed "s/^v//" | grep . || echo "0.0.0-dev")
 COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE = $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 PKG = github.com/cognitivevr/c3d-upload-tools/internal/version

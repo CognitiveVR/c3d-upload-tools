@@ -83,3 +83,29 @@ func TestNormalizeFlagReplacesUnderscores(t *testing.T) {
 		t.Errorf("normalizeFlag = %q, want a-b-c", got)
 	}
 }
+
+func TestFormatIsValidatedWhenSubcommandHasOwnPersistentPreRun(t *testing.T) {
+	streams := testIO()
+	root := newRootCmd(streams)
+	hookRan, bodyRan := false, false
+	root.AddCommand(&cobra.Command{
+		Use:               "stub",
+		PersistentPreRunE: func(*cobra.Command, []string) error { hookRan = true; return nil },
+		RunE:              func(*cobra.Command, []string) error { bodyRan = true; return nil },
+	})
+
+	if code := run(context.Background(), root, []string{"stub", "--format", "bogus"}, streams); code != 4 {
+		t.Fatalf("exit code = %d, want 4", code)
+	}
+	if bodyRan {
+		t.Error("command body ran despite invalid --format")
+	}
+
+	hookRan = false
+	if code := run(context.Background(), root, []string{"stub", "--format", "json"}, streams); code != 0 {
+		t.Fatalf("valid format: exit code = %d, want 0", code)
+	}
+	if !hookRan || !bodyRan {
+		t.Errorf("stub hook ran=%v body ran=%v, want both true", hookRan, bodyRan)
+	}
+}

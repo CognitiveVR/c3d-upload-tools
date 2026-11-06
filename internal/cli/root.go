@@ -56,6 +56,7 @@ func run(ctx context.Context, root *cobra.Command, args []string, streams IO) in
 }
 
 func newRootCmd(streams IO) *cobra.Command {
+	cobra.EnableTraverseRunHooks = true
 	root := &cobra.Command{
 		Use:           binaryName,
 		Short:         "Upload scenes, dynamic objects and egocentric models to Cognitive3D",
