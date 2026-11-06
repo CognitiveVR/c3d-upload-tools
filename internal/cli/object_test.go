@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -124,8 +125,11 @@ func TestObjectUploadWithUploadManifestPostsTheSavedManifestAfterTheObject(t *te
 		t.Errorf("manifest POST = ?%v %v", sent[1].Query, sent[1].Header)
 	}
 	var body manifest.Manifest
-	if err := json.Unmarshal(sent[1].Body, &body); err != nil || len(body.Objects) != 1 || body.Objects[0].ID != "cube-1" {
-		t.Errorf("manifest body = %s (%v)", sent[1].Body, err)
+	if err := json.Unmarshal(sent[1].Body, &body); err != nil {
+		t.Fatalf("manifest body = %s (%v)", sent[1].Body, err)
+	}
+	if saved := loadManifest(t, objectManifestPath()); !reflect.DeepEqual(&body, saved) || len(body.Objects) != 1 || body.Objects[0].ID != "cube-1" {
+		t.Errorf("POSTed %+v, saved %+v", body.Objects, saved.Objects)
 	}
 	result := decodeObject(t, got.stdout)
 	if result["manifestUploaded"] != true {
@@ -507,5 +511,30 @@ func TestObjectUploadManifestUploadFailureStillSavesAndReportsTheObject(t *testi
 	}
 	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 {
 		t.Errorf("manifest = %+v", m.Objects)
+	}
+}
+
+func TestObjectUploadManifestSaveFailureStillReportsTheObjectAndExitsOne(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	locked := t.TempDir()
+	makeReadOnly(t, locked)
+	target := filepath.Join(locked, "m.json")
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID,
+		"--object-id", "c1", "--manifest", target)
+	if got.code != 1 || got.stdout != "Object ID: c1\n" || !strings.Contains(got.stderr, "manifest could not be saved") {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if len(postsTo(fake)) != 1 {
+		t.Errorf("POSTs = %+v", postsTo(fake))
+	}
+
+	got = runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID,
+		"--object-id", "c1", "--manifest", target, "--format", "json")
+	result := decodeObject(t, got.stdout)
+	if got.code != 1 || result["objectId"] != "c1" || result["manifestUploaded"] != false {
+		t.Errorf("exit %d, result %v", got.code, result)
 	}
 }

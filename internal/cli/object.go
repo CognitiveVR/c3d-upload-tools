@@ -141,16 +141,19 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	}
 
 	client := rt.client()
-	if err := object.Upload(ctx, client, plan, sceneID, versionNumber, rt.log); err != nil {
+	if err := object.Upload(ctx, client, plan, sceneID, versionNumber, rt.log, uploadProgress(rt, plan.TotalBytes)); err != nil {
 		return err
 	}
 	m.Upsert(id, mesh)
+	result := objectResult{ObjectID: id, Mesh: mesh, SceneID: sceneID, VersionNumber: versionNumber, ManifestPath: manifestFile}
 	if err := m.Save(manifestFile); err != nil {
+		if printErr := printObjectResult(rt, result); printErr != nil {
+			return printErr
+		}
 		return fmt.Errorf("object %s was uploaded as id %s, but the manifest could not be saved: %w", mesh, id, err)
 	}
 	rt.log.Info("Saved object %s to %s", id, manifestFile)
 
-	result := objectResult{ObjectID: id, Mesh: mesh, SceneID: sceneID, VersionNumber: versionNumber, ManifestPath: manifestFile}
 	if uploadManifest {
 		if err := m.Validate(); err != nil {
 			return usageErrorf("%s is not a valid manifest: %v", manifestFile, err)

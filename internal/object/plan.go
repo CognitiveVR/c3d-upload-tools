@@ -120,9 +120,16 @@ func Plan(dir, objectName string) (*UploadPlan, error) {
 		return nil, &CheckError{Errors: errs, Warnings: p.Warnings}
 	}
 
+	var sized []model.SizedFile
 	for _, f := range append(append(models, textures...), thumbnail) {
 		p.Parts = append(p.Parts, filePart(f))
 		p.TotalBytes += f.size
+		sized = append(sized, model.SizedFile{Name: f.name, Bytes: f.size})
+	}
+	warnings, err := model.CheckSizes(sized, p.TotalBytes)
+	p.Warnings = append(p.Warnings, warnings...)
+	if err != nil {
+		return nil, err
 	}
 	return p, nil
 }

@@ -16,10 +16,6 @@ const (
 	screenshotFileName = "screenshot.png"
 	modelBaseName      = "scene"
 	octetStream        = "application/octet-stream"
-
-	fileWarningBytes  int64 = 500 * 1000 * 1000
-	totalWarningBytes int64 = 2 << 30
-	totalLimitBytes   int64 = 3 << 30
 )
 
 // LocalPlan is everything a scene upload sends except settings.json, read
@@ -194,21 +190,15 @@ func findScreenshot(dir string) (localFile, error) {
 	return localFile{}, fmt.Errorf("%s is missing from %s: a scene upload needs it as the scene's screenshot", screenshotFileName, dir)
 }
 
-// checkSizes warns about files of 500 MB or more and uploads of 2 GiB or
-// more, and refuses uploads over the gateway's 3 GiB limit.
+// checkSizes applies the size thresholds of model.CheckSizes to the plan.
 func checkSizes(p *LocalPlan) error {
+	var sized []model.SizedFile
 	for _, f := range p.files() {
-		if f.size >= fileWarningBytes {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("%s is %d bytes, 500 MB or more; it will take a long time to upload and convert", f.name, f.size))
-		}
+		sized = append(sized, model.SizedFile{Name: f.name, Bytes: f.size})
 	}
-	switch {
-	case p.TotalBytes > totalLimitBytes:
-		return fmt.Errorf("the upload is %d bytes, over the gateway's limit of 3 GiB (%d bytes) per request", p.TotalBytes, totalLimitBytes)
-	case p.TotalBytes >= totalWarningBytes:
-		p.Warnings = append(p.Warnings, fmt.Sprintf("the upload is %d bytes, 2 GiB or more; it will take a long time to upload and convert", p.TotalBytes))
-	}
-	return nil
+	warnings, err := model.CheckSizes(sized, p.TotalBytes)
+	p.Warnings = append(p.Warnings, warnings...)
+	return err
 }
 
 // Finalize builds settings.json in memory for sceneName (empty keeps the

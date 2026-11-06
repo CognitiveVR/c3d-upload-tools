@@ -73,7 +73,7 @@ func TestUploadPostsEveryPartUnderFieldFileWithTheVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Upload(context.Background(), newClient(t, fake), plan, "scene-1", 3, nil); err != nil {
+	if err := Upload(context.Background(), newClient(t, fake), plan, "scene-1", 3, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	reqs := fake.Requests()
@@ -101,7 +101,7 @@ func TestUploadEscapesTheMeshNameInThePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Upload(context.Background(), newClient(t, fake), plan, "scene-1", 1, nil); err != nil {
+	if err := Upload(context.Background(), newClient(t, fake), plan, "scene-1", 1, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	r := fake.Requests()[0]
@@ -137,7 +137,7 @@ func TestUploadToAnUnknownSceneFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Upload(context.Background(), newClient(t, fake), plan, "nope", 1, nil); err == nil {
+	if err := Upload(context.Background(), newClient(t, fake), plan, "nope", 1, nil, nil); err == nil {
 		t.Error("want an error for a 401 from the gateway")
 	}
 }

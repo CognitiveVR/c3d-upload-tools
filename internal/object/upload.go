@@ -51,14 +51,15 @@ func VersionQuery(versionNumber int) url.Values {
 	return url.Values{"version": {strconv.Itoa(versionNumber)}}
 }
 
-// Upload sends plan to version versionNumber of scene sceneID.
-func Upload(ctx context.Context, client *gateway.Client, plan *UploadPlan, sceneID string, versionNumber int, log *ui.Logger) error {
+// Upload sends plan to version versionNumber of scene sceneID. progress may be nil.
+func Upload(ctx context.Context, client *gateway.Client, plan *UploadPlan, sceneID string, versionNumber int, log *ui.Logger, progress *ui.Progress) error {
 	if log == nil {
 		log = ui.New(io.Discard, ui.Options{})
 	}
-	if _, err := client.PostMultipart(ctx, UploadPath(sceneID, plan.Mesh), VersionQuery(versionNumber), plan.Parts, nil); err != nil {
+	if _, err := client.PostMultipart(ctx, UploadPath(sceneID, plan.Mesh), VersionQuery(versionNumber), plan.Parts, progress); err != nil {
 		return err
 	}
+	progress.Done()
 	log.Info("Uploaded object %s to scene %s version %d", plan.Mesh, sceneID, versionNumber)
 	return nil
 }

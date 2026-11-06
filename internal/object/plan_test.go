@@ -194,3 +194,30 @@ func TestPlanModelCheckFailureIsACheckErrorWithWarnings(t *testing.T) {
 		t.Errorf("warnings = %v", check.Warnings)
 	}
 }
+
+// sparseTexture adds a texture of the given size without writing its bytes.
+func sparseTexture(t *testing.T, dir, name string, size int64) {
+	t.Helper()
+	writeFile(t, dir, name, "x")
+	if err := os.Truncate(filepath.Join(dir, name), size); err != nil {
+		t.Skipf("cannot make a sparse file: %v", err)
+	}
+}
+
+func TestPlanWarnsAtTwoGiBAndRefusesAboveThree(t *testing.T) {
+	dir := copyFixture(t, "object-gltf")
+	sparseTexture(t, dir, "big.png", 2<<30)
+	plan, err := Plan(dir, "cube")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Warnings) != 2 || !strings.Contains(plan.Warnings[0], "big.png") || !strings.Contains(plan.Warnings[1], "2 GiB") {
+		t.Errorf("warnings = %q", plan.Warnings)
+	}
+
+	dir = copyFixture(t, "object-gltf")
+	sparseTexture(t, dir, "big.png", 31<<30/10)
+	if _, err := Plan(dir, "cube"); err == nil || !strings.Contains(err.Error(), "3 GiB") {
+		t.Errorf("3.1 GiB: err = %v", err)
+	}
+}
