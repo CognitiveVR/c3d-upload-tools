@@ -139,9 +139,9 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	if err := object.Upload(ctx, client, plan, sceneID, versionNumber, rt.log, uploadProgress(rt, plan.TotalBytes)); err != nil {
 		return err
 	}
-	m.Upsert(id, mesh)
 	result := objectResult{ObjectID: id, Mesh: mesh, SceneID: sceneID, VersionNumber: versionNumber, ManifestPath: manifestFile}
-	if err := m.Save(manifestFile); err != nil {
+	current, err := saveObjectEntry(manifestFile, id, mesh)
+	if err != nil {
 		if printErr := printObjectResult(rt, result); printErr != nil {
 			return printErr
 		}
@@ -150,10 +150,7 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	rt.log.Info("Saved object %s to %s", id, manifestFile)
 
 	if uploadManifest {
-		if err := m.Validate(); err != nil {
-			return usageErrorf("%s is not a valid manifest: %v", manifestFile, err)
-		}
-		if err := object.UploadManifest(ctx, client, m, sceneID, versionNumber); err != nil {
+		if err := object.UploadManifest(ctx, client, current, sceneID, versionNumber); err != nil {
 			if printErr := printObjectResult(rt, result); printErr != nil {
 				return printErr
 			}
@@ -163,6 +160,23 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 		rt.log.Info("Uploaded the manifest to scene %s version %d", sceneID, versionNumber)
 	}
 	return printObjectResult(rt, result)
+}
+
+// saveObjectEntry re-reads the manifest file, so entries written while the
+// upload ran are kept, then upserts id and mesh, validates and saves it.
+func saveObjectEntry(file, id, mesh string) (*manifest.Manifest, error) {
+	m, err := manifest.LoadOrEmpty(file)
+	if err != nil {
+		return nil, err
+	}
+	m.Upsert(id, mesh)
+	if err := m.Validate(); err != nil {
+		return nil, fmt.Errorf("%s is not a valid manifest: %w", file, err)
+	}
+	if err := m.Save(file); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func latestVersionNumber(ctx context.Context, rt *runtime, sceneID string) (int, error) {

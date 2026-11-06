@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -524,6 +525,37 @@ func TestObjectUploadManifestUploadFailureStillSavesAndReportsTheObject(t *testi
 	}
 	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 {
 		t.Errorf("manifest = %+v", m.Objects)
+	}
+}
+
+func TestObjectUploadKeepsAnEntryAddedToTheManifestDuringTheUpload(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	saved := make(chan error, 1)
+	fake.OnRoute("POST /v0/objects/{sceneId}/{meshName}", func() {
+		other := &manifest.Manifest{Objects: []manifest.Entry{manifest.DefaultEntry("other", "mesh-other")}}
+		saved <- other.Save(objectManifestPath())
+	})
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "c1")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	select {
+	case err := <-saved:
+		if err != nil {
+			t.Fatal(err)
+		}
+	default:
+		t.Fatal("the object POST never happened")
+	}
+	var ids []string
+	for _, e := range loadManifest(t, objectManifestPath()).Objects {
+		ids = append(ids, e.ID)
+	}
+	if !slices.Equal(ids, []string{"other", "c1"}) {
+		t.Errorf("manifest ids = %v, want the entry written during the upload and the new one", ids)
 	}
 }
 
