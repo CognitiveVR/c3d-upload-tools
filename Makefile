@@ -24,6 +24,10 @@ test: ## Run tests with the race detector
 
 lint: ## Run golangci-lint (pinned version in GOLANGCI_LINT_VERSION)
 	@if command -v golangci-lint > /dev/null; then \
+		installed="v$$(golangci-lint version --short 2>/dev/null)"; \
+		if [ "$$installed" != "$(GOLANGCI_LINT_VERSION)" ]; then \
+			echo "warning: golangci-lint $$installed is installed but $(GOLANGCI_LINT_VERSION) is pinned; results may differ from CI"; \
+		fi; \
 		golangci-lint run ./...; \
 	else \
 		echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)"; \
