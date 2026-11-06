@@ -9,7 +9,7 @@ Guidance for working in this repository. The product is the Go CLI `cognitive3d-
 - `make lint`: golangci-lint (pinned version in the Makefile)
 - `gofmt -l .` must print nothing and `go vet ./...` must be clean before a commit
 - `make install-hooks`: point git at `.githooks` for the pre-commit hook
-- Go 1.25 in `go.mod`, with no `toolchain` line. Dependencies are limited to `github.com/spf13/cobra` and `gopkg.in/yaml.v3`; tests use the standard `testing` package only
+- Go 1.26.10 in `go.mod` (the oldest patch release the security scanner accepts; raise it when the scanner flags a newer one), with no `toolchain` line. Dependencies are limited to `github.com/spf13/cobra` and `gopkg.in/yaml.v3`; tests use the standard `testing` package only
 
 Markdown is checked in CI with the exact commands below; run them after editing any `*.md`:
 

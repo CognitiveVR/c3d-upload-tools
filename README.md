@@ -38,7 +38,7 @@ sudo tar -xzf cognitive3d-cli-upload_<version>_Linux_x86_64.tar.gz -C /usr/local
 
 ### Build from source
 
-Requires Go 1.25 or newer.
+Requires Go 1.26.10 or newer; an older `go` command downloads that toolchain on first use.
 
 ```bash
 make build
