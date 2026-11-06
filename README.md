@@ -137,7 +137,7 @@ Every setting is resolved in this order, first match wins:
 | Developer API key | `--api-key` | `C3D_DEVELOPER_API_KEY` |
 | Scene id | `--scene-id` | `C3D_SCENE_ID` |
 | Environment, `prod` or `dev` | `--env` | `C3D_DEFAULT_ENVIRONMENT`, then `C3D_ENV` |
-| Gateway base URL override | `--gateway-url` | `C3D_UPLOAD_GATEWAY_URL` |
+| Gateway base URL override, including the API version path, for example `https://data.c3ddev.com/v0` | `--gateway-url` | `C3D_UPLOAD_GATEWAY_URL` |
 | Color off | none | `NO_COLOR` |
 
 The environment defaults to `prod`. The config file holds `default_environment`, plus `developer_api_key` and `scene_id` under `production:` and `development:`:
