@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cognitivevr/c3d-upload-tools/internal/ego"
 	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
 	"github.com/cognitivevr/c3d-upload-tools/internal/object"
 	"github.com/cognitivevr/c3d-upload-tools/internal/scene"
@@ -163,12 +164,15 @@ func runSceneUpload(cmd *cobra.Command, rt *runtime) error {
 func planFailure(rt *runtime, err error) error {
 	var sceneCheck *scene.CheckError
 	var objectCheck *object.CheckError
+	var egoCheck *ego.CheckError
 	var warnings, errs []string
 	switch {
 	case errors.As(err, &sceneCheck):
 		warnings, errs = sceneCheck.Warnings, sceneCheck.Errors
 	case errors.As(err, &objectCheck):
 		warnings, errs = objectCheck.Warnings, objectCheck.Errors
+	case errors.As(err, &egoCheck):
+		warnings, errs = egoCheck.Warnings, egoCheck.Errors
 	}
 	for _, warning := range warnings {
 		rt.log.Warn("%s", warning)

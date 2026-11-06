@@ -93,6 +93,8 @@ type Server struct {
 	objectFiles   map[meshKey][]objectFile
 	objectRows    map[versionKey][]objectRow
 	nextObjectID  int
+	egos          map[versionKey]map[string]*egoSlot
+	optimizeAfter map[slotKey]int
 }
 
 // pendingVersions are versions a POST adds, left out of the next polls GET
@@ -117,6 +119,9 @@ func (s *Server) routes() []route {
 		{"GET /v0/scenes/{sceneId}", acceptExpired, s.getScene},
 		{"POST /v0/scenes/{sceneId}", acceptExpired, s.addVersion},
 		{"POST /v0/scenes/{sceneId}/screenshot", acceptExpired, s.replaceScreenshot},
+		{"GET /v0/scenes/{sceneId}/egos", acceptExpired, s.listEgos},
+		{"POST /v0/scenes/{sceneId}/egos/{key}", acceptExpired, s.uploadEgo},
+		{"DELETE /v0/scenes/{sceneId}/egos/{key}", acceptExpired, s.deleteEgo},
 		{"POST /v0/objects/{sceneId}/{meshName}", acceptExpired, s.uploadObject},
 		{"POST /v0/objects/{sceneId}", acceptExpired, s.uploadManifest},
 		{"GET /v0/versions/{versionId}/objects", acceptExpired, s.listObjects},
@@ -136,6 +141,8 @@ func New(t testing.TB) *Server {
 		hidden:        map[string]*pendingVersions{},
 		objectFiles:   map[meshKey][]objectFile{},
 		objectRows:    map[versionKey][]objectRow{},
+		egos:          map[versionKey]map[string]*egoSlot{},
+		optimizeAfter: map[slotKey]int{},
 	}
 	mux := http.NewServeMux()
 	for _, rt := range s.routes() {
