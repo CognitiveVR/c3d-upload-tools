@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	maxAttempts    = 3
-	baseRetryDelay = time.Second
-	maxRetryAfter  = 60 * time.Second
+	maxAttempts          = 3
+	baseRetryDelay       = time.Second
+	maxRetryAfterSeconds = 60
 )
 
 // withRetry runs a GET attempt up to maxAttempts times while it fails with
@@ -51,7 +51,7 @@ func retryable(resp *Response, err error) bool {
 // it doubles the base delay per attempt and adds up to 50 percent jitter.
 func (c *Client) retryDelay(attempt int, retryAfter string) time.Duration {
 	if seconds, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && seconds >= 0 {
-		return min(time.Duration(seconds)*time.Second, maxRetryAfter)
+		return time.Duration(min(seconds, maxRetryAfterSeconds)) * time.Second
 	}
 	delay := baseRetryDelay << (attempt - 1)
 	return delay + time.Duration(c.random()*0.5*float64(delay))

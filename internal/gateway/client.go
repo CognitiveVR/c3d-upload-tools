@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -57,13 +56,8 @@ type User struct {
 	KeyExpiresAtMilliseconds int64  `json:"keyExpiresAt"`
 }
 
-// Client is safe for concurrent use once its first request has started.
+// Client is safe for concurrent use.
 type Client struct {
-	// ResponseHeaderTimeout bounds the wait for response headers on every
-	// request except PostMultipart. It is read when the first such request is
-	// made.
-	ResponseHeaderTimeout time.Duration
-
 	baseURL   string
 	host      string
 	apiKey    string
@@ -72,9 +66,7 @@ type Client struct {
 
 	preflighted atomic.Bool
 
-	apiOnce    sync.Once
 	apiHTTP    *http.Client
-	uploadOnce sync.Once
 	uploadHTTP *http.Client
 
 	sleep  func(ctx context.Context, d time.Duration) error
@@ -86,9 +78,25 @@ func UserAgent() string {
 	return fmt.Sprintf("%s/%s (%s/%s)", binaryName, version.Version, runtime.GOOS, runtime.GOARCH)
 }
 
+type options struct {
+	responseHeaderTimeout time.Duration
+}
+
+type Option func(*options)
+
+// WithResponseHeaderTimeout bounds the wait for response headers on every
+// request except PostMultipart; the default is 60 seconds.
+func WithResponseHeaderTimeout(d time.Duration) Option {
+	return func(o *options) { o.responseHeaderTimeout = d }
+}
+
 // New returns a client for baseURL, which includes the /v0 prefix. A nil log
 // discards debug output.
-func New(baseURL, apiKey, userAgent string, log *ui.Logger) *Client {
+func New(baseURL, apiKey, userAgent string, log *ui.Logger, opts ...Option) *Client {
+	o := options{responseHeaderTimeout: defaultResponseHeaderTimeout}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	if log == nil {
 		log = ui.New(io.Discard, ui.Options{})
 	}
@@ -97,14 +105,15 @@ func New(baseURL, apiKey, userAgent string, log *ui.Logger) *Client {
 		host = u.Host
 	}
 	return &Client{
-		ResponseHeaderTimeout: defaultResponseHeaderTimeout,
-		baseURL:               strings.TrimRight(baseURL, "/"),
-		host:                  host,
-		apiKey:                apiKey,
-		userAgent:             userAgent,
-		log:                   log,
-		sleep:                 sleepContext,
-		random:                rand.Float64,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		host:       host,
+		apiKey:     apiKey,
+		userAgent:  userAgent,
+		log:        log,
+		apiHTTP:    newHTTPClient(o.responseHeaderTimeout),
+		uploadHTTP: newHTTPClient(0),
+		sleep:      sleepContext,
+		random:     rand.Float64,
 	}
 }
 
@@ -125,7 +134,7 @@ func (c *Client) User(ctx context.Context) (User, error) {
 // Get retries 502, 503, 504 and transport errors; out may be nil.
 func (c *Client) Get(ctx context.Context, path string, query url.Values, out any) error {
 	resp, err := c.withRetry(ctx, path, func() (*Response, error) {
-		return c.attempt(ctx, c.apiClient(), http.MethodGet, path, query, nil, 0, "")
+		return c.attempt(ctx, c.apiHTTP, http.MethodGet, path, query, nil, 0, "")
 	})
 	if err != nil {
 		return err
@@ -134,7 +143,7 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values, out any
 }
 
 func (c *Client) Delete(ctx context.Context, path string, query url.Values, out any) error {
-	resp, err := c.attempt(ctx, c.apiClient(), http.MethodDelete, path, query, nil, 0, "")
+	resp, err := c.attempt(ctx, c.apiHTTP, http.MethodDelete, path, query, nil, 0, "")
 	if err != nil {
 		return err
 	}
@@ -147,7 +156,7 @@ func (c *Client) PostJSON(ctx context.Context, path string, query url.Values, bo
 		return nil, fmt.Errorf("encode POST %s body: %w", path, err)
 	}
 	reader := &sentReader{r: bytes.NewReader(data), remaining: int64(len(data))}
-	resp, err := c.attempt(ctx, c.apiClient(), http.MethodPost, path, query, reader, int64(len(data)), "application/json")
+	resp, err := c.attempt(ctx, c.apiHTTP, http.MethodPost, path, query, reader, int64(len(data)), "application/json")
 	return c.result(http.MethodPost, path, resp, err, reader.sent.Load())
 }
 
@@ -155,7 +164,7 @@ func (c *Client) PostJSON(ctx context.Context, path string, query url.Values, bo
 // after it has processed every part.
 func (c *Client) PostMultipart(ctx context.Context, path string, query url.Values, parts []Part, progress *ui.Progress) (*Response, error) {
 	body := buildMultipartBody(parts, progress)
-	resp, err := c.attempt(ctx, c.uploadClient(), http.MethodPost, path, query, body, body.contentLength, body.contentType)
+	resp, err := c.attempt(ctx, c.uploadHTTP, http.MethodPost, path, query, body, body.contentLength, body.contentType)
 	_ = body.Close()
 	<-body.done
 	if body.err != nil {
@@ -245,16 +254,6 @@ func (c *Client) transportError(ctx context.Context, method, path string, err er
 		err = uerr.Err
 	}
 	return newTransportError(method, path, c.host, err, false, ctx.Err() != nil)
-}
-
-func (c *Client) apiClient() *http.Client {
-	c.apiOnce.Do(func() { c.apiHTTP = newHTTPClient(c.ResponseHeaderTimeout) })
-	return c.apiHTTP
-}
-
-func (c *Client) uploadClient() *http.Client {
-	c.uploadOnce.Do(func() { c.uploadHTTP = newHTTPClient(0) })
-	return c.uploadHTTP
 }
 
 // newHTTPClient has no overall timeout; a zero responseHeaderTimeout waits

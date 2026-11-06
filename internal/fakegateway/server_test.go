@@ -211,6 +211,9 @@ func TestRecordsRequests(t *testing.T) {
 	if first.Method != "POST" || first.Path != "/v0/objects/scene-a" || first.Query.Get("version") != "3" || string(first.Body) != `{"objects":[]}` {
 		t.Fatalf("first %+v", first)
 	}
+	if !first.Complete || !got[1].Complete {
+		t.Fatalf("complete bodies not marked complete: %v %v", first.Complete, got[1].Complete)
+	}
 	if first.Header.Get("Authorization") != header(s.Key()) {
 		t.Fatalf("header not recorded: %v", first.Header)
 	}

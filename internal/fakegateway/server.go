@@ -5,6 +5,7 @@ package fakegateway
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -41,14 +42,15 @@ type User struct {
 }
 
 // Recorded is one request as the fake received it. Body and Part.Body are
-// kept only when under 1 MB.
+// kept only when under 1 MB. Complete is false when the body ended early.
 type Recorded struct {
-	Method string
-	Path   string
-	Query  url.Values
-	Header http.Header
-	Body   []byte
-	Parts  []RecordedPart
+	Method   string
+	Path     string
+	Query    url.Values
+	Header   http.Header
+	Body     []byte
+	Parts    []RecordedPart
+	Complete bool
 }
 
 type RecordedPart struct {
@@ -208,44 +210,57 @@ func (s *Server) next() (time.Duration, *failure) {
 
 func (s *Server) record(r *http.Request) {
 	rec := Recorded{Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(), Header: r.Header.Clone()}
+	var err error
 	if mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mediaType == "multipart/form-data" {
-		rec.Parts = readParts(r)
+		rec.Parts, err = readParts(r)
 		// Reading to EOF lets the server notice when the client hangs up.
-		_, _ = io.Copy(io.Discard, r.Body)
+		if _, drainErr := io.Copy(io.Discard, r.Body); err == nil {
+			err = drainErr
+		}
 	} else {
-		rec.Body, _ = readCapped(r.Body)
+		rec.Body, _, err = readCapped(r.Body)
 	}
+	rec.Complete = err == nil
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.requests = append(s.requests, rec)
 }
 
-func readParts(r *http.Request) []RecordedPart {
+func readParts(r *http.Request) ([]RecordedPart, error) {
 	mr, err := r.MultipartReader()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var parts []RecordedPart
 	for {
 		p, err := mr.NextRawPart()
+		if errors.Is(err, io.EOF) {
+			return parts, nil
+		}
 		if err != nil {
-			return parts
+			return parts, err
 		}
 		_, params, _ := mime.ParseMediaType(p.Header.Get("Content-Disposition"))
-		body, size := readCapped(p)
+		body, size, err := readCapped(p)
 		parts = append(parts, RecordedPart{Field: params["name"], Filename: params["filename"], Size: size, Body: body})
+		if err != nil {
+			return parts, err
+		}
 	}
 }
 
 // readCapped drains r and returns its bytes when under the record limit.
-func readCapped(r io.Reader) ([]byte, int64) {
+func readCapped(r io.Reader) ([]byte, int64, error) {
 	var buf bytes.Buffer
-	n, _ := io.Copy(&buf, io.LimitReader(r, recordedBodyLimitBytes))
-	rest, _ := io.Copy(io.Discard, r)
-	if rest > 0 || n >= recordedBodyLimitBytes {
-		return nil, n + rest
+	n, err := io.Copy(&buf, io.LimitReader(r, recordedBodyLimitBytes))
+	if err != nil {
+		return nil, n, err
 	}
-	return buf.Bytes(), n
+	rest, err := io.Copy(io.Discard, r)
+	if rest > 0 || n >= recordedBodyLimitBytes {
+		return nil, n + rest, err
+	}
+	return buf.Bytes(), n, err
 }
 
 func (r Recorded) clone() Recorded {

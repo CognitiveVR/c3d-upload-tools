@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -34,9 +35,9 @@ func (r *sleepRecorder) got() []time.Duration {
 	return append([]time.Duration(nil), r.durations...)
 }
 
-func newTestClient(t *testing.T, fake *fakegateway.Server, key string) (*Client, *sleepRecorder) {
+func newTestClient(t *testing.T, fake *fakegateway.Server, key string, opts ...Option) (*Client, *sleepRecorder) {
 	t.Helper()
-	c := New(fake.URL(), key, UserAgent(), nil)
+	c := New(fake.URL(), key, UserAgent(), nil, opts...)
 	rec := &sleepRecorder{}
 	c.sleep = rec.sleep
 	c.random = func() float64 { return 0.5 }
@@ -142,6 +143,7 @@ func TestMultipartPartsAndProgress(t *testing.T) {
 }
 
 func TestMultipartOpenErrorIsReturned(t *testing.T) {
+	t.Parallel()
 	fake := fakegateway.New(t)
 	c, _ := newTestClient(t, fake, fake.Key())
 	errMissing := errors.New("missing file")
@@ -330,6 +332,18 @@ func TestRetryAfterIsCappedAtSixtySeconds(t *testing.T) {
 	}
 }
 
+func TestOversizedRetryAfterIsCappedNotOverflowed(t *testing.T) {
+	fake := fakegateway.New(t)
+	c, sleeps := newTestClient(t, fake, fake.Key())
+	fake.FailWithHeaders(503, "", http.Header{"Retry-After": {"9300000000"}})
+	if err := c.VerifyKey(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := sleeps.got(); len(got) != 1 || got[0] != 60*time.Second {
+		t.Fatalf("sleeps %v", got)
+	}
+}
+
 func TestGetDoesNotRetryOtherStatuses(t *testing.T) {
 	fake := fakegateway.New(t)
 	c, _ := newTestClient(t, fake, fake.Key())
@@ -356,6 +370,7 @@ func TestPostIsNotRetried(t *testing.T) {
 }
 
 func TestUploadCutOffByDeadlineAfterBodySent(t *testing.T) {
+	t.Parallel()
 	fake := fakegateway.New(t)
 	c, _ := newTestClient(t, fake, fake.Key())
 	fake.Delay(3 * time.Second)
@@ -389,7 +404,75 @@ func TestInterruptedBeforeSending(t *testing.T) {
 	}
 }
 
+// blockingPart's reader blocks until ctx is done, then streams bytes without
+// end, so the body can never be fully sent.
+func blockingPart(ctx context.Context, started chan<- struct{}) Part {
+	var once sync.Once
+	return Part{Field: "file", Filename: "big.glb", Open: func() (io.ReadCloser, error) {
+		return io.NopCloser(readerFunc(func(p []byte) (int, error) {
+			once.Do(func() { close(started) })
+			<-ctx.Done()
+			return copy(p, "x"), nil
+		})), nil
+	}}
+}
+
+type readerFunc func(p []byte) (int, error)
+
+func (f readerFunc) Read(p []byte) (int, error) { return f(p) }
+
+func TestCancelMidBodyIsNotBodySent(t *testing.T) {
+	fake := fakegateway.New(t)
+	c, _ := newTestClient(t, fake, fake.Key())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	go func() {
+		<-started
+		cancel()
+	}()
+	_, err := c.PostMultipart(ctx, "/scenes/s1", nil, []Part{blockingPart(ctx, started)}, nil)
+	gerr := gatewayError(t, err)
+	if gerr.Kind != Interrupted || gerr.BodySent {
+		t.Fatalf("kind %v bodySent %v", gerr.Kind, gerr.BodySent)
+	}
+	msg := gerr.UserMessage()
+	if !strings.Contains(msg, "Could not reach") || strings.Contains(msg, "may still have completed") {
+		t.Fatalf("message %q", msg)
+	}
+}
+
+func TestPartReadErrorIsReturned(t *testing.T) {
+	fake := fakegateway.New(t)
+	c, _ := newTestClient(t, fake, fake.Key())
+	errDisk := errors.New("disk read failed")
+	part := Part{Field: "file", Filename: "cube.glb", Open: func() (io.ReadCloser, error) {
+		sent := false
+		return io.NopCloser(readerFunc(func(p []byte) (int, error) {
+			if !sent {
+				sent = true
+				return copy(p, "partial"), nil
+			}
+			return 0, errDisk
+		})), nil
+	}}
+	_, err := c.PostMultipart(context.Background(), "/scenes/s1", nil, []Part{part}, nil)
+	if !errors.Is(err, errDisk) {
+		t.Fatalf("got %v", err)
+	}
+	var gerr *Error
+	if errors.As(err, &gerr) {
+		t.Fatalf("a local read error must not be a gateway error: %v", err)
+	}
+	for _, r := range fake.Requests() {
+		if r.Complete {
+			t.Fatalf("fake recorded a complete request: %+v", r)
+		}
+	}
+}
+
 func TestMultipartWithoutDeadlineAwaitsSlowResponse(t *testing.T) {
+	t.Parallel()
 	fake := fakegateway.New(t)
 	c, _ := newTestClient(t, fake, fake.Key())
 	fake.Delay(3 * time.Second)
@@ -400,9 +483,9 @@ func TestMultipartWithoutDeadlineAwaitsSlowResponse(t *testing.T) {
 }
 
 func TestResponseHeaderTimeoutAppliesToGetButNotMultipart(t *testing.T) {
+	t.Parallel()
 	fake := fakegateway.New(t)
-	c, _ := newTestClient(t, fake, fake.Key())
-	c.ResponseHeaderTimeout = 100 * time.Millisecond
+	c, _ := newTestClient(t, fake, fake.Key(), WithResponseHeaderTimeout(100*time.Millisecond))
 	for range 3 {
 		fake.Delay(400 * time.Millisecond)
 	}
@@ -422,8 +505,30 @@ func TestResponseHeaderTimeoutAppliesToGetButNotMultipart(t *testing.T) {
 	}
 }
 
+// hangUpListener accepts every connection and closes it at once, which fails
+// a request quickly with the same error on every OS.
+func hangUpListener(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
+	return ln.Addr().String()
+}
+
 func TestUnreachableHostIsNetwork(t *testing.T) {
-	c := New("http://127.0.0.1:1/v0", "fake-key-unreachable", UserAgent(), nil)
+	addr := hangUpListener(t)
+	c := New("http://"+addr+"/v0", "fake-key-unreachable", UserAgent(), nil)
 	rec := &sleepRecorder{}
 	c.sleep = rec.sleep
 	err := c.VerifyKey(context.Background())
@@ -431,7 +536,7 @@ func TestUnreachableHostIsNetwork(t *testing.T) {
 	if gerr.Kind != Network || gerr.BodySent {
 		t.Fatalf("kind %v bodySent %v", gerr.Kind, gerr.BodySent)
 	}
-	if !strings.HasPrefix(gerr.UserMessage(), "Could not reach 127.0.0.1:1: ") {
+	if !strings.HasPrefix(gerr.UserMessage(), "Could not reach "+addr+": ") {
 		t.Fatalf("message %q", gerr.UserMessage())
 	}
 	if len(rec.got()) != 2 {
