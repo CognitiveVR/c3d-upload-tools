@@ -13,7 +13,7 @@
     Copyright = '(c) 2025 Cognitive3D. All rights reserved.'
     
     # Module description
-    Description = 'PowerShell tools for uploading scenes and dynamic objects to the Cognitive3D analytics platform'
+    Description = 'PowerShell tools for uploading scenes and dynamic objects to the Cognitive3D analytics platform. Deprecated: this module will be removed in c3d-upload-tools 3.0; use the cognitive3d-cli-upload binary (see docs/migration-2.0.md).'
     
     # PowerShell version requirements - support both Windows PowerShell and PowerShell Core
     PowerShellVersion = '5.1'
