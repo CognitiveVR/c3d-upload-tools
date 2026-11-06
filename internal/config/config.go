@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -40,6 +41,7 @@ type Settings struct {
 	Verbose     bool
 	Quiet       bool
 	ConfigPath  string
+	Warnings    []string
 }
 
 // normalizeEnvironment maps every accepted spelling to "prod" or "dev".
@@ -78,16 +80,32 @@ func Resolve(flags Flags, env func(string) string, dotenv map[string]string, fil
 		return dotenv[name]
 	}
 
-	rawEnvironment := firstNonEmpty(flags.Environment, lookup("C3D_DEFAULT_ENVIRONMENT"), lookup("C3D_ENV"))
-	if rawEnvironment == "" && file != nil {
+	rawEnvironment, source := flags.Environment, "--env"
+	if rawEnvironment == "" {
+		for _, name := range []string{"C3D_DEFAULT_ENVIRONMENT", "C3D_ENV"} {
+			if v := env(name); v != "" {
+				rawEnvironment, source = v, name+" in the environment"
+				break
+			}
+			if v := dotenv[name]; v != "" {
+				rawEnvironment, source = v, name+" in .env"
+				break
+			}
+		}
+	}
+	if rawEnvironment == "" && file != nil && file.DefaultEnvironment != "" {
 		rawEnvironment = file.DefaultEnvironment
+		source = "default_environment in the config file"
+		if file.Path != "" {
+			source = "default_environment in " + file.Path
+		}
 	}
 	if rawEnvironment == "" {
-		rawEnvironment = "prod"
+		rawEnvironment, source = "prod", ""
 	}
 	environment, err := normalizeEnvironment(rawEnvironment)
 	if err != nil {
-		return Settings{}, err
+		return Settings{}, fmt.Errorf("%w (from %s)", err, source)
 	}
 
 	var section EnvironmentSection
@@ -105,9 +123,16 @@ func Resolve(flags Flags, env func(string) string, dotenv map[string]string, fil
 		}
 	}
 
+	gatewayURL = strings.TrimRight(gatewayURL, "/")
+	warnings, err := checkGatewayURL(gatewayURL)
+	if err != nil {
+		return Settings{}, err
+	}
+
 	return Settings{
 		Environment: environment,
-		GatewayURL:  strings.TrimRight(gatewayURL, "/"),
+		GatewayURL:  gatewayURL,
+		Warnings:    warnings,
 		APIKey:      firstNonEmpty(flags.APIKey, lookup("C3D_DEVELOPER_API_KEY"), section.DeveloperAPIKey),
 		SceneID:     firstNonEmpty(flags.SceneID, lookup("C3D_SCENE_ID"), section.SceneID),
 		Format:      firstNonEmpty(flags.Format, "text"),
@@ -116,6 +141,30 @@ func Resolve(flags Flags, env func(string) string, dotenv map[string]string, fil
 		Quiet:       flags.Quiet,
 		ConfigPath:  flags.ConfigPath,
 	}, nil
+}
+
+func isLoopbackHost(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+// checkGatewayURL requires https except for loopback hosts and warns when the
+// API key would go to a host that is not a Cognitive3D gateway.
+func checkGatewayURL(raw string) ([]string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("gateway URL %q is not a valid URL: %w", raw, err)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return nil, fmt.Errorf("gateway URL %q has no host", raw)
+	}
+	if u.Scheme != "https" && (u.Scheme != "http" || !isLoopbackHost(host)) {
+		return nil, fmt.Errorf("gateway URL %q is not allowed: https is required except for localhost, 127.0.0.1 and ::1", raw)
+	}
+	if host == "data.cognitive3d.com" || host == "data.c3ddev.com" {
+		return nil, nil
+	}
+	return []string{fmt.Sprintf("Gateway %s is not a Cognitive3D host; your API key will be sent there.", host)}, nil
 }
 
 // RequireAPIKey fails when no developer key was resolved. Commands call it

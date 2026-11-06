@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,6 +90,7 @@ func TestResolveEnvironmentPrecedence(t *testing.T) {
 	}{
 		{"flag wins", Flags{Environment: "prod"}, map[string]string{"C3D_DEFAULT_ENVIRONMENT": "dev"}, nil, file, "prod"},
 		{"default environment variable", Flags{}, map[string]string{"C3D_DEFAULT_ENVIRONMENT": "prod", "C3D_ENV": "dev"}, nil, file, "prod"},
+		{"dotenv default variable beats process C3D_ENV", Flags{}, map[string]string{"C3D_ENV": "dev"}, map[string]string{"C3D_DEFAULT_ENVIRONMENT": "prod"}, nil, "prod"},
 		{"C3D_ENV after default variable", Flags{}, map[string]string{"C3D_ENV": "prod"}, nil, file, "prod"},
 		{"dotenv default variable", Flags{}, nil, map[string]string{"C3D_DEFAULT_ENVIRONMENT": "prod"}, file, "prod"},
 		{"dotenv C3D_ENV", Flags{}, nil, map[string]string{"C3D_ENV": "prod"}, file, "prod"},
@@ -125,16 +127,19 @@ func TestResolveNormalizesEnvironmentSpellings(t *testing.T) {
 }
 
 func TestResolveRejectsUnknownEnvironment(t *testing.T) {
+	badFile := fileWith("staging", "", "", "", "")
+	badFile.Path = "/cfg/upload.yaml"
 	sources := map[string]struct {
 		flags  Flags
 		env    map[string]string
 		dotenv map[string]string
 		file   *File
+		source string
 	}{
-		"flag":   {Flags{Environment: "staging"}, nil, nil, nil},
-		"env":    {Flags{}, map[string]string{"C3D_ENV": "staging"}, nil, nil},
-		"dotenv": {Flags{}, nil, map[string]string{"C3D_DEFAULT_ENVIRONMENT": "staging"}, nil},
-		"file":   {Flags{}, nil, nil, fileWith("staging", "", "", "", "")},
+		"flag":   {Flags{Environment: "staging"}, nil, nil, nil, "--env"},
+		"env":    {Flags{}, map[string]string{"C3D_ENV": "staging"}, nil, nil, "C3D_ENV in the environment"},
+		"dotenv": {Flags{}, nil, map[string]string{"C3D_DEFAULT_ENVIRONMENT": "staging"}, nil, "C3D_DEFAULT_ENVIRONMENT in .env"},
+		"file":   {Flags{}, nil, nil, badFile, "/cfg/upload.yaml"},
 	}
 	for name, tc := range sources {
 		t.Run(name, func(t *testing.T) {
@@ -142,7 +147,7 @@ func TestResolveRejectsUnknownEnvironment(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error")
 			}
-			for _, part := range []string{`"staging"`, "production", "prod", "development", "dev"} {
+			for _, part := range []string{tc.source, `"staging"`, "production", "prod", "development", "dev"} {
 				if !strings.Contains(err.Error(), part) {
 					t.Fatalf("error %q does not mention %s", err, part)
 				}
@@ -179,10 +184,10 @@ func TestResolveGatewayURL(t *testing.T) {
 	}{
 		{"prod default", Flags{}, nil, nil, "https://data.cognitive3d.com/v0"},
 		{"dev default", Flags{Environment: "dev"}, nil, nil, "https://data.c3ddev.com/v0"},
-		{"env override", Flags{}, map[string]string{"C3D_UPLOAD_GATEWAY_URL": "http://env.test/v0"}, nil, "http://env.test/v0"},
-		{"dotenv override", Flags{}, nil, map[string]string{"C3D_UPLOAD_GATEWAY_URL": "http://dot.test/v0"}, "http://dot.test/v0"},
-		{"flag beats env", Flags{GatewayURL: "http://flag.test/v0"}, map[string]string{"C3D_UPLOAD_GATEWAY_URL": "http://env.test/v0"}, nil, "http://flag.test/v0"},
-		{"trailing slash trimmed", Flags{GatewayURL: "http://flag.test/v0/"}, nil, nil, "http://flag.test/v0"},
+		{"env override", Flags{}, map[string]string{"C3D_UPLOAD_GATEWAY_URL": "https://env.test/v0"}, nil, "https://env.test/v0"},
+		{"dotenv override", Flags{}, nil, map[string]string{"C3D_UPLOAD_GATEWAY_URL": "https://dot.test/v0"}, "https://dot.test/v0"},
+		{"flag beats env", Flags{GatewayURL: "https://flag.test/v0"}, map[string]string{"C3D_UPLOAD_GATEWAY_URL": "https://env.test/v0"}, nil, "https://flag.test/v0"},
+		{"trailing slash trimmed", Flags{GatewayURL: "https://flag.test/v0/"}, nil, nil, "https://flag.test/v0"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -330,5 +335,43 @@ func TestDefaultFilePath(t *testing.T) {
 	}
 	if want := filepath.Join(dir, ".cognitive3d", "upload.yaml"); got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestResolveGatewayURLSafety(t *testing.T) {
+	const warnFmt = "Gateway %s is not a Cognitive3D host; your API key will be sent there."
+	rejected := map[string]string{
+		"http://evil.example/v0": "https is required",
+		"ftp://localhost/v0":     "https is required",
+		"not a url":              "no host",
+		"https:///v0":            "no host",
+		"http://[::1":            "not a valid URL",
+	}
+	for raw, part := range rejected {
+		_, err := Resolve(Flags{}, envMap(nil), map[string]string{"C3D_UPLOAD_GATEWAY_URL": raw}, nil)
+		if err == nil || !strings.Contains(err.Error(), part) || !strings.Contains(err.Error(), raw) {
+			t.Fatalf("%q: got %v, want error naming the URL and %q", raw, err, part)
+		}
+	}
+	accepted := map[string]string{
+		"http://localhost:8080/v0":     "localhost",
+		"http://127.0.0.1:8080/v0":     "127.0.0.1",
+		"http://[::1]:8080/v0":         "::1",
+		"https://proxy.example.com/v0": "proxy.example.com",
+	}
+	for raw, host := range accepted {
+		s, err := Resolve(Flags{GatewayURL: raw}, envMap(nil), nil, nil)
+		if err != nil {
+			t.Fatalf("%q: %v", raw, err)
+		}
+		if len(s.Warnings) != 1 || s.Warnings[0] != fmt.Sprintf(warnFmt, host) {
+			t.Fatalf("%q: warnings %q", raw, s.Warnings)
+		}
+	}
+	for _, e := range []string{"prod", "dev"} {
+		s, err := Resolve(Flags{Environment: e}, envMap(nil), nil, nil)
+		if err != nil || len(s.Warnings) != 0 {
+			t.Fatalf("%s: warnings %q, err %v", e, s.Warnings, err)
+		}
 	}
 }

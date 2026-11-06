@@ -21,6 +21,9 @@ type File struct {
 	DefaultEnvironment string             `yaml:"default_environment"`
 	Production         EnvironmentSection `yaml:"production"`
 	Development        EnvironmentSection `yaml:"development"`
+
+	// Path is where the file was read from; empty for a File built in code.
+	Path string `yaml:"-"`
 }
 
 // DefaultFilePath returns <home>/.cognitive3d/upload.yaml.
@@ -55,5 +58,6 @@ func LoadFile(path string) (*File, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("cannot parse config file %s: %w", path, err)
 	}
+	f.Path = path
 	return &f, nil
 }
