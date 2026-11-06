@@ -3,6 +3,7 @@ package scene
 import (
 	"context"
 	"errors"
+	"net/http"
 	"slices"
 	"testing"
 	"time"
@@ -139,6 +140,50 @@ func TestWaitForVersionStopsOnALookupFailure(t *testing.T) {
 	var gerr *gateway.Error
 	if !errors.As(err, &notVisible) || !errors.As(notVisible.Cause, &gerr) || gerr.Kind != gateway.SceneNotAccessible {
 		t.Errorf("err = %v, want VersionNotVisibleError caused by SceneNotAccessible", err)
+	}
+}
+
+func TestWaitForVersionKeepsPollingThroughAServerError(t *testing.T) {
+	fastPolling(t)
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: testSceneID, Versions: []fakegateway.Version{{ID: 1, VersionNumber: 1}}})
+	fake.SetNextUpload(testSceneID, 0, fakegateway.Version{ID: 2002, VersionNumber: 2})
+	client := newClient(t, fake)
+	if _, err := client.PostMultipart(context.Background(), "/scenes/"+testSceneID, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	retryNow := http.Header{"Retry-After": {"0"}}
+	for range 3 {
+		fake.FailWithHeaders(500, "", retryNow)
+	}
+
+	v, latest, err := WaitForVersion(context.Background(), client, testSceneID, 2, 5*time.Second)
+	if err != nil || v.Number != 2 || v.ID != 2002 || latest != 2 {
+		t.Fatalf("got %+v latest %d err %v, want version 2", v, latest, err)
+	}
+}
+
+func TestWaitForVersionReportsTheLastServerErrorAtTheDeadline(t *testing.T) {
+	fastPolling(t)
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: testSceneID, Versions: []fakegateway.Version{{ID: 1, VersionNumber: 1}}})
+	for range 1000 {
+		fake.FailWith(501, "")
+	}
+	_, _, err := WaitForVersion(context.Background(), newClient(t, fake), testSceneID, 2, 50*time.Millisecond)
+	var notVisible *VersionNotVisibleError
+	var gerr *gateway.Error
+	if !errors.As(err, &notVisible) || !errors.As(notVisible.Cause, &gerr) || gerr.StatusCode != 501 {
+		t.Fatalf("err = %v, want VersionNotVisibleError caused by the 501", err)
+	}
+	gets := 0
+	for _, r := range fake.Requests() {
+		if r.Method == "GET" {
+			gets++
+		}
+	}
+	if gets < 2 {
+		t.Errorf("GET requests = %d, want polling to continue after the first failure", gets)
 	}
 }
 

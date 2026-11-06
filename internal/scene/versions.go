@@ -2,7 +2,9 @@ package scene
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"slices"
 	"sort"
@@ -118,7 +120,8 @@ func (e *ConcurrentVersionsError) Error() string {
 }
 
 // VersionNotVisibleError reports that the expected version did not appear,
-// either before the timeout (Cause nil) or because a lookup failed.
+// either before the timeout (Cause nil) or because a lookup failed. A
+// transient failure is the Cause only when the timeout ends the wait on it.
 type VersionNotVisibleError struct {
 	SceneID    string
 	Expected   int
@@ -138,39 +141,28 @@ func (e *VersionNotVisibleError) Unwrap() error { return e.Cause }
 // WaitForVersion polls the scene until a version numbered expected or higher
 // appears, for at most timeout. Exactly one such version is returned; more
 // than one is a *ConcurrentVersionsError; none is a *VersionNotVisibleError.
-// latestSeen is the highest version number of the last successful poll.
+// latestSeen is the highest version number of the last successful poll. A
+// lookup failing with 429, a 5xx or a network error counts as "not visible
+// yet"; any other lookup failure ends the wait at once.
 func WaitForVersion(ctx context.Context, client *gateway.Client, sceneID string, expected int, timeout time.Duration) (Version, int, error) {
 	deadline := time.Now().Add(timeout)
 	latestSeen := 0
+	var lastErr error
 	for {
 		info, err := Describe(ctx, client, sceneID)
-		if err != nil {
+		lastErr = err
+		if err != nil && !transientLookupError(err) {
 			return Version{}, latestSeen, &VersionNotVisibleError{SceneID: sceneID, Expected: expected, LatestSeen: latestSeen, Cause: err}
 		}
-		latest, _ := LatestVersion(info)
-		latestSeen = latest.Number
-		var fresh []Version
-		for _, v := range info.Versions {
-			if v.Number >= expected {
-				fresh = append(fresh, v)
+		if err == nil {
+			if v, done, err := pickVersion(info, sceneID, expected, &latestSeen); done {
+				return v, latestSeen, err
 			}
-		}
-		switch len(fresh) {
-		case 0:
-		case 1:
-			return fresh[0], latestSeen, nil
-		default:
-			sort.Slice(fresh, func(i, j int) bool { return fresh[i].Number < fresh[j].Number })
-			candidates := make([]int, len(fresh))
-			for i, v := range fresh {
-				candidates[i] = v.Number
-			}
-			return Version{}, latestSeen, &ConcurrentVersionsError{SceneID: sceneID, Candidates: candidates}
 		}
 
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return Version{}, latestSeen, &VersionNotVisibleError{SceneID: sceneID, Expected: expected, LatestSeen: latestSeen}
+			return Version{}, latestSeen, &VersionNotVisibleError{SceneID: sceneID, Expected: expected, LatestSeen: latestSeen, Cause: lastErr}
 		}
 		timer := time.NewTimer(min(pollInterval, remaining))
 		select {
@@ -180,4 +172,40 @@ func WaitForVersion(ctx context.Context, client *gateway.Client, sceneID string,
 		case <-timer.C:
 		}
 	}
+}
+
+// transientLookupError is a lookup failure that a later poll may not repeat:
+// 429, any 5xx, or a network error.
+func transientLookupError(err error) bool {
+	var gerr *gateway.Error
+	if !errors.As(err, &gerr) {
+		return false
+	}
+	return gerr.Kind == gateway.Network || gerr.StatusCode == http.StatusTooManyRequests ||
+		(gerr.StatusCode >= 500 && gerr.StatusCode <= 599)
+}
+
+// pickVersion records the latest number in info and reports whether the wait
+// is over: one version at or above expected, or several.
+func pickVersion(info Info, sceneID string, expected int, latestSeen *int) (Version, bool, error) {
+	latest, _ := LatestVersion(info)
+	*latestSeen = latest.Number
+	var fresh []Version
+	for _, v := range info.Versions {
+		if v.Number >= expected {
+			fresh = append(fresh, v)
+		}
+	}
+	switch len(fresh) {
+	case 0:
+		return Version{}, false, nil
+	case 1:
+		return fresh[0], true, nil
+	}
+	sort.Slice(fresh, func(i, j int) bool { return fresh[i].Number < fresh[j].Number })
+	candidates := make([]int, len(fresh))
+	for i, v := range fresh {
+		candidates[i] = v.Number
+	}
+	return Version{}, true, &ConcurrentVersionsError{SceneID: sceneID, Candidates: candidates}
 }

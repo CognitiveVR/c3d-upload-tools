@@ -16,7 +16,7 @@ const (
 )
 
 // withRetry runs a GET attempt up to maxAttempts times while it fails with
-// 502, 503, 504 or a network error.
+// 429, a 5xx other than 501 and 505, or a network error.
 func (c *Client) withRetry(ctx context.Context, path string, attempt func() (*Response, error)) (*Response, error) {
 	for n := 1; ; n++ {
 		resp, err := attempt()
@@ -40,11 +40,17 @@ func retryable(resp *Response, err error) bool {
 		var gerr *Error
 		return errors.As(err, &gerr) && gerr.Kind == Network
 	}
-	switch resp.StatusCode {
-	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+	return retryableStatus(resp.StatusCode)
+}
+
+func retryableStatus(status int) bool {
+	switch status {
+	case http.StatusNotImplemented, http.StatusHTTPVersionNotSupported:
+		return false
+	case http.StatusTooManyRequests:
 		return true
 	}
-	return false
+	return status >= 500 && status <= 599
 }
 
 // retryDelay honors Retry-After in seconds, capped at one minute; otherwise

@@ -357,15 +357,46 @@ func TestOversizedRetryAfterIsCappedNotOverflowed(t *testing.T) {
 	}
 }
 
-func TestGetDoesNotRetryOtherStatuses(t *testing.T) {
+func TestGetRetriesTooManyRequestsHonoringRetryAfter(t *testing.T) {
+	fake := fakegateway.New(t)
+	c, sleeps := newTestClient(t, fake, fake.Key())
+	fake.FailWithHeaders(429, "", http.Header{"Retry-After": {"0"}})
+	if err := c.VerifyKey(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(fake.Requests()); n != 2 {
+		t.Fatalf("recorded %d requests, want 2", n)
+	}
+	if got := sleeps.got(); len(got) != 1 || got[0] != 0 {
+		t.Fatalf("sleeps %v, want [0]", got)
+	}
+}
+
+func TestGetRetriesInternalServerError(t *testing.T) {
 	fake := fakegateway.New(t)
 	c, _ := newTestClient(t, fake, fake.Key())
 	fake.FailWith(500, "")
-	if err := c.VerifyKey(context.Background()); err == nil {
-		t.Fatal("want error")
+	if err := c.VerifyKey(context.Background()); err != nil {
+		t.Fatal(err)
 	}
-	if n := len(fake.Requests()); n != 1 {
-		t.Fatalf("recorded %d requests", n)
+	if n := len(fake.Requests()); n != 2 {
+		t.Fatalf("recorded %d requests, want 2", n)
+	}
+}
+
+func TestGetDoesNotRetryOtherStatuses(t *testing.T) {
+	for _, status := range []int{400, 404, 501, 505} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			fake := fakegateway.New(t)
+			c, _ := newTestClient(t, fake, fake.Key())
+			fake.FailWith(status, "")
+			if err := c.VerifyKey(context.Background()); err == nil {
+				t.Fatal("want error")
+			}
+			if n := len(fake.Requests()); n != 1 {
+				t.Fatalf("recorded %d requests, want 1", n)
+			}
+		})
 	}
 }
 
