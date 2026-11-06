@@ -358,6 +358,7 @@ func TestResolveGatewayURLSafety(t *testing.T) {
 		"http://127.0.0.1:8080/v0":     "127.0.0.1",
 		"http://[::1]:8080/v0":         "::1",
 		"https://proxy.example.com/v0": "proxy.example.com",
+		"http://LOCALHOST:8080/v0":     "localhost",
 	}
 	for raw, host := range accepted {
 		s, err := Resolve(Flags{GatewayURL: raw}, envMap(nil), nil, nil)
@@ -372,6 +373,15 @@ func TestResolveGatewayURLSafety(t *testing.T) {
 		s, err := Resolve(Flags{Environment: e}, envMap(nil), nil, nil)
 		if err != nil || len(s.Warnings) != 0 {
 			t.Fatalf("%s: warnings %q, err %v", e, s.Warnings, err)
+		}
+	}
+}
+
+func TestResolveGatewayHostCaseInsensitive(t *testing.T) {
+	for _, raw := range []string{"https://DATA.COGNITIVE3D.COM/v0", "https://Data.C3DDev.com/v0"} {
+		s, err := Resolve(Flags{GatewayURL: raw}, envMap(nil), nil, nil)
+		if err != nil || len(s.Warnings) != 0 {
+			t.Fatalf("%q: warnings %q, err %v", raw, s.Warnings, err)
 		}
 	}
 }

@@ -154,7 +154,7 @@ func checkGatewayURL(raw string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gateway URL %q is not a valid URL: %w", raw, err)
 	}
-	host := u.Hostname()
+	host := strings.ToLower(u.Hostname())
 	if host == "" {
 		return nil, fmt.Errorf("gateway URL %q has no host", raw)
 	}
