@@ -333,6 +333,14 @@ func TestGetBackoffDoublesWithJitterThenGivesUp(t *testing.T) {
 	}
 }
 
+func TestJitterFractionStaysInUnitInterval(t *testing.T) {
+	for i := 0; i < 10000; i++ {
+		if f := jitterFraction(); f < 0 || f >= 1 {
+			t.Fatalf("jitterFraction() = %v; want [0, 1)", f)
+		}
+	}
+}
+
 func TestRetryAfterIsCappedAtSixtySeconds(t *testing.T) {
 	fake := fakegateway.New(t)
 	c, sleeps := newTestClient(t, fake, fake.Key())

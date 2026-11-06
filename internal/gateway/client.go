@@ -4,11 +4,12 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -113,7 +114,7 @@ func New(baseURL, apiKey, userAgent string, log *ui.Logger, opts ...Option) *Cli
 		apiHTTP:    newHTTPClient(o.responseHeaderTimeout),
 		uploadHTTP: newHTTPClient(0),
 		sleep:      sleepContext,
-		random:     rand.Float64,
+		random:     jitterFraction,
 	}
 }
 
@@ -298,4 +299,14 @@ func (s *sentReader) Read(p []byte) (int, error) {
 		s.sent.Store(true)
 	}
 	return n, err
+}
+
+// jitterFraction returns a uniform value in [0, 1) from the system's random
+// source; a read failure yields the midpoint so a retry still waits.
+func jitterFraction() float64 {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0.5
+	}
+	return float64(binary.LittleEndian.Uint64(b[:])>>11) / (1 << 53)
 }
