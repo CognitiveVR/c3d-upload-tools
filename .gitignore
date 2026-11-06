@@ -1,5 +1,6 @@
 .DS_Store
 *object*.json
+!internal/**/testdata/*.json
 
 # Auto-generated during scene uploads
 **/settings.json
