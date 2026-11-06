@@ -63,9 +63,13 @@ func unquote(value string) string {
 	return value
 }
 
-// LoadCurrentDirectory parses ./.env. A missing file yields an empty map and
-// no error.
+// LoadCurrentDirectory parses ./.env. A missing .env, or one that is not a
+// regular file (such as a virtualenv directory), yields an empty map and no
+// error.
 func LoadCurrentDirectory() (map[string]string, error) {
+	if info, err := os.Stat(".env"); err == nil && !info.Mode().IsRegular() {
+		return map[string]string{}, nil
+	}
 	file, err := os.Open(".env")
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

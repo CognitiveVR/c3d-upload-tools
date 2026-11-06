@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -149,13 +150,36 @@ func TestLoadCurrentDirectoryReadsFile(t *testing.T) {
 	}
 }
 
-func TestLoadCurrentDirectoryUnreadableIsError(t *testing.T) {
+func TestLoadCurrentDirectoryIgnoresADotEnvDirectory(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, ".env"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
+	got, err := LoadCurrentDirectory()
+	if err != nil {
+		t.Fatalf("a .env directory must be ignored, got %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("want empty non-nil map, got %d keys (nil=%v)", len(got), got == nil)
+	}
+}
+
+func TestLoadCurrentDirectoryUnreadableIsError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes do not deny reads on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	if err := os.WriteFile(path, []byte("A=1\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := os.Open(path); err == nil {
+		_ = f.Close()
+		t.Skip("this user can read a mode 000 file")
+	}
+	t.Chdir(dir)
 	if _, err := LoadCurrentDirectory(); err == nil {
-		t.Fatal("reading a .env that is a directory must return an error")
+		t.Fatal("an unreadable .env must return an error")
 	}
 }
