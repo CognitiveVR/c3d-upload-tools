@@ -186,9 +186,9 @@ func (e *Error) UserMessage() string {
 		return fmt.Sprintf("The Cognitive3D gateway returned a server error (status %d). Please try again later.", e.StatusCode)
 	case Network, Interrupted:
 		if e.BodySent {
-			if check := checkCommand(e.method, e.path); check != "" {
+			if check, retry := checkCommand(e.method, e.path); check != "" {
 				return "The connection was lost while waiting for the gateway's answer. The upload may still have completed. Check with: " +
-					check + " before retrying, because a retry would create another version."
+					check + " before retrying, because " + retry
 			}
 		}
 		return fmt.Sprintf("Could not reach %s: %v", e.host, e.cause)
@@ -255,20 +255,28 @@ func sceneIDFromPath(path string) string {
 	return ""
 }
 
-// checkCommand names the command that shows whether an upload landed, or
-// returns empty for routes that are not uploads.
-func checkCommand(method, path string) string {
+const (
+	retryCreatesVersion  = "a retry would create another version."
+	retryReplacesContent = "a retry replaces the same content."
+)
+
+// checkCommand names the command that shows whether an upload landed and
+// what a retry of it does, or returns empty for routes that are not uploads.
+// Only POST /scenes and POST /scenes/{id} create versions.
+func checkCommand(method, path string) (command, retry string) {
 	if method != http.MethodPost {
-		return ""
+		return "", ""
 	}
 	seg := segments(path)
 	switch {
-	case seg[0] == "scenes" && (len(seg) <= 2 || (len(seg) == 3 && seg[2] == "screenshot")):
-		return binaryName + " scene list"
+	case seg[0] == "scenes" && len(seg) <= 2:
+		return binaryName + " scene list", retryCreatesVersion
+	case seg[0] == "scenes" && len(seg) == 3 && seg[2] == "screenshot":
+		return binaryName + " scene list", retryReplacesContent
 	case len(seg) == 3 && seg[0] == "objects":
-		return binaryName + " object list --scene-id " + seg[1]
+		return binaryName + " object list --scene-id " + seg[1], retryReplacesContent
 	case len(seg) == 4 && seg[0] == "scenes" && seg[2] == "egos":
-		return binaryName + " ego list --scene-id " + seg[1]
+		return binaryName + " ego list --scene-id " + seg[1], retryReplacesContent
 	}
-	return ""
+	return "", ""
 }

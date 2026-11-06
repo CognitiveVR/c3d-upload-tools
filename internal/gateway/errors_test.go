@@ -131,19 +131,21 @@ func TestManifestRouteIsExact(t *testing.T) {
 }
 
 func TestLostConnectionMessageNamesTheCheckCommand(t *testing.T) {
+	const newVersion = "a retry would create another version."
+	const sameContent = "a retry replaces the same content."
 	tests := []struct {
-		method, path, check string
+		method, path, check, consequence string
 	}{
-		{"POST", "/scenes", "cognitive3d-cli-upload scene list"},
-		{"POST", "/scenes/s1", "cognitive3d-cli-upload scene list"},
-		{"POST", "/scenes/s1/screenshot", "cognitive3d-cli-upload scene list"},
-		{"POST", "/objects/s1/cube", "cognitive3d-cli-upload object list --scene-id s1"},
-		{"POST", "/scenes/s1/egos/head", "cognitive3d-cli-upload ego list --scene-id s1"},
+		{"POST", "/scenes", "cognitive3d-cli-upload scene list", newVersion},
+		{"POST", "/scenes/s1", "cognitive3d-cli-upload scene list", newVersion},
+		{"POST", "/scenes/s1/screenshot", "cognitive3d-cli-upload scene list", sameContent},
+		{"POST", "/objects/s1/cube", "cognitive3d-cli-upload object list --scene-id s1", sameContent},
+		{"POST", "/scenes/s1/egos/head", "cognitive3d-cli-upload ego list --scene-id s1", sameContent},
 	}
 	for _, tt := range tests {
 		e := newTransportError(tt.method, tt.path, "data.c3ddev.com", context.DeadlineExceeded, true, true)
 		want := "The connection was lost while waiting for the gateway's answer. The upload may still have completed. Check with: " +
-			tt.check + " before retrying, because a retry would create another version."
+			tt.check + " before retrying, because " + tt.consequence
 		if e.UserMessage() != want {
 			t.Errorf("%s %s: %q", tt.method, tt.path, e.UserMessage())
 		}
