@@ -61,6 +61,41 @@ func TestProgressDone(t *testing.T) {
 	}
 }
 
+func TestProgressAbortEndsADrawnLine(t *testing.T) {
+	var buf bytes.Buffer
+	p, _ := newTestProgress(&buf, 1000, "x")
+	p.Add(420)
+	buf.Reset()
+	p.Abort()
+	if buf.String() != "\n" {
+		t.Fatalf("got %q, want a newline", buf.String())
+	}
+	buf.Reset()
+	p.Abort()
+	if buf.Len() != 0 {
+		t.Fatalf("second Abort wrote %q", buf.String())
+	}
+}
+
+func TestProgressAbortIsANoOpWithoutALine(t *testing.T) {
+	var buf bytes.Buffer
+	p, _ := newTestProgress(&buf, 1000, "x")
+	p.Abort()
+	if buf.Len() != 0 {
+		t.Fatalf("Abort before any draw wrote %q", buf.String())
+	}
+	p.Add(10)
+	p.Done()
+	buf.Reset()
+	p.Abort()
+	if buf.Len() != 0 {
+		t.Fatalf("Abort after Done wrote %q", buf.String())
+	}
+	var none *Progress
+	none.Abort()
+	NewProgress(nil, 1, "x").Abort()
+}
+
 func TestProgressZeroTotalOmitsPercent(t *testing.T) {
 	var buf bytes.Buffer
 	p, _ := newTestProgress(&buf, 0, "x")

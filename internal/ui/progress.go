@@ -69,6 +69,22 @@ func (p *Progress) Done() {
 		done = p.total
 	}
 	_, _ = io.WriteString(p.terminal, "\r"+p.line(done)+"\n")
+	p.drawn = false
+}
+
+// Abort ends a drawn status line with a newline, so the next log line starts
+// on its own line. Without an unfinished line it does nothing, so it is safe
+// to defer next to Done.
+func (p *Progress) Abort() {
+	if p == nil || p.terminal == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.drawn {
+		_, _ = io.WriteString(p.terminal, "\n")
+		p.drawn = false
+	}
 }
 
 func (p *Progress) line(done int64) string {

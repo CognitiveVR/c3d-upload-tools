@@ -1,6 +1,7 @@
 package object
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/cognitivevr/c3d-upload-tools/internal/fakegateway"
 	"github.com/cognitivevr/c3d-upload-tools/internal/gateway"
 	"github.com/cognitivevr/c3d-upload-tools/internal/manifest"
+	"github.com/cognitivevr/c3d-upload-tools/internal/ui"
 )
 
 var uuidV4 = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
@@ -128,6 +130,24 @@ func TestUploadManifestPostsTheJSONBody(t *testing.T) {
 	var got manifest.Manifest
 	if err := json.Unmarshal(r.Body, &got); err != nil || len(got.Objects) != 1 || got.Objects[0].ID != "id-1" {
 		t.Errorf("body = %s (err %v)", r.Body, err)
+	}
+}
+
+func TestFailedUploadEndsTheProgressLine(t *testing.T) {
+	fake := fakegateway.New(t)
+	fake.AddScene(fakegateway.Scene{ID: "scene-1", SDKFacingID: "scene-1"})
+	fake.FailWith(http.StatusInternalServerError, "conversion failed")
+	plan, err := Plan(copyFixture(t, "object-gltf"), "cube")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var terminal bytes.Buffer
+	progress := ui.NewProgress(&terminal, plan.TotalBytes, "cube")
+	if err := Upload(context.Background(), newClient(t, fake), plan, "scene-1", 1, nil, progress); err == nil {
+		t.Fatal("want an error for a 500 from the gateway")
+	}
+	if !strings.HasPrefix(terminal.String(), "\r") || !strings.HasSuffix(terminal.String(), "\n") {
+		t.Errorf("terminal = %q, want a drawn line ended by a newline", terminal.String())
 	}
 }
 

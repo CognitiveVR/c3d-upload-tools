@@ -56,6 +56,7 @@ func Upload(ctx context.Context, client *gateway.Client, plan *UploadPlan, scene
 	if log == nil {
 		log = ui.New(io.Discard, ui.Options{})
 	}
+	defer progress.Abort()
 	if _, err := client.PostMultipart(ctx, UploadPath(sceneID, plan.Mesh), VersionQuery(versionNumber), plan.Parts, progress); err != nil {
 		return err
 	}
