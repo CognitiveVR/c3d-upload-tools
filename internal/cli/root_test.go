@@ -1,0 +1,85 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
+)
+
+func testIO() IO {
+	return IO{Stdin: &bytes.Buffer{}, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}
+}
+
+func TestLegacyUnderscoreFlagsAreAccepted(t *testing.T) {
+	cases := []struct {
+		args []string
+		want int
+	}{
+		{[]string{"stub", "--scene_dir", "x", "--dry_run"}, 0},
+		{[]string{"stub", "--scene-dir", "x", "--dry-run"}, 0},
+		{[]string{"stub", "--scene--dir", "x"}, 4},
+	}
+	for _, tc := range cases {
+		streams := testIO()
+		root := newRootCmd(streams)
+		var gotDir string
+		var gotDry bool
+		stub := &cobra.Command{
+			Use: "stub",
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				gotDir, _ = cmd.Flags().GetString("scene-dir")
+				gotDry, _ = cmd.Flags().GetBool("dry-run")
+				return nil
+			},
+		}
+		stub.Flags().String("scene-dir", "", "")
+		stub.Flags().Bool("dry-run", false, "")
+		root.AddCommand(stub)
+
+		if code := run(context.Background(), root, tc.args, streams); code != tc.want {
+			t.Fatalf("%v: exit code = %d, want %d", tc.args, code, tc.want)
+		}
+		if tc.want == 0 && (gotDir != "x" || !gotDry) {
+			t.Errorf("%v: scene-dir=%q dry-run=%v, want x/true", tc.args, gotDir, gotDry)
+		}
+	}
+}
+
+func TestExecuteStopsWhenContextIsCancelled(t *testing.T) {
+	streams := testIO()
+	root := newRootCmd(streams)
+	started := make(chan struct{})
+	root.AddCommand(&cobra.Command{
+		Use: "block",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			close(started)
+			<-cmd.Context().Done()
+			return cmd.Context().Err()
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan int, 1)
+	go func() { done <- run(ctx, root, []string{"block"}, streams) }()
+
+	<-started
+	cancel()
+	select {
+	case code := <-done:
+		if code != 1 {
+			t.Errorf("exit code = %d, want 1", code)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("run did not return within one second of cancellation")
+	}
+}
+
+func TestNormalizeFlagReplacesUnderscores(t *testing.T) {
+	if got := normalizeFlag(nil, "a_b_c"); got != "a-b-c" {
+		t.Errorf("normalizeFlag = %q, want a-b-c", got)
+	}
+}

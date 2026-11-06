@@ -14,3 +14,7 @@
 .env.prod
 .env.upload2.dev
 .env*
+# Go build output
+/dist/
+/cognitive3d-cli-upload
+coverage.out
