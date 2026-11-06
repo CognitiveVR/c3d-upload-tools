@@ -24,10 +24,13 @@
         "httptest",
         "localfile",
         "Nopper",
+        "notarytool",
         "Pavlovic",
         "pflag",
         "testdata",
-        "visualstudio"
+        "virtualenv",
+        "visualstudio",
+        "xcrun"
     ],
     "ignorePaths": [
         "node_modules/**",

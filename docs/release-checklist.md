@@ -42,6 +42,10 @@ Running the Release workflow by hand (Actions, Release, Run workflow) takes a `d
 
 - `dry_run` true (the default) builds a snapshot with `goreleaser release --snapshot --clean` and uploads `dist/` as the `snapshot-dist` artifact. Nothing is published.
 - Signing secrets are used only for `v*` tags and for dispatches from `main`. A dispatch from any other branch builds an unsigned snapshot.
+- A run that signs fails before building if any of `APPLE_TEAM_ID`, `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_DEVELOPER_ID_P12_BASE64`, `APPLE_DEVELOPER_ID_P12_PASSWORD` or `HOMEBREW_TAP_TOKEN` is empty, and names the empty ones.
+- A real release (a tag, or `dry_run` false) fails unless its commit is on `main`, and sets `REQUIRE_SIGNING=1`, so `scripts/sign-macos.sh` fails instead of skipping when `APPLE_TEAM_ID` is unset.
+- `sign-macos.sh` fails unless notarization reports `Accepted`. It prints the submission id and status; on failure, run the `xcrun notarytool log <id>` command it prints to see why.
+- A prerelease tag such as `v2.1.0-rc.1` publishes the GitHub prerelease but skips the Homebrew cask.
 - `dry_run` false on a ref that is not a tag fails at GoReleaser, because it cannot publish without a tag.
 
 ## One-time repository setup

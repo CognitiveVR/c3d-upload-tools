@@ -79,11 +79,13 @@ Upload a dynamic object. The directory holds `<name>.glb` (or `<name>.gltf` plus
 cognitive3d-cli-upload object upload --scene-id <scene-id> --object-dir ./my-object --object-filename cube
 ```
 
-Pass `--manifest <path>` to merge into a different manifest file, and `--upload-manifest` to upload the manifest right after the object. Otherwise upload the manifest as a separate step so the objects appear in the dashboard:
+Pass `--manifest <path>` to merge into a different manifest file, and `--upload-manifest` to upload the manifest right after the object. The manifest file is read again after the upload, so entries other uploads added in the meantime are kept. Otherwise upload the manifest as a separate step so the objects appear in the dashboard:
 
 ```bash
 cognitive3d-cli-upload object manifest upload --scene-id <scene-id>
 ```
+
+After the manifest upload, the CLI lists the version's objects and warns about any that have no files. If that listing fails, the manifest is still uploaded: the command warns, exits 0, and the JSON result has `objectsWithoutFiles` set to `null`.
 
 List the objects of the latest version. `--write-manifest` saves the list as `<scene id>_object_manifest.json`, replacing that file, and `--write-list` saves the raw list as `<scene id>_object_list.json`:
 
@@ -125,7 +127,9 @@ Other commands: `scene list`, `scene show`, `ego list`, `version` and `completio
 | `object upload` | `<name>.glb`, or `<name>.gltf` plus `<name>.bin`; `cvr_object_thumbnail.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`) |
 | `ego upload` | The model and its `.bin` files | `.png`, `.jpg` and `.webp` images, one `ego.json` |
 
-`settings.json` is built in memory from the existing file and the scene name, sent with the upload, and written into the scene directory only after the upload succeeds. Its `sdkVersion` is `cli-go-v<version>`.
+`settings.json` is built in memory from the existing file and the scene name, sent with the upload, and written into the scene directory only after the upload succeeds. Its `sdkVersion` is `cli-go-v<version>`. Before sending anything, `scene upload` checks that it can create a file in the directory and that an existing `settings.json` is writable; if not, it exits 4 without starting the upload. A dry run skips that check and writes nothing. If the write still fails after the gateway accepted the upload, the CLI warns and carries on. A `settings.json` that is a link or not a regular file is refused, and a leading UTF-8 byte order mark in it is ignored.
+
+`.DS_Store`, `Thumbs.db`, `desktop.ini` and other hidden files are skipped without a warning.
 
 The CLI warns about any file of 500 MB or more and about an upload of 2 GiB or more, and refuses an upload over 3 GiB, the gateway's limit per request. A large upload can legitimately take a long time because the gateway converts every file before it answers; there is no client-side response timeout unless you set `--timeout`.
 
@@ -159,7 +163,7 @@ development:
   developer_api_key: your_dev_key
 ```
 
-The key is required only when a command is about to talk to the gateway, so `--dry-run` and local validation work without one. Keep the key out of version control; `.env` is git-ignored here.
+The key is required only when a command is about to talk to the gateway, so `--dry-run` and local validation work without one. Keep the key out of version control; `.env` is git-ignored here. A `.env` that is not a regular file, such as a Python virtualenv directory, is ignored.
 
 Flags also accept the old underscore spellings, so `--scene_dir` and `--dry_run` still work in existing scripts.
 
@@ -181,7 +185,7 @@ With `--format json`, a command prints exactly one JSON object or array on stdou
 
 ## Scene versions
 
-Each `scene upload` to an existing scene creates a new version. The CLI reads the latest version number before the upload and waits for the next one to appear, and prints that number as the new version. If more than one new version appears while the upload runs, it cannot tell which one is its own, so it lists the candidate numbers, prints no version number, and exits 1; check with `scene show`. If the new version is not visible within 30 seconds, the command also exits 1 and prints the `scene show` command to check; `settings.json` has already been written by then.
+Each `scene upload` to an existing scene creates a new version. The CLI reads the latest version number before the upload and waits for the next one to appear, and prints that number as the new version. If more than one new version appears while the upload runs, it cannot tell which one is its own, so it lists the candidate numbers, prints no version number, and exits 1; check with `scene show`. Once it sees one new version, it polls once more to confirm that no second one follows. If the new version is not visible within 30 seconds, the command also exits 1 and prints the `scene show` command to check; `settings.json` has already been written by then. The 30 seconds bound every request of the wait, including retries and any `Retry-After` the gateway asks for.
 
 Objects, manifests and egos belong to a version. After a new version, upload them again; the CLI warns about this each time. Commands that take `--version` use the latest version when it is omitted.
 
@@ -189,17 +193,19 @@ Objects, manifests and egos belong to a version. After a new version, upload the
 
 `ego upload` fills one slot (`head`, `controller_left`, `controller_right` or a custom key) from a directory of a model, its `.png`, `.jpg` and `.webp` images and an optional `ego.json`. `ego list` shows each slot with its file count and whether it is optimized, and `ego delete` empties a slot so session replay falls back to the bundled model.
 
-`--wait` polls every 5 seconds for up to 120 seconds and reports whether the gateway marked the model optimized. Running out of time is not an error: small models may never be marked optimized, so a `false` answer is normal for them. `--timeout` bounds the whole command, including the wait, so a long `--wait` needs a longer `--timeout` or none. When `--timeout` or Ctrl-C cuts the wait short, the model is already uploaded; the command exits 1 and names `ego list --scene-id <id>` to check on it.
+`--wait` polls every 5 seconds for up to 120 seconds and reports whether the gateway marked the model optimized. Running out of time is not an error: small models may never be marked optimized, so a `false` answer is normal for them. `--timeout` bounds the whole command, including the wait, so a long `--wait` needs a longer `--timeout` or none. The 120 seconds also bound each poll and its retries. When a poll fails, or `--timeout` or Ctrl-C cuts the wait short, the model is already uploaded: the command prints the upload result, exits 1 with a message that starts "The model was uploaded; checking optimization failed", and names `ego list --scene-id <id>` to check on it.
+
+`ego delete` asks for confirmation unless `--yes` is passed. Declining deletes nothing and exits 0; with `--format json` it prints the delete result with `deleted` false and `existed` null.
 
 ## Troubleshooting
 
 Expired key (exit 2): the CLI prints the rotation steps. Open the dashboard, go to Settings, "Manage developer key", generate a new key and update `C3D_DEVELOPER_API_KEY`. Run `cognitive3d-cli-upload auth verify` to confirm it.
 
-"The upload may still have completed": the connection dropped, or the command timed out or was interrupted, after the files were sent. The gateway may have finished the job. Check with the command the message names before retrying: `cognitive3d-cli-upload scene list` after a scene upload, because a retry creates another version; `object list --scene-id <scene-id>` or `ego list --scene-id <scene-id>` after an object or ego upload, which a retry replaces with the same content.
+"The upload may still have completed": the connection dropped, or the command timed out or was interrupted, after the files were sent. The gateway may have finished the job. An error status answered after the files were sent carries the same "Check with" advice. Check with the command the message names before retrying: `cognitive3d-cli-upload scene list` after a scene upload, because a retry creates another version; `object list --scene-id <scene-id>` or `ego list --scene-id <scene-id>` after an object or ego upload, which a retry replaces with the same content.
 
 Scene not found (exit 3): the gateway answers an unknown scene and a scene from another project the same way. Both the plain id and the `p<projectId>-<uuid>` form are accepted. Run `cognitive3d-cli-upload scene list` to see the scenes this key can reach, and `auth verify --scene-id <id>` to test one id. Check that the key belongs to the right project and `--env`.
 
-Model check failures (exit 4): textures must be `.png`, `.jpg`, `.jpeg` or `.webp`. Other files in the directory are skipped with a warning naming each one, and the upload is refused if the model references a skipped file or a file that is not in the directory. A `.glb` must be valid glTF 2.0 with no external references, and a scene directory holds either one `.glb` or `scene.gltf` plus `scene.bin`, never both. Symlinks are not uploaded.
+Model check failures (exit 4): textures must be `.png`, `.jpg`, `.jpeg` or `.webp`. Other files in the directory are skipped with a warning naming each one, and the upload is refused if the model references a skipped file or a file that is not in the directory. A `.glb` must be valid glTF 2.0 with no external references, and a scene directory holds either one `.glb` or `scene.gltf` plus `scene.bin`, never both. The `.gltf` and `.bin` names are exact: rename `Scene.gltf` or `scene.BIN` to `scene.gltf` and `scene.bin`. Symlinks are not uploaded, and a file replaced by a link between the check and the upload is refused.
 
 ## Legacy tools
 

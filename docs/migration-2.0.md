@@ -40,11 +40,15 @@ Legacy flag spellings such as `--scene_id`, `--scene_dir` and `--dry_run` are ac
 - Dry run is offline and keyless: it makes no network calls and needs no API key.
 - `sdkVersion` in `settings.json` becomes `cli-go-v<version>`.
 - A model that references a texture the CLI would not upload is rejected instead of uploaded broken.
-- Scene `settings.json` is written into the scene directory only after the upload succeeds.
+- Scene `settings.json` is written into the scene directory only after the upload succeeds. The upload checks first that the directory and an existing `settings.json` are writable and exits 4 without sending anything if not; a write that still fails afterwards is a warning, and the command exits 0.
+- A scene's separate model files must be named exactly `scene.gltf` and `scene.bin`; the legacy tools also accepted case variants such as `scene.BIN`.
+- `desktop.ini`, `Thumbs.db` and hidden files are skipped silently in every upload directory, including an ego directory.
+- A `.env` that is not a regular file, such as a Python virtualenv directory, is ignored, as the legacy scripts did.
 - Size thresholds replace the old 100 MB per-file limit: a file of 500 MB or more and a total of 2 GiB or more produce a warning, and a total over 3 GiB is refused (exit 4).
 - Symlinks in an upload directory are not uploaded.
-- A new scene version is attributed by reading the latest version before the upload and waiting for the next one to appear. If it cannot be told apart from another concurrent upload, the CLI exits 1 and names no version.
-- `ego upload` takes a directory of one model plus its images and an optional `ego.json`; `ego list` shows each slot's `files` count and `optimized` flag; `--wait` polls for up to 120 seconds and reports `optimized`, which small models may never become.
+- A new scene version is attributed by reading the latest version before the upload and waiting for the next one to appear, then polling once more to confirm no second one follows. If it cannot be told apart from another concurrent upload, the CLI exits 1 and names no version.
+- `ego upload` takes a directory of one model plus its images and an optional `ego.json`; `ego list` shows each slot's `files` count and `optimized` flag; `--wait` polls for up to 120 seconds and reports `optimized`, which small models may never become; a failed poll exits 1 with a message that the model was uploaded. A declined `ego delete` exits 0, and in JSON mode prints the result with `deleted` false.
+- `object manifest upload` exits 0 once the manifest is accepted, even if the follow-up object listing fails; it then warns, and the JSON result has `objectsWithoutFiles` set to `null`.
 
 ## Flags and environment variables
 
