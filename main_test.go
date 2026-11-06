@@ -237,21 +237,27 @@ func TestSceneUploadInterruptedAfterTheBodyWasSent(t *testing.T) {
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
+	// stop kills and reaps the child before failing; stderr is safe to read
+	// only once Wait has returned.
+	stop := func(message string) {
+		t.Helper()
+		_ = cmd.Process.Kill()
+		<-exited
+		t.Fatalf("%s (stderr %q)", message, stderr.String())
+	}
 
 	received := false
-	for deadline := time.Now().Add(10 * time.Second); !received && time.Now().Before(deadline); {
+	for deadline := time.Now().Add(3 * time.Second); !received && time.Now().Before(deadline); {
 		for _, r := range fake.Requests() {
 			received = received || (r.Method == http.MethodPost && r.Complete)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	if !received {
-		_ = cmd.Process.Kill()
-		<-exited
-		t.Fatalf("the fake never received the whole POST (stderr %q)", stderr.String())
+		stop("the fake did not receive the whole POST within three seconds")
 	}
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
-		t.Fatal(err)
+		stop("sending the interrupt: " + err.Error())
 	}
 
 	select {
@@ -261,9 +267,7 @@ func TestSceneUploadInterruptedAfterTheBodyWasSent(t *testing.T) {
 			t.Errorf("exit = %v, want exit code 1", err)
 		}
 	case <-time.After(2 * time.Second):
-		_ = cmd.Process.Kill()
-		<-exited
-		t.Fatal("the CLI did not exit within two seconds of the interrupt")
+		stop("the CLI did not exit within two seconds of the interrupt")
 	}
 	if want := "The upload may still have completed."; !strings.Contains(stderr.String(), want) {
 		t.Errorf("stderr = %q, want %q", stderr.String(), want)

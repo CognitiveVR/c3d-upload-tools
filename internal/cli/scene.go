@@ -128,16 +128,16 @@ func runSceneUpload(cmd *cobra.Command, rt *runtime) error {
 
 	progress := uploadProgress(rt, local.TotalBytes+int64(len(plan.SettingsBytes)))
 	result, err := scene.Upload(ctx, client, plan, sceneID, previousLatest, rt.log, progress)
-	var notVisible *scene.VersionNotVisibleError
-	if errors.As(err, &notVisible) {
+	if err != nil {
 		if result.SceneID != "" {
 			if printErr := printSceneResult(rt, result); printErr != nil {
 				return printErr
 			}
 		}
-		return &codedError{code: exitFailure, kind: "version_not_visible", message: notVisibleMessage(notVisible)}
-	}
-	if err != nil {
+		var notVisible *scene.VersionNotVisibleError
+		if errors.As(err, &notVisible) {
+			return &codedError{code: exitFailure, kind: "version_not_visible", message: notVisibleMessage(notVisible)}
+		}
 		return err
 	}
 	if err := printSceneResult(rt, result); err != nil {
@@ -194,14 +194,18 @@ type dryRunPart struct {
 }
 
 type dryRunRequest struct {
-	DryRun bool         `json:"dryRun"`
-	Method string       `json:"method"`
-	Path   string       `json:"path"`
-	Parts  []dryRunPart `json:"parts"`
+	DryRun        bool         `json:"dryRun"`
+	Method        string       `json:"method"`
+	Path          string       `json:"path"`
+	Authorization string       `json:"authorization"`
+	Parts         []dryRunPart `json:"parts"`
 }
 
 func printSceneDryRun(rt *runtime, plan *scene.UploadPlan, path string) error {
-	request := dryRunRequest{DryRun: true, Method: http.MethodPost, Path: path}
+	request := dryRunRequest{
+		DryRun: true, Method: http.MethodPost, Path: path,
+		Authorization: "APIKEY:DEVELOPER " + redactKey(rt.settings.APIKey),
+	}
 	for _, p := range plan.Parts {
 		request.Parts = append(request.Parts, dryRunPart{Field: p.Field, Filename: p.Filename, Bytes: p.Size})
 	}
@@ -210,7 +214,7 @@ func printSceneDryRun(rt *runtime, plan *scene.UploadPlan, path string) error {
 		return json.NewEncoder(out).Encode(request)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\nAuthorization: APIKEY:DEVELOPER %s\n", request.Method, request.Path, redactKey(rt.settings.APIKey))
+	fmt.Fprintf(&b, "%s %s\nAuthorization: %s\n", request.Method, request.Path, request.Authorization)
 	for _, p := range request.Parts {
 		fmt.Fprintf(&b, "%s  %s  %d bytes\n", p.Field, p.Filename, p.Bytes)
 	}

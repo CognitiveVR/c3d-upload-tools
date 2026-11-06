@@ -158,18 +158,22 @@ func statFile(dir, name string) (localFile, error) {
 		return localFile{}, fmt.Errorf("cannot upload %q: %w", name, err)
 	}
 	path := filepath.Join(dir, name)
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return localFile{}, err
 	}
-	if !info.Mode().IsRegular() {
-		return localFile{}, fmt.Errorf("%s is not a regular file", path)
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		return localFile{}, fmt.Errorf("%s is a symbolic link; it must be a regular file", name)
+	case !info.Mode().IsRegular():
+		return localFile{}, fmt.Errorf("%s is not a regular file", name)
 	}
 	return localFile{name: name, path: path, size: info.Size()}, nil
 }
 
 // findScreenshot matches screenshot.png exactly, so that a differently cased
-// file is reported the same way on every file system.
+// file is reported the same way on every file system. Like every other part,
+// it must be a regular file, not a link.
 func findScreenshot(dir string) (localFile, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

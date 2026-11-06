@@ -156,6 +156,42 @@ func TestUploadVersionNotVisibleKeepsSettingsAndReturnsTheError(t *testing.T) {
 	readSettings(t, plan.Local.Dir)
 }
 
+// makeReadOnly removes write permission from dir until the test ends, and
+// skips the test where that does not stop file creation (root, Windows).
+func makeReadOnly(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	probe, err := os.CreateTemp(dir, "probe")
+	if err == nil {
+		_ = probe.Close()
+		_ = os.Remove(probe.Name())
+		t.Skip("a read-only directory still accepts new files here")
+	}
+}
+
+func TestUploadSettingsWriteFailureKeepsTheNewSceneID(t *testing.T) {
+	fastPolling(t)
+	fake := fakegateway.New(t)
+	plan := finalizedPlan(t, "scene-glb", "S")
+	makeReadOnly(t, plan.Local.Dir)
+	log, _ := testLogger()
+
+	result, err := Upload(context.Background(), newClient(t, fake), plan, "", 0, log, nil)
+	if err == nil {
+		t.Fatal("Upload succeeded in a read-only directory")
+	}
+	if result.SceneID == "" || !result.Created {
+		t.Fatalf("result = %+v, want the new scene id", result)
+	}
+	if msg := err.Error(); !strings.Contains(msg, result.SceneID) || !strings.Contains(msg, "settings.json could not be written") {
+		t.Errorf("err = %q, want the scene id and settings.json named", msg)
+	}
+	assertNoSettings(t, plan.Local.Dir)
+}
+
 func TestUploadGatewayFailureWritesNothing(t *testing.T) {
 	fake := fakegateway.New(t)
 	fake.FailWith(http.StatusInternalServerError, "conversion failed")
@@ -240,11 +276,12 @@ func TestUploadCancelledBeforeTheBodyWasSentCouldNotReach(t *testing.T) {
 
 	_, err := Upload(ctx, newClient(t, fake), plan, "", 0, log, nil)
 	var gerr *gateway.Error
-	if !errors.As(err, &gerr) || gerr.BodySent {
-		t.Fatalf("err = %v, want a gateway error with the body not sent", err)
+	if !errors.As(err, &gerr) || gerr.Kind != gateway.Interrupted || gerr.BodySent {
+		t.Fatalf("err = %v, want Interrupted with the body not sent", err)
 	}
-	if msg := gerr.UserMessage(); strings.Contains(msg, "may still have completed") {
-		t.Errorf("message = %q, must not claim the upload may have completed", msg)
+	msg := gerr.UserMessage()
+	if !strings.HasPrefix(msg, "Could not reach ") || strings.Contains(msg, "may still have completed") {
+		t.Errorf("message = %q, want Could not reach and no claim that the upload may have completed", msg)
 	}
 	assertNoSettings(t, plan.Local.Dir)
 }

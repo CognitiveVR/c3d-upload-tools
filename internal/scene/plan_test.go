@@ -138,6 +138,21 @@ func TestPlanRequiresScreenshotWithExactName(t *testing.T) {
 	}
 }
 
+func TestPlanRejectsASymlinkedScreenshot(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	target := filepath.Join(dir, "real.png")
+	if err := os.Rename(filepath.Join(dir, "screenshot.png"), target); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "screenshot.png")); err != nil {
+		t.Skipf("cannot create a symbolic link here: %v", err)
+	}
+	_, err := Plan(dir)
+	if err == nil || !strings.Contains(err.Error(), "screenshot.png is a symbolic link; it must be a regular file") {
+		t.Errorf("err = %v, want the symbolic-link error", err)
+	}
+}
+
 func TestPlanFailsTheModelCheckWithEveryError(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "scene.gltf", `{"buffers":[{"uri":"scene.bin","byteLength":9}],"images":[{"uri":"missing.png"},{"uri":"data:image/png;base64,AA=="}]}`)

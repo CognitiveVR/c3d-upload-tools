@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -279,6 +282,18 @@ func TestSceneUploadDryRunRedactsTheKeyAndPrintsJSON(t *testing.T) {
 	if result["dryRun"] != true || result["method"] != "POST" || result["path"] != "/scenes/"+testSceneUUID {
 		t.Errorf("result = %v", result)
 	}
+	if want := "APIKEY:DEVELOPER " + fake.Key()[:4] + "…"; result["authorization"] != want {
+		t.Errorf("authorization = %v, want %q", result["authorization"], want)
+	}
+	if strings.Contains(got.stdout+got.stderr, fake.Key()) {
+		t.Error("JSON dry run printed the whole key")
+	}
+
+	t.Setenv("C3D_DEVELOPER_API_KEY", "")
+	got = runCommand(t, "scene", "upload", "--scene-dir", sceneDir(t, "scene-glb"), "--scene-name", "Dry", "--dry-run", "--format", "json")
+	if result := decodeObject(t, got.stdout); result["authorization"] != "APIKEY:DEVELOPER (not set)" {
+		t.Errorf("authorization without a key = %v", result["authorization"])
+	}
 	parts, _ := result["parts"].([]any)
 	if len(parts) != 3 {
 		t.Fatalf("parts = %v", result["parts"])
@@ -430,6 +445,93 @@ func TestSceneUploadCancelledAfterTheBodyWasSent(t *testing.T) {
 		t.Errorf("stderr = %q, want %q", stderr.String(), want)
 	}
 	assertNoSettingsFile(t, dir)
+}
+
+func TestSceneUploadCancelledBeforeTheBodyWasSent(t *testing.T) {
+	isolate(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_, _ = io.ReadFull(r.Body, make([]byte, 1))
+		once.Do(func() { close(started) })
+		<-release
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
+	t.Setenv("C3D_UPLOAD_GATEWAY_URL", server.URL+"/v0")
+	t.Setenv("C3D_DEVELOPER_API_KEY", "test-developer-key")
+
+	dir := sceneDir(t, "scene-glb")
+	big, err := os.Create(filepath.Join(dir, "big.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Far more than any socket buffer holds, so the body cannot finish while
+	// the server reads nothing.
+	if err := big.Truncate(64 << 20); err != nil {
+		t.Fatal(err)
+	}
+	if err := big.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+		}
+		cancel()
+	}()
+	var stdout, stderr bytes.Buffer
+	code := Execute(ctx, []string{"scene", "upload", "--scene-dir", dir, "--scene-name", "S"},
+		IO{Stdin: &bytes.Buffer{}, Stdout: &stdout, Stderr: &stderr})
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("exit %d, stdout %q, want 1 and nothing (stderr %q)", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Could not reach ") || strings.Contains(stderr.String(), "may still have completed") {
+		t.Errorf("stderr = %q, want Could not reach and no claim that the upload may have completed", stderr.String())
+	}
+	assertNoSettingsFile(t, dir)
+}
+
+// makeReadOnly removes write permission from dir until the test ends, and
+// skips the test where that does not stop file creation (root, Windows).
+func makeReadOnly(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	probe, err := os.CreateTemp(dir, "probe")
+	if err == nil {
+		_ = probe.Close()
+		_ = os.Remove(probe.Name())
+		t.Skip("a read-only directory still accepts new files here")
+	}
+}
+
+func TestSceneUploadSettingsWriteFailurePrintsTheNewSceneID(t *testing.T) {
+	startFake(t)
+	dir := sceneDir(t, "scene-glb")
+	makeReadOnly(t, dir)
+	got := runCommand(t, "scene", "upload", "--scene-dir", dir, "--scene-name", "S")
+	if got.code != 1 {
+		t.Fatalf("exit %d, want 1 (stderr %q)", got.code, got.stderr)
+	}
+	id := strings.TrimSuffix(got.stdout, "\n")
+	if len(id) != 36 || got.stdout != id+"\n" {
+		t.Fatalf("stdout = %q, want the new scene id and a newline", got.stdout)
+	}
+	if !strings.Contains(got.stderr, "scene "+id) || !strings.Contains(got.stderr, "settings.json could not be written") {
+		t.Errorf("stderr = %q, want the scene id and settings.json named", got.stderr)
+	}
 }
 
 func TestRedactKey(t *testing.T) {

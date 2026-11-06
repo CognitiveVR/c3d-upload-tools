@@ -41,8 +41,9 @@ func UploadPath(sceneID string) string {
 // Upload sends plan as a new scene (sceneID empty) or as a new version of
 // sceneID, whose latest version before the upload was previousLatest. Once
 // the gateway accepts it, settings.json is written into the scene directory
-// and Upload waits for the new version to appear. A *VersionNotVisibleError
-// comes back with the Result filled in as far as it is known.
+// and Upload waits for the new version to appear. Any error after the gateway
+// accepted the upload comes back with the Result filled in as far as it is
+// known, so callers can still report the scene id.
 func Upload(ctx context.Context, client *gateway.Client, plan *UploadPlan, sceneID string, previousLatest int, log *ui.Logger, progress *ui.Progress) (Result, error) {
 	if log == nil {
 		log = ui.New(io.Discard, ui.Options{})
@@ -54,14 +55,16 @@ func Upload(ctx context.Context, client *gateway.Client, plan *UploadPlan, scene
 	progress.Done()
 
 	result := Result{SceneID: sceneID, Created: sceneID == ""}
-	if err := WriteSettings(plan.Local.Dir, plan.SettingsBytes); err != nil {
-		return result, fmt.Errorf("the gateway accepted the upload, but %w", err)
-	}
 	if result.Created {
-		result.SceneID = strings.TrimSpace(string(resp.Body))
-		if !createdSceneID.MatchString(result.SceneID) {
-			return Result{Created: true}, fmt.Errorf("the gateway accepted the new scene but answered with an unusable scene id %q", result.SceneID)
+		id := strings.TrimSpace(string(resp.Body))
+		if !createdSceneID.MatchString(id) {
+			return Result{Created: true}, fmt.Errorf("the gateway accepted the new scene but answered with an unusable scene id %q", id)
 		}
+		result.SceneID = id
+	}
+	if err := WriteSettings(plan.Local.Dir, plan.SettingsBytes); err != nil {
+		return result, fmt.Errorf("the gateway accepted the upload as scene %s, but settings.json could not be written to %s: %w",
+			result.SceneID, plan.Local.Dir, err)
 	}
 	log.Info("Uploaded to scene %s; waiting for the new version to appear", result.SceneID)
 
