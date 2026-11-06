@@ -116,6 +116,21 @@ func TestMessageAndHintSplitTheUserMessage(t *testing.T) {
 			"Check with: cognitive3d-cli-upload scene list before retrying, because a retry would create another version.", " "},
 		{"forbidden", newStatusError("GET", "/scenes/s1", 403, nil, "", true),
 			"Access forbidden. Your API key may not have permission for this operation.", "", ""},
+		{"server error after sending", sent(newStatusError("POST", "/scenes/s1", 502, nil, "", true)),
+			"The Cognitive3D gateway returned a server error (status 502).",
+			"Check with: cognitive3d-cli-upload scene list before retrying, because a retry would create another version.", " "},
+		{"server error with body after sending", sent(newStatusError("POST", "/scenes/s1/egos/head", 500, []byte("upstream timeout"), "text/plain", true)),
+			"The Cognitive3D gateway returned a server error (status 500): upstream timeout",
+			"Check with: cognitive3d-cli-upload ego list --scene-id s1 before retrying, because a retry replaces the same content.", " "},
+		{"client error after sending", sent(newStatusError("POST", "/objects/s1/cube", 422, []byte("bad mesh"), "text/plain", true)),
+			"POST /objects/s1/cube failed with status 422: bad mesh",
+			"Check with: cognitive3d-cli-upload object list --scene-id s1 before retrying, because a retry replaces the same content.", " "},
+		{"server error before sending", newStatusError("POST", "/scenes/s1", 502, nil, "", true),
+			"The Cognitive3D gateway returned a server error (status 502). Please try again later.", "", ""},
+		{"server error after sending a manifest", sent(newStatusError("POST", "/objects/s1", 503, nil, "", true)),
+			"The Cognitive3D gateway returned a server error (status 503). Please try again later.", "", ""},
+		{"server error on a GET", sent(newStatusError("GET", "/scenes/s1", 503, nil, "", true)),
+			"The Cognitive3D gateway returned a server error (status 503). Please try again later.", "", ""},
 	}
 	for _, tt := range tests {
 		message, hint := tt.err.MessageAndHint()
@@ -218,4 +233,9 @@ func TestLocalFileErrorShowsTheCause(t *testing.T) {
 	if got := e.Error(); !strings.Contains(got, "POST /scenes/s1") || !strings.Contains(got, "local_file") {
 		t.Errorf("Error() %q", got)
 	}
+}
+
+func sent(e *Error) *Error {
+	e.BodySent = true
+	return e
 }

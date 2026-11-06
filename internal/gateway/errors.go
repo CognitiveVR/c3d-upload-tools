@@ -185,12 +185,23 @@ func (e *Error) MessageAndHint() (message, hint string) {
 		}
 		return "Authentication failed. Please check your developer API key.", keyVerificationSteps
 	case Network, Interrupted:
-		if check, retry := checkCommand(e.method, e.path); e.BodySent && check != "" {
-			return "The connection was lost while waiting for the gateway's answer. The upload may still have completed.",
-				"Check with: " + check + " before retrying, because " + retry
+		if hint := e.uploadCheckHint(); hint != "" {
+			return "The connection was lost while waiting for the gateway's answer. The upload may still have completed.", hint
 		}
+	case ServerError, ClientError:
+		return e.message(), e.uploadCheckHint()
 	}
 	return e.message(), ""
+}
+
+// uploadCheckHint names the command that shows whether a sent upload landed,
+// or returns empty when the body was not sent or the route is not an upload.
+func (e *Error) uploadCheckHint() string {
+	check, retry := checkCommand(e.method, e.path)
+	if !e.BodySent || check == "" {
+		return ""
+	}
+	return "Check with: " + check + " before retrying, because " + retry
 }
 
 func (e *Error) message() string {
@@ -208,6 +219,9 @@ func (e *Error) message() string {
 	case ServerError:
 		if body := collapseWhitespace(e.Body); body != "" && !e.isHTML() && len([]rune(body)) < bodyDisplayLimit {
 			return fmt.Sprintf("The Cognitive3D gateway returned a server error (status %d): %s", e.StatusCode, body)
+		}
+		if e.uploadCheckHint() != "" {
+			return fmt.Sprintf("The Cognitive3D gateway returned a server error (status %d).", e.StatusCode)
 		}
 		return fmt.Sprintf("The Cognitive3D gateway returned a server error (status %d). Please try again later.", e.StatusCode)
 	case Network, Interrupted:
