@@ -153,15 +153,20 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 				unchecked = fmt.Sprintf(", and the new id for mesh %s was generated without checking whether the version already lists it", mesh)
 			}
 			rt.log.Warn("Could not list the objects of version %d (%s); the manifest entry is not uploaded%s. Check them with %s before running %s", versionNumber, userMessage(err), unchecked, objectListCommand(sceneID, versionNumber), manifestUploadCommand(sceneID, versionNumber, manifestFile))
-		} else if rowID, ok := remote.IDForMesh(mesh); ok && !strings.EqualFold(rowID, id) {
-			_, taken := m.EntryByID(rowID)
-			switch {
-			case source != object.Generated:
-				rt.log.Warn("Version %d already lists mesh %s as object %s; this upload uses id %s (%s), so the dashboard will show both", versionNumber, mesh, rowID, id, describeIDSource(source, manifestFile))
-			case taken || manifest.ValidateID(rowID) != nil:
-				rt.log.Warn("Version %d lists mesh %s as object %s, but that id cannot be reused here (%s), so a new id is generated and the dashboard will show both", versionNumber, mesh, rowID, reuseRefusal(taken, manifestFile))
-			default:
-				id, source = rowID, object.ReusedFromVersion
+		} else if _, listed := remote.EntryByID(id); !listed {
+			// Only an id the version does not list adds a row; several
+			// objects may share a mesh, so the first row for it decides
+			// nothing when this id is already one of them.
+			if rowID, ok := remote.IDForMesh(mesh); ok {
+				_, taken := m.EntryByID(rowID)
+				switch {
+				case source != object.Generated:
+					rt.log.Warn("Version %d already lists mesh %s as object %s; this upload uses id %s (%s), so the dashboard will show both", versionNumber, mesh, rowID, id, describeIDSource(source, manifestFile))
+				case taken || manifest.ValidateID(rowID) != nil:
+					rt.log.Warn("Version %d lists mesh %s as object %s, but that id cannot be reused here (%s), so a new id is generated and the dashboard will show both", versionNumber, mesh, rowID, reuseRefusal(taken, manifestFile))
+				default:
+					id, source = rowID, object.ReusedFromVersion
+				}
 			}
 		}
 	} else if !versionGiven {
@@ -175,8 +180,15 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	var seed *manifest.Entry
 	if remote != nil {
 		if row, ok := remote.EntryByID(id); ok {
-			row.Mesh = mesh
+			if row.Mesh != mesh {
+				if row.Name == row.Mesh {
+					row.Name = mesh
+				}
+				row.FileType = nil
+				row.Mesh = mesh
+			}
 			seed = &row
+			id = row.ID
 			if err := checkMerge(m, id, mesh, seed); err != nil {
 				return usageErrorf("cannot add the object to %s: %v", manifestFile, err)
 			}
@@ -195,7 +207,15 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 		}
 		return fmt.Errorf("object %s was uploaded as id %s, but the manifest could not be saved: %w", mesh, id, err)
 	}
-	rt.log.Info("Saved object %s to %s", id, manifestFile)
+	entry, ok := current.EntryByID(id)
+	if !ok {
+		if printErr := printObjectResult(rt, result); printErr != nil {
+			return printErr
+		}
+		return fmt.Errorf("object %s was uploaded as id %s, but %s has no entry for it", mesh, id, manifestFile)
+	}
+	result.ObjectID = entry.ID
+	rt.log.Info("Saved object %s to %s", entry.ID, manifestFile)
 
 	switch {
 	case !uploadManifest:
@@ -207,17 +227,14 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	row, listed := remote.EntryByID(id)
 	if listed && row.Mesh == mesh {
 		result.ManifestEntryExisting = true
-		rt.log.Info("Version %d already lists object %s with mesh %s, so no manifest entry is sent; its scale and position are in %s (run %s to push edits)", versionNumber, id, mesh, manifestFile, manifestUploadCommand(sceneID, versionNumber, manifestFile))
+		rt.log.Info("Version %d already lists object %s with mesh %s, so no manifest entry is sent; its scale and position are in %s (run %s to push edits)", versionNumber, entry.ID, mesh, manifestFile, manifestUploadCommand(sceneID, versionNumber, manifestFile))
 		return printObjectResult(rt, result)
 	}
-	entry, ok := current.EntryByID(id)
-	if !ok {
-		if printErr := printObjectResult(rt, result); printErr != nil {
-			return printErr
-		}
-		return fmt.Errorf("object %s was uploaded as id %s, but %s has no entry for it to upload", mesh, id, manifestFile)
+	if listed {
+		// A re-export under a new mesh name changes only the mesh: the row
+		// keeps the scale and position the dashboard holds.
+		entry = *seed
 	}
-	result.ObjectID = entry.ID
 	single := &manifest.Manifest{Objects: []manifest.Entry{entry}}
 	if err := object.UploadManifest(ctx, client, single, sceneID, versionNumber); err != nil {
 		if printErr := printObjectResult(rt, result); printErr != nil {
@@ -227,7 +244,7 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	}
 	result.ManifestUploaded = true
 	if listed {
-		rt.log.Info("Updated the manifest entry for object %s in scene %s version %d from mesh %s to %s", entry.ID, sceneID, versionNumber, row.Mesh, mesh)
+		rt.log.Info("Updated object %s in scene %s version %d from mesh %s to %s; its scale and position there are kept (run %s to push edits from %s)", entry.ID, sceneID, versionNumber, row.Mesh, mesh, manifestUploadCommand(sceneID, versionNumber, manifestFile), manifestFile)
 	} else {
 		rt.log.Info("Uploaded the manifest entry for object %s to scene %s version %d", entry.ID, sceneID, versionNumber)
 	}

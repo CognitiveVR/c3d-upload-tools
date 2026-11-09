@@ -346,8 +346,91 @@ func TestObjectUploadMeshChangeForAnExistingIDUpdatesTheRow(t *testing.T) {
 		t.Errorf("stderr should name the mesh change: %q", got.stderr)
 	}
 	rows := listRows(t)
-	if len(rows) != 1 || rows[0]["meshName"] != "cube" || rows[0]["scaleCustomX"] != 3.0 {
-		t.Errorf("rows = %v, want x-1 on mesh cube with its scale kept", rows)
+	if len(rows) != 1 || rows[0]["meshName"] != "cube" || rows[0]["name"] != "cube" || rows[0]["scaleCustomX"] != 3.0 {
+		t.Errorf("rows = %v, want x-1 on mesh cube, named after it, with its scale kept", rows)
+	}
+}
+
+// With a local entry for the id, a mesh change still sends only the mesh:
+// the local transforms are not pushed over the dashboard's, and a name
+// that was not the old mesh name is kept.
+func TestObjectUploadMeshChangeKeepsTheDashboardTransformsOverALocalEntry(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	old := manifest.DefaultEntry("x-1", "oldcube")
+	old.Name = "Old Cube"
+	old.ScaleCustom = []float64{3, 3, 3}
+	seedRows(t, old)
+	local := &manifest.Manifest{Objects: []manifest.Entry{manifest.DefaultEntry("x-1", "oldcube")}}
+	if err := local.Save(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	before := len(postsTo(fake))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "x-1", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	sent := postsTo(fake)[before:]
+	if len(sent) != 2 {
+		t.Fatalf("POSTs = %+v, want the files and the manifest entry", sent)
+	}
+	var body manifest.Manifest
+	if err := json.Unmarshal(sent[1].Body, &body); err != nil {
+		t.Fatalf("manifest body = %s (%v)", sent[1].Body, err)
+	}
+	if len(body.Objects) != 1 || body.Objects[0].Mesh != "cube" || body.Objects[0].Name != "Old Cube" || !reflect.DeepEqual(body.Objects[0].ScaleCustom, []float64{3, 3, 3}) {
+		t.Errorf("POSTed %+v, want the version's entry with only the mesh changed", body.Objects)
+	}
+	if rows := listRows(t); len(rows) != 1 || rows[0]["meshName"] != "cube" || rows[0]["scaleCustomX"] != 3.0 {
+		t.Errorf("rows = %v, want the mesh changed and the scale kept", rows)
+	}
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || m.Objects[0].Mesh != "cube" || m.Objects[0].ScaleCustom[0] != 1 {
+		t.Errorf("manifest = %+v, want the local entry re-meshed and its own scale kept", m.Objects)
+	}
+}
+
+// Several objects may share a mesh; uploading the files of one of them is
+// not a second object and gets no warning.
+func TestObjectUploadDoesNotWarnWhenTheIDIsOneOfSeveralForTheMesh(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	seedRows(t, manifest.DefaultEntry("c1", "cube"), manifest.DefaultEntry("c2", "cube"))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "c2", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if strings.Contains(got.stderr, "show both") {
+		t.Errorf("no warning expected for an id the version lists: %q", got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["manifestEntryExisting"] != true {
+		t.Errorf("result = %v", result)
+	}
+	if rows := listRows(t); len(rows) != 2 {
+		t.Errorf("rows = %v, want the two objects unchanged", rows)
+	}
+}
+
+// An id given in another case than the version's is stored and reported in
+// the version's spelling.
+func TestObjectUploadReportsAListedIDInTheVersionsSpelling(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	seedRows(t, manifest.DefaultEntry("ABC", "cube"))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "abc", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["objectId"] != "ABC" {
+		t.Errorf("result = %v, want the version's spelling", result)
+	}
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || m.Objects[0].ID != "ABC" {
+		t.Errorf("manifest = %+v", m.Objects)
 	}
 }
 
