@@ -110,14 +110,14 @@ func OpenRegularIn(root, rel string) (*os.File, error) {
 	path := filepath.Join(root, rel)
 	before, err := r.Lstat(rel)
 	if err != nil {
-		return nil, err
+		return nil, escapeError(path, err)
 	}
 	if !before.Mode().IsRegular() {
 		return nil, replacedError(path)
 	}
 	f, err := r.Open(rel)
 	if err != nil {
-		return nil, err
+		return nil, escapeError(path, err)
 	}
 	opened, err := f.Stat()
 	if err != nil {
@@ -127,13 +127,23 @@ func OpenRegularIn(root, rel string) (*os.File, error) {
 	current, err := r.Lstat(rel)
 	if err != nil {
 		_ = f.Close()
-		return nil, err
+		return nil, escapeError(path, err)
 	}
 	if !current.Mode().IsRegular() || !os.SameFile(opened, current) {
 		_ = f.Close()
 		return nil, replacedError(path)
 	}
 	return f, nil
+}
+
+// escapeError turns os.Root's refusal to leave the root (a directory on the
+// way swapped for a link out of it) into the same message a replaced file
+// gets. Other errors pass through unchanged.
+func escapeError(path string, err error) error {
+	if strings.Contains(err.Error(), "escapes from parent") {
+		return fmt.Errorf("%w: %w", replacedError(path), err)
+	}
+	return err
 }
 
 func replacedError(path string) error {

@@ -143,6 +143,9 @@ func TestPartInRefusesADirectorySwappedForALinkLeavingRoot(t *testing.T) {
 		_ = rc.Close()
 		t.Fatal("opened a file through a directory that became a link out of root")
 	}
+	if !strings.Contains(err.Error(), f.Path) || !strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("error %q, want the replaced-file message naming the path", err)
+	}
 	rc, err = Part("file", f).Open()
 	if err == nil {
 		_ = rc.Close()

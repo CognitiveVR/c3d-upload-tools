@@ -126,6 +126,15 @@ func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
 	if !strings.Contains(got.stderr, hint) {
 		t.Errorf("stderr should name the custom manifest file: %q", got.stderr)
 	}
+
+	spaced := filepath.Join(t.TempDir(), "my manifest.json")
+	got = runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", spaced)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stderr, `--manifest "`+spaced+`"`) {
+		t.Errorf("a manifest path with a space must be quoted in the hint: %q", got.stderr)
+	}
 }
 
 func TestObjectUploadWithUploadManifestPostsTheSavedManifestAfterTheObject(t *testing.T) {

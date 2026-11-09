@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -152,7 +153,7 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	if !uploadManifest {
 		command := fmt.Sprintf("%s object manifest upload --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
 		if manifestFile != manifest.DefaultPath(sceneID) {
-			command += fmt.Sprintf(" --%s %s", manifestFlag, manifestFile)
+			command += fmt.Sprintf(" --%s %s", manifestFlag, quoteArgument(manifestFile))
 		}
 		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload, or pass --%s", command, uploadManifestFlag)
 	}
@@ -196,6 +197,15 @@ func latestVersionNumber(ctx context.Context, rt *runtime, sceneID string) (int,
 		return 0, &codedError{code: exitNotFound, kind: "no_versions", message: fmt.Sprintf("scene %s has no versions", sceneID)}
 	}
 	return latest.Number, nil
+}
+
+// quoteArgument wraps a value in double quotes when a shell would otherwise
+// split it; double quotes are understood by cmd.exe, PowerShell and sh alike.
+func quoteArgument(value string) string {
+	if strings.ContainsAny(value, " \t") {
+		return `"` + value + `"`
+	}
+	return value
 }
 
 func describeIDSource(source object.IDSource, manifestFile string) string {
