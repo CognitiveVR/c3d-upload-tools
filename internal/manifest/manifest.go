@@ -108,7 +108,8 @@ func LoadOrEmpty(path string) (*Manifest, error) {
 }
 
 // Upsert sets the mesh of the entry whose id matches without regard to case,
-// keeping its stored id and every other field, or appends DefaultEntry(id, mesh).
+// keeping its stored id and every other field except a name that was the old
+// mesh name, which follows the new one; or appends DefaultEntry(id, mesh).
 func (m *Manifest) Upsert(id, mesh string) MergeOutcome {
 	return m.Adopt(DefaultEntry(id, mesh))
 }
@@ -117,6 +118,9 @@ func (m *Manifest) Upsert(id, mesh string) MergeOutcome {
 func (m *Manifest) Adopt(e Entry) MergeOutcome {
 	for i := range m.Objects {
 		if strings.EqualFold(m.Objects[i].ID, e.ID) {
+			if m.Objects[i].Name == m.Objects[i].Mesh {
+				m.Objects[i].Name = e.Mesh
+			}
 			m.Objects[i].Mesh = e.Mesh
 			return Updated
 		}

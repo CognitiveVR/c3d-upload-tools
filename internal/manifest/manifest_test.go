@@ -545,3 +545,10 @@ func TestAdoptAppendsTheGivenEntryOrUpdatesTheMeshOfAMatchingID(t *testing.T) {
 		t.Errorf("Adopt = %v, objects %+v, want the stored id and scale kept with the new mesh", got, m.Objects)
 	}
 }
+
+func TestUpsertRenamesAnEntryNamedAfterItsOldMesh(t *testing.T) {
+	m := &Manifest{Objects: []Entry{DefaultEntry("x-1", "oldcube")}}
+	if got := m.Upsert("x-1", "cube"); got != Updated || m.Objects[0].Mesh != "cube" || m.Objects[0].Name != "cube" {
+		t.Errorf("Upsert = %v, entry %+v, want the default name to follow the mesh", got, m.Objects[0])
+	}
+}

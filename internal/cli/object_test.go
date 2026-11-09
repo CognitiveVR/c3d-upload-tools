@@ -386,8 +386,8 @@ func TestObjectUploadMeshChangeKeepsTheDashboardTransformsOverALocalEntry(t *tes
 	if rows := listRows(t); len(rows) != 1 || rows[0]["meshName"] != "cube" || rows[0]["scaleCustomX"] != 3.0 {
 		t.Errorf("rows = %v, want the mesh changed and the scale kept", rows)
 	}
-	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || m.Objects[0].Mesh != "cube" || m.Objects[0].ScaleCustom[0] != 1 {
-		t.Errorf("manifest = %+v, want the local entry re-meshed and its own scale kept", m.Objects)
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || m.Objects[0].Mesh != "cube" || m.Objects[0].Name != "cube" || m.Objects[0].ScaleCustom[0] != 1 {
+		t.Errorf("manifest = %+v, want the local entry re-meshed, renamed with it, and its own scale kept", m.Objects)
 	}
 }
 
