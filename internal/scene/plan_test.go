@@ -201,6 +201,73 @@ func TestPlanNamesTheSubdirectoryWhenTheScreenshotIsMissingOrMiscased(t *testing
 	}
 }
 
+func TestPlanWarnsAboutAMiscasedScreenshotBesideAnExactOne(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	writeFile(t, dir, "Screenshot.PNG", "png")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates := 0
+	for _, e := range entries {
+		if strings.EqualFold(e.Name(), "screenshot.png") {
+			candidates++
+		}
+	}
+	if candidates != 2 {
+		t.Skip("the file system folds case, so both names cannot coexist")
+	}
+	plan, err := Plan(dir)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if plan.Screenshot != filepath.Join(dir, "screenshot.png") {
+		t.Errorf("screenshot = %q, want the exact name", plan.Screenshot)
+	}
+	if len(plan.Warnings) != 1 || !strings.Contains(plan.Warnings[0], "ignoring Screenshot.PNG") {
+		t.Errorf("warnings = %q, want one about Screenshot.PNG", plan.Warnings)
+	}
+	for _, name := range plan.Textures {
+		if strings.EqualFold(name, "screenshot.png") {
+			t.Errorf("Screenshot.PNG must not be uploaded as a texture: %q", plan.Textures)
+		}
+	}
+}
+
+func TestFinalizeRefusesAScreenshotDirectorySwappedForALink(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	sub := filepath.Join(dir, "screenshot")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(dir, "screenshot.png"), filepath.Join(sub, "screenshot.png")); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := Plan(dir)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	up, err := Finalize(plan, "name", "cli-go-vtest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	screenshot := up.Parts[len(up.Parts)-1]
+
+	outside := t.TempDir()
+	writeFile(t, outside, "screenshot.png", "outside")
+	if err := os.Rename(sub, sub+"-real"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, sub); err != nil {
+		t.Skipf("cannot create a symbolic link here: %v", err)
+	}
+	rc, err := screenshot.Open()
+	if err == nil {
+		_ = rc.Close()
+		t.Fatal("Open followed the swapped-in directory link, want a refusal")
+	}
+}
+
 func TestPlanIgnoresAScreenshotFileWhereTheSubdirectoryWouldBe(t *testing.T) {
 	dir := copyFixture(t, "scene-glb")
 	if err := os.Remove(filepath.Join(dir, "screenshot.png")); err != nil {

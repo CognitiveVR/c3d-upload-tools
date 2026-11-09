@@ -150,7 +150,11 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	rt.log.Info("Saved object %s to %s", id, manifestFile)
 
 	if !uploadManifest {
-		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s object manifest upload --scene-id %s after your last object upload, or pass --%s", binaryName, sceneID, uploadManifestFlag)
+		command := fmt.Sprintf("%s object manifest upload --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
+		if manifestFile != manifest.DefaultPath(sceneID) {
+			command += fmt.Sprintf(" --%s %s", manifestFlag, manifestFile)
+		}
+		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload, or pass --%s", command, uploadManifestFlag)
 	}
 	if uploadManifest {
 		if err := object.UploadManifest(ctx, client, current, sceneID, versionNumber); err != nil {

@@ -189,7 +189,7 @@ func TestAuthVerifyAcrossTheProcessBoundary(t *testing.T) {
 	t.Run("no key", func(t *testing.T) {
 		dir, env := authEnvironment(t, fake, "")
 		res := runCLIWith(t, dir, env, "auth", "verify")
-		want := "no developer API key: pass --api-key your_api_key, or set C3D_DEVELOPER_API_KEY with: export C3D_DEVELOPER_API_KEY=your_api_key"
+		want := "no developer API key: set C3D_DEVELOPER_API_KEY with: export C3D_DEVELOPER_API_KEY=your_api_key (or pass --api-key your_api_key)"
 		if res.exitCode != 4 || res.stdout != "" || !strings.Contains(res.stderr, want) {
 			t.Errorf("exit %d, stdout %q, stderr %q", res.exitCode, res.stdout, res.stderr)
 		}

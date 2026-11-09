@@ -84,10 +84,12 @@ func Plan(dir string) (*LocalPlan, error) {
 		modelNames = append(modelNames, f.Name)
 	}
 
-	if p.screenshot, err = findScreenshot(abs); err != nil {
+	var screenshotWarnings []string
+	if p.screenshot, screenshotWarnings, err = findScreenshot(abs); err != nil {
 		return nil, err
 	}
 	p.Screenshot = p.screenshot.Path
+	p.Warnings = append(p.Warnings, screenshotWarnings...)
 
 	if p.Existing, err = ReadSettings(abs); err != nil {
 		return nil, err
@@ -146,44 +148,58 @@ func (p *LocalPlan) files() []localfile.File {
 
 // findScreenshot takes screenshot.png from dir, else from the screenshot
 // subdirectory the Unity SDK exports to. The name must match exactly, so that
-// a differently cased file is reported the same way on every file system.
-// Like every other part, it must be a regular file, not a link.
-func findScreenshot(dir string) (localfile.File, error) {
+// a differently cased file is reported the same way on every file system:
+// as an error when it is the only candidate, as a warning when an exact one
+// is used instead. Like every other part, it must be a regular file, not a
+// link.
+func findScreenshot(dir string) (localfile.File, []string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return localfile.File{}, err
+		return localfile.File{}, nil, err
 	}
 	var near []string
+	found := ""
 	hasSubdir := false
 	for _, e := range entries {
 		switch {
 		case e.Name() == screenshotFileName:
-			return localfile.Stat(dir, screenshotFileName)
+			found = dir
 		case strings.EqualFold(e.Name(), screenshotFileName):
 			near = append(near, e.Name())
 		case e.Name() == screenshotDirName && e.Type().IsDir():
 			hasSubdir = true
 		}
 	}
-	if hasSubdir {
+	if found == "" && hasSubdir {
 		subdir := filepath.Join(dir, screenshotDirName)
 		subEntries, err := os.ReadDir(subdir)
 		if err != nil {
-			return localfile.File{}, err
+			return localfile.File{}, nil, err
 		}
 		for _, e := range subEntries {
 			switch {
 			case e.Name() == screenshotFileName:
-				return localfile.Stat(subdir, screenshotFileName)
+				found = subdir
 			case strings.EqualFold(e.Name(), screenshotFileName):
 				near = append(near, filepath.Join(screenshotDirName, e.Name()))
 			}
 		}
 	}
-	if len(near) > 0 {
-		return localfile.File{}, fmt.Errorf("%s is missing from %s: found %s, but the name must be exactly %s", screenshotFileName, dir, strings.Join(near, ", "), screenshotFileName)
+	if found != "" {
+		f, err := localfile.Stat(found, screenshotFileName)
+		if err != nil {
+			return localfile.File{}, nil, err
+		}
+		var warnings []string
+		for _, name := range near {
+			warnings = append(warnings, fmt.Sprintf("ignoring %s: the screenshot must be named exactly %s, so %s is used", name, screenshotFileName, filepath.Join(filepath.Base(found), screenshotFileName)))
+		}
+		return f, warnings, nil
 	}
-	return localfile.File{}, fmt.Errorf("%s is missing from %s: a scene upload needs it as the scene's screenshot, in that directory or in its %s subdirectory", screenshotFileName, dir, screenshotDirName)
+	if len(near) > 0 {
+		return localfile.File{}, nil, fmt.Errorf("%s is missing from %s: found %s, but the name must be exactly %s", screenshotFileName, dir, strings.Join(near, ", "), screenshotFileName)
+	}
+	return localfile.File{}, nil, fmt.Errorf("%s is missing from %s: a scene upload needs it as the scene's screenshot, in that directory or in its %s subdirectory", screenshotFileName, dir, screenshotDirName)
 }
 
 // checkSizes applies the size thresholds of model.CheckSizes to the plan.
@@ -213,6 +229,6 @@ func Finalize(local *LocalPlan, sceneName, sdkVersion string) (*UploadPlan, erro
 		Field: "file", Filename: settingsFileName, ContentType: "application/json", Size: int64(len(data)),
 		Open: func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil },
 	})
-	parts = append(parts, localfile.Part("screenshot", local.screenshot))
+	parts = append(parts, localfile.PartIn("screenshot", local.Dir, local.screenshot))
 	return &UploadPlan{Local: local, SceneName: settings.SceneName, Parts: parts, SettingsBytes: data}, nil
 }

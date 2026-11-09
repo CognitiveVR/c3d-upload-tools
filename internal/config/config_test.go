@@ -225,7 +225,7 @@ func TestResolveWithoutKeyThenRequireAPIKey(t *testing.T) {
 		t.Fatalf("Resolve must not fail without a key: %v", err)
 	}
 	err = RequireAPIKey(s)
-	want := "no developer API key: pass --api-key your_api_key, or set C3D_DEVELOPER_API_KEY with: export C3D_DEVELOPER_API_KEY=your_api_key"
+	want := "no developer API key: set C3D_DEVELOPER_API_KEY with: export C3D_DEVELOPER_API_KEY=your_api_key (or pass --api-key your_api_key)"
 	if err == nil || err.Error() != want {
 		t.Fatalf("RequireAPIKey = %v, want %q", err, want)
 	}

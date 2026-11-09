@@ -107,9 +107,24 @@ func TestObjectUploadDoesNotUploadTheManifestUnlessAsked(t *testing.T) {
 			t.Errorf("manifest POSTed: %+v", r)
 		}
 	}
-	hint := "object manifest upload --scene-id " + objectSceneID
-	if !strings.Contains(got.stderr, hint) || !strings.Contains(got.stderr, "--upload-manifest") {
-		t.Errorf("stderr should say how to publish the manifest: %q", got.stderr)
+	hint := "object manifest upload --scene-id " + objectSceneID + " --version 2"
+	if !strings.Contains(got.stderr, hint) || !strings.Contains(got.stderr, "--upload-manifest") || strings.Contains(got.stderr, "--manifest ") {
+		t.Errorf("stderr should name the manifest upload command for the version, without --manifest for the default file: %q", got.stderr)
+	}
+}
+
+func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	custom := filepath.Join(t.TempDir(), "custom.json")
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", custom)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	hint := "object manifest upload --scene-id " + objectSceneID + " --version 2 --manifest " + custom
+	if !strings.Contains(got.stderr, hint) {
+		t.Errorf("stderr should name the custom manifest file: %q", got.stderr)
 	}
 }
 
