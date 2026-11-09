@@ -24,9 +24,10 @@ All notable changes to this project are documented in this file. The format foll
 - `scene upload` also finds `screenshot.png` in the `screenshot` subdirectory the Unity SDK exports to.
 - The missing-key and rejected-key messages name `--api-key` as well as `C3D_DEVELOPER_API_KEY`.
 - `object upload` uploads the object's own manifest entry after its files when the version does not
-  list the object yet, so a new object appears in the dashboard without a second command; an id
-  with no local entry is reused from the version's object for that mesh before a new one is
-  generated. `--upload-manifest=false` skips both.
+  list the object with this mesh yet, so a new object appears in the dashboard without a second
+  command and a renamed mesh updates its row; an id with no local entry is reused from the version's
+  object for that mesh before a new one is generated, and a local entry created for a listed object
+  starts from the version's scale and position. `--upload-manifest=false` skips both.
 
 ### Changed
 

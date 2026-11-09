@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/cognitivevr/c3d-upload-tools/v2/internal/gateway"
 )
@@ -41,39 +40,16 @@ type Listed struct {
 	MeshName string
 }
 
-type listedRow struct {
-	SDKID    string            `json:"sdkId"`
-	MeshName string            `json:"meshName"`
-	Files    []json.RawMessage `json:"files"`
-}
-
-func parseRows(raw []byte) ([]listedRow, error) {
-	var rows []listedRow
-	if err := json.Unmarshal(raw, &rows); err != nil {
-		return nil, fmt.Errorf("parse object list: %w", err)
-	}
-	return rows, nil
-}
-
-// All returns every listed object, in list order.
-func All(raw []byte) ([]Listed, error) {
-	rows, err := parseRows(raw)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Listed, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, Listed{SDKID: r.SDKID, MeshName: r.MeshName})
-	}
-	return out, nil
-}
-
 // WithoutFiles returns the listed objects whose files array is empty, in
 // list order.
 func WithoutFiles(raw []byte) ([]Listed, error) {
-	rows, err := parseRows(raw)
-	if err != nil {
-		return nil, err
+	var rows []struct {
+		SDKID    string            `json:"sdkId"`
+		MeshName string            `json:"meshName"`
+		Files    []json.RawMessage `json:"files"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, fmt.Errorf("parse object list: %w", err)
 	}
 	var out []Listed
 	for _, r := range rows {
@@ -82,25 +58,4 @@ func WithoutFiles(raw []byte) ([]Listed, error) {
 		}
 	}
 	return out, nil
-}
-
-// FindID returns the id of the first listed object whose id equals id
-// without regard to case, as the gateway matches ids.
-func FindID(listed []Listed, id string) (Listed, bool) {
-	for _, l := range listed {
-		if strings.EqualFold(l.SDKID, id) {
-			return l, true
-		}
-	}
-	return Listed{}, false
-}
-
-// FindMesh returns the first listed object whose mesh name equals mesh exactly.
-func FindMesh(listed []Listed, mesh string) (Listed, bool) {
-	for _, l := range listed {
-		if l.MeshName == mesh {
-			return l, true
-		}
-	}
-	return Listed{}, false
 }

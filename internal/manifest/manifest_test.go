@@ -532,3 +532,16 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 	b.ScaleCustom = []float64{1}
 	wantErrNaming(t, (&Manifest{Objects: []Entry{a, b}}).Validate(), `"a"`, "mesh", `"b"`, "scaleCustom")
 }
+
+func TestAdoptAppendsTheGivenEntryOrUpdatesTheMeshOfAMatchingID(t *testing.T) {
+	seed := DefaultEntry("ID-1", "cube")
+	seed.ScaleCustom = []float64{3, 3, 3}
+	m := &Manifest{Objects: []Entry{DefaultEntry("other", "sphere")}}
+	if got := m.Adopt(seed); got != Appended || len(m.Objects) != 2 || !reflect.DeepEqual(m.Objects[1], seed) {
+		t.Errorf("Adopt = %v, objects %+v", got, m.Objects)
+	}
+	renamed := DefaultEntry("id-1", "box")
+	if got := m.Adopt(renamed); got != Updated || len(m.Objects) != 2 || m.Objects[1].ID != "ID-1" || m.Objects[1].Mesh != "box" || m.Objects[1].ScaleCustom[0] != 3 {
+		t.Errorf("Adopt = %v, objects %+v, want the stored id and scale kept with the new mesh", got, m.Objects)
+	}
+}
