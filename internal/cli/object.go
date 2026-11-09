@@ -52,7 +52,7 @@ func newObjectUploadCmd(rt *runtime) *cobra.Command {
 	flags.String(sceneIDFlag, "", "the scene to upload to (or set C3D_SCENE_ID)")
 	flags.Int(versionFlag, 0, "scene version number; the latest version when omitted")
 	flags.String(manifestFlag, "", "manifest file to merge the object into (default <scene id>_object_manifest.json)")
-	flags.Bool(uploadManifestFlag, false, "also upload the manifest after the object")
+	flags.Bool(uploadManifestFlag, true, "upload this object's manifest entry after its files, so it appears in the dashboard; --upload-manifest=false leaves that to object manifest upload")
 	flags.Bool(dryRunFlag, false, "print the request without sending it")
 	return upload
 }
@@ -120,7 +120,7 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 
 	if dryRun {
 		if uploadManifest {
-			rt.log.Info("--%s would also POST %s?version=%s after the object", uploadManifestFlag, object.ManifestPath(sceneID), versionText(wanted, versionGiven))
+			rt.log.Info("The object's manifest entry would then be POSTed to %s?version=%s (--%s=false skips that)", object.ManifestPath(sceneID), versionText(wanted, versionGiven), uploadManifestFlag)
 		}
 		return printObjectDryRun(rt, plan, sceneID, id, source, manifestFile, versionText(wanted, versionGiven))
 	}
@@ -155,18 +155,25 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 		if manifestFile != manifest.DefaultPath(sceneID) {
 			command += fmt.Sprintf(" --%s %s", manifestFlag, quoteArgument(manifestFile))
 		}
-		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload, or pass --%s", command, uploadManifestFlag)
+		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload", command)
+		return printObjectResult(rt, result)
 	}
-	if uploadManifest {
-		if err := object.UploadManifest(ctx, client, current, sceneID, versionNumber); err != nil {
-			if printErr := printObjectResult(rt, result); printErr != nil {
-				return printErr
-			}
-			return err
+	entry, ok := current.EntryByID(id)
+	if !ok {
+		if printErr := printObjectResult(rt, result); printErr != nil {
+			return printErr
 		}
-		result.ManifestUploaded = true
-		rt.log.Info("Uploaded the manifest to scene %s version %d", sceneID, versionNumber)
+		return fmt.Errorf("object %s was uploaded as id %s, but %s has no entry for it to upload", mesh, id, manifestFile)
 	}
+	single := &manifest.Manifest{Objects: []manifest.Entry{entry}}
+	if err := object.UploadManifest(ctx, client, single, sceneID, versionNumber); err != nil {
+		if printErr := printObjectResult(rt, result); printErr != nil {
+			return printErr
+		}
+		return err
+	}
+	result.ManifestUploaded = true
+	rt.log.Info("Uploaded the manifest entry for object %s to scene %s version %d", id, sceneID, versionNumber)
 	return printObjectResult(rt, result)
 }
 
@@ -201,8 +208,8 @@ func latestVersionNumber(ctx context.Context, rt *runtime, sceneID string) (int,
 
 // quoteArgument double-quotes a value holding anything outside the characters
 // cmd.exe, PowerShell and sh all pass through bare, or starting with a
-// character sh expands. Quotes do not protect `$`, backquotes, `%`, `!` or a
-// `"` in every shell; those paths stay the user's problem.
+// character sh expands. Quotes do not protect `$`, backquotes, `%`, `!`, a
+// `"` or a doubled `\` in every shell; those paths stay the user's problem.
 func quoteArgument(value string) string {
 	if strings.HasPrefix(value, "~") || strings.HasPrefix(value, "=") {
 		return `"` + value + `"`

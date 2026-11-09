@@ -79,7 +79,7 @@ Upload a dynamic object. The directory holds `<name>.glb` (or `<name>.gltf` plus
 cognitive3d-cli-upload object upload --scene-id <scene-id> --object-dir ./my-object --object-filename cube
 ```
 
-Pass `--manifest <path>` to merge into a different manifest file, and `--upload-manifest` to upload the manifest right after the object. The manifest file is read again after the upload, so entries other uploads added in the meantime are kept. Otherwise upload the manifest as a separate step so the objects appear in the dashboard:
+After the files, the command uploads the object's own manifest entry, so the object appears in the dashboard at once; the gateway adds or refreshes that one entry and leaves the rest of the version's objects alone. Pass `--manifest <path>` to merge into a different manifest file. Pass `--upload-manifest=false` to skip the entry upload, for example when you edit scales and positions in the manifest file first; then upload the whole file as a separate step:
 
 ```bash
 cognitive3d-cli-upload object manifest upload --scene-id <scene-id>

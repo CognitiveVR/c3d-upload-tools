@@ -23,6 +23,8 @@ All notable changes to this project are documented in this file. The format foll
 - After a new scene version appears, one confirming poll catches a concurrent upload.
 - `scene upload` also finds `screenshot.png` in the `screenshot` subdirectory the Unity SDK exports to.
 - The missing-key and rejected-key messages name `--api-key` as well as `C3D_DEVELOPER_API_KEY`.
+- `object upload` uploads the object's own manifest entry after its files by default, so the object
+  appears in the dashboard without a second command; `--upload-manifest=false` skips it.
 
 ### Changed
 

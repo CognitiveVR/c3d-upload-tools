@@ -120,6 +120,17 @@ func (m *Manifest) Upsert(id, mesh string) MergeOutcome {
 	return Appended
 }
 
+// EntryByID returns the entry whose id equals id without regard to case, the
+// same match Upsert uses.
+func (m *Manifest) EntryByID(id string) (Entry, bool) {
+	for _, e := range m.Objects {
+		if strings.EqualFold(e.ID, id) {
+			return e, true
+		}
+	}
+	return Entry{}, false
+}
+
 // IDForMesh returns the id of the first entry whose mesh equals mesh exactly.
 func (m *Manifest) IDForMesh(mesh string) (string, bool) {
 	for _, e := range m.Objects {
