@@ -96,6 +96,7 @@ else
     "edit manifest"
     "object manifest upload"
     "object list --write-manifest"
+    "object upload cube again (no local manifest)"
     "ego upload head (gltf + bin)"
     "ego upload controller_left (glb)"
     "ego list"
@@ -195,10 +196,10 @@ version=$(field .versionNumber)
 done_step "scene=$scene_id version=$version"
 
 run_cli object upload --scene-id "$scene_id" --object-dir "$assets/testdata/object-gltf" --object-filename cube
-object_id=$(field .objectId)
+cube_id=$(field .objectId)
 mesh=$(field .mesh)
 version=$(field .versionNumber)
-done_step "object=$object_id mesh=$mesh version=$version"
+done_step "object=$cube_id mesh=$mesh version=$version"
 
 run_cli object upload --scene-id "$scene_id" --object-dir "$assets/testdata/object-glb" --object-filename box
 object_id=$(field .objectId)
@@ -224,6 +225,19 @@ run_cli object list --scene-id "$scene_id" --write-manifest
 listed=$(printf '%s' "$OUT" | jq 'length')
 jq -e "$cube_scaled" "$manifest" >/dev/null || fail "round trip lost the cube scaleCustom [2,2,2]: $(jq -c '.objects[] | select(.mesh == "cube")' "$manifest" || true)"
 done_step "round trip kept cube scaleCustom=[2,2,2] (listed $listed objects)"
+
+# A re-upload from a checkout without the manifest must find the version's
+# object for the mesh, send no entry, and copy its transforms into the local file.
+rm -f "$manifest"
+run_cli object upload --scene-id "$scene_id" --object-dir "$assets/testdata/object-gltf" --object-filename cube
+object_id=$(field .objectId)
+[ "$object_id" = "$cube_id" ] || fail "re-upload used id $object_id, expected the version's $cube_id"
+[ "$(printf '%s' "$OUT" | jq -r '.manifestEntryExisting')" = "true" ] || fail "re-upload should report manifestEntryExisting true: $OUT"
+jq -e "$cube_scaled" "$manifest" >/dev/null || fail "re-upload did not seed the local entry from the version: $(jq -c '.objects[] | select(.mesh == "cube")' "$manifest" || true)"
+run_cli object list --scene-id "$scene_id"
+relisted=$(printf '%s' "$OUT" | jq 'length')
+[ "$relisted" = "$listed" ] || fail "re-upload changed the object count from $listed to $relisted"
+done_step "object=$object_id reused, entry kept, $relisted objects"
 
 run_cli ego upload --scene-id "$scene_id" --ego-dir "$assets/testdata/ego-head" --slot head --wait
 slot=$(field .slot)
