@@ -143,7 +143,7 @@ func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
 	if got.code != 0 {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
-	hint := "object manifest upload --scene-id " + objectSceneID + " --version 2 --manifest " + custom
+	hint := "object manifest upload --scene-id " + objectSceneID + " --version 2 --manifest " + quoteArgument(custom)
 	if !strings.Contains(got.stderr, hint) {
 		t.Errorf("stderr should name the custom manifest file: %q", got.stderr)
 	}
