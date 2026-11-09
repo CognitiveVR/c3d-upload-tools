@@ -3,8 +3,10 @@
 package localfile
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -140,7 +142,8 @@ func OpenRegularIn(root, rel string) (*os.File, error) {
 // way swapped for a link out of it) into the same message a replaced file
 // gets. Other errors pass through unchanged.
 func escapeError(path string, err error) error {
-	if strings.Contains(err.Error(), "escapes from parent") {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) && pathErr.Err != nil && pathErr.Err.Error() == "path escapes from parent" {
 		return fmt.Errorf("%w: %w", replacedError(path), err)
 	}
 	return err

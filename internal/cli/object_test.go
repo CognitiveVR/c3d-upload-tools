@@ -113,6 +113,24 @@ func TestObjectUploadDoesNotUploadTheManifestUnlessAsked(t *testing.T) {
 	}
 }
 
+func TestQuoteArgument(t *testing.T) {
+	cases := map[string]string{
+		"obj-scene_object_manifest.json": "obj-scene_object_manifest.json",
+		`C:\Users\me\m.json`:             `C:\Users\me\m.json`,
+		"/tmp/x/manifest.json":           "/tmp/x/manifest.json",
+		"/tmp/my manifest.json":          `"/tmp/my manifest.json"`,
+		"/work/R&D/m.json":               `"/work/R&D/m.json"`,
+		`C:\Users\me\{Game}\m.json`:      `"C:\Users\me\{Game}\m.json"`,
+		"/tmp/proj(1)/m.json":            `"/tmp/proj(1)/m.json"`,
+		"/tmp/o'brien/m.json":            `"/tmp/o'brien/m.json"`,
+	}
+	for in, want := range cases {
+		if got := quoteArgument(in); got != want {
+			t.Errorf("quoteArgument(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
 	fake := startFake(t)
 	objectScene(fake)

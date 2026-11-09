@@ -153,6 +153,18 @@ func TestPartInRefusesADirectorySwappedForALinkLeavingRoot(t *testing.T) {
 	}
 }
 
+func TestOpenRegularInReportsAMissingFilePlainlyWhateverThePathSays(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "escapes from parent")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := OpenRegularIn(root, filepath.Join("escapes from parent", "missing.png"))
+	if !errors.Is(err, fs.ErrNotExist) || strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("err = %v, want a plain not-found error", err)
+	}
+}
+
 func TestPartInFallsBackToPartOutsideRoot(t *testing.T) {
 	root := t.TempDir()
 	elsewhere := t.TempDir()
