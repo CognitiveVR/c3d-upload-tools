@@ -200,11 +200,15 @@ func latestVersionNumber(ctx context.Context, rt *runtime, sceneID string) (int,
 }
 
 // quoteArgument double-quotes a value holding anything outside the characters
-// cmd.exe, PowerShell and sh all pass through bare. Quotes do not protect
-// `$`, backquotes or `%` in every shell; those paths stay the user's problem.
+// cmd.exe, PowerShell and sh all pass through bare, or starting with a
+// character sh expands. Quotes do not protect `$`, backquotes, `%`, `!` or a
+// `"` in every shell; those paths stay the user's problem.
 func quoteArgument(value string) string {
+	if strings.HasPrefix(value, "~") || strings.HasPrefix(value, "=") {
+		return `"` + value + `"`
+	}
 	for _, r := range value {
-		plain := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune(`/\.-_:~+=`, r)
+		plain := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune(`/.-_:~+=`, r)
 		if !plain {
 			return `"` + value + `"`
 		}
