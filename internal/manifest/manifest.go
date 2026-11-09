@@ -108,16 +108,36 @@ func LoadOrEmpty(path string) (*Manifest, error) {
 }
 
 // Upsert sets the mesh of the entry whose id matches without regard to case,
-// keeping its stored id and every other field, or appends DefaultEntry(id, mesh).
+// keeping its stored id and every other field except a name that was the old
+// mesh name, which follows the new one; or appends DefaultEntry(id, mesh).
 func (m *Manifest) Upsert(id, mesh string) MergeOutcome {
+	return m.Adopt(DefaultEntry(id, mesh))
+}
+
+// Adopt is Upsert with e as the entry appended when no entry has its id.
+func (m *Manifest) Adopt(e Entry) MergeOutcome {
 	for i := range m.Objects {
-		if strings.EqualFold(m.Objects[i].ID, id) {
-			m.Objects[i].Mesh = mesh
+		if strings.EqualFold(m.Objects[i].ID, e.ID) {
+			if m.Objects[i].Name == m.Objects[i].Mesh {
+				m.Objects[i].Name = e.Mesh
+			}
+			m.Objects[i].Mesh = e.Mesh
 			return Updated
 		}
 	}
-	m.Objects = append(m.Objects, DefaultEntry(id, mesh))
+	m.Objects = append(m.Objects, e)
 	return Appended
+}
+
+// EntryByID returns the entry whose id equals id without regard to case, the
+// same match Upsert uses.
+func (m *Manifest) EntryByID(id string) (Entry, bool) {
+	for _, e := range m.Objects {
+		if strings.EqualFold(e.ID, id) {
+			return e, true
+		}
+	}
+	return Entry{}, false
 }
 
 // IDForMesh returns the id of the first entry whose mesh equals mesh exactly.

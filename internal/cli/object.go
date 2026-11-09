@@ -52,7 +52,7 @@ func newObjectUploadCmd(rt *runtime) *cobra.Command {
 	flags.String(sceneIDFlag, "", "the scene to upload to (or set C3D_SCENE_ID)")
 	flags.Int(versionFlag, 0, "scene version number; the latest version when omitted")
 	flags.String(manifestFlag, "", "manifest file to merge the object into (default <scene id>_object_manifest.json)")
-	flags.Bool(uploadManifestFlag, false, "also upload the manifest after the object")
+	flags.Bool(uploadManifestFlag, true, "upload this object's manifest entry after its files, so it appears in the dashboard; --upload-manifest=false leaves that to object manifest upload")
 	flags.Bool(dryRunFlag, false, "print the request without sending it")
 	return upload
 }
@@ -64,6 +64,9 @@ type objectResult struct {
 	VersionNumber    int    `json:"versionNumber"`
 	ManifestPath     string `json:"manifestPath"`
 	ManifestUploaded bool   `json:"manifestUploaded"`
+	// ManifestEntryExisting is true when the version already listed the
+	// object, so no manifest entry was sent.
+	ManifestEntryExisting bool `json:"manifestEntryExisting"`
 }
 
 func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
@@ -111,73 +114,189 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	if err != nil {
 		return &usageError{message: err.Error()}
 	}
-	merged := &manifest.Manifest{Objects: slices.Clone(m.Objects)}
-	merged.Upsert(id, mesh)
-	if err := merged.Validate(); err != nil {
+	if err := checkMerge(m, id, mesh, nil); err != nil {
 		return usageErrorf("cannot add the object to %s: %v", manifestFile, err)
 	}
-	rt.log.Info("Object id %s (%s)", id, describeIDSource(source, manifestFile))
-
 	if dryRun {
+		rt.log.Info("Object id %s (%s)", id, describeIDSource(source, manifestFile))
+		manifestPost := ""
 		if uploadManifest {
-			rt.log.Info("--%s would also POST %s?version=%s after the object", uploadManifestFlag, object.ManifestPath(sceneID), versionText(wanted, versionGiven))
+			manifestPost = object.ManifestPath(sceneID) + "?version=" + versionText(wanted, versionGiven)
+			rt.log.Info("The object's manifest entry is then POSTed to %s unless the version already lists the object (--%s=false skips that)", manifestPost, uploadManifestFlag)
 		}
-		return printObjectDryRun(rt, plan, sceneID, id, source, manifestFile, versionText(wanted, versionGiven))
+		return printObjectDryRun(rt, plan, sceneID, id, source, manifestFile, versionText(wanted, versionGiven), manifestPost)
 	}
 
 	ctx := cmd.Context()
 	if err := preflight(ctx, rt); err != nil {
 		return err
 	}
+	client := rt.client()
 	versionNumber := wanted
-	if !versionGiven {
+	// remote holds the version's objects as manifest entries, nil when they
+	// could not be listed or were not asked for.
+	var remote *manifest.Manifest
+	if uploadManifest {
+		version, err := chooseVersion(ctx, rt, sceneID, wanted, versionGiven)
+		if err != nil {
+			return err
+		}
+		versionNumber = version.Number
+		raw, err := object.List(ctx, client, version.ID)
+		if err == nil {
+			remote, err = manifest.FromObjectList(raw)
+		}
+		if err != nil {
+			remote = nil
+			unchecked := ""
+			if source == object.Generated {
+				unchecked = fmt.Sprintf(", and the new id for mesh %s was generated without checking whether the version already lists it", mesh)
+			}
+			rt.log.Warn("Could not list the objects of version %d (%s); the manifest entry is not uploaded%s. Check them with %s before running %s", versionNumber, userMessage(err), unchecked, objectListCommand(sceneID, versionNumber), manifestUploadCommand(sceneID, versionNumber, manifestFile))
+		} else if _, listed := remote.EntryByID(id); !listed {
+			// Only an id the version does not list adds a row; several
+			// objects may share a mesh, so the first row for it decides
+			// nothing when this id is already one of them.
+			if rowID, ok := remote.IDForMesh(mesh); ok {
+				_, taken := m.EntryByID(rowID)
+				switch {
+				case source != object.Generated:
+					rt.log.Warn("Version %d already lists mesh %s as object %s; this upload uses id %s (%s), so the dashboard will show both", versionNumber, mesh, rowID, id, describeIDSource(source, manifestFile))
+				case taken || manifest.ValidateID(rowID) != nil:
+					rt.log.Warn("Version %d lists mesh %s as object %s, but that id cannot be reused here (%s), so a new id is generated and the dashboard will show both", versionNumber, mesh, rowID, reuseRefusal(taken, manifestFile))
+				default:
+					id, source = rowID, object.ReusedFromVersion
+				}
+			}
+		}
+	} else if !versionGiven {
 		if versionNumber, err = latestVersionNumber(ctx, rt, sceneID); err != nil {
 			return err
 		}
 	}
+	// The local entry for an id the version already lists starts from the
+	// scale and position the version holds, so a later manifest upload does
+	// not replace them with defaults.
+	var seed *manifest.Entry
+	if remote != nil {
+		if row, ok := remote.EntryByID(id); ok {
+			if row.Mesh != mesh {
+				if row.Name == row.Mesh {
+					row.Name = mesh
+				}
+				row.FileType = nil
+				row.Mesh = mesh
+			}
+			seed = &row
+			id = row.ID
+			if err := checkMerge(m, id, mesh, seed); err != nil {
+				return usageErrorf("cannot add the object to %s: %v", manifestFile, err)
+			}
+		}
+	}
+	rt.log.Info("Object id %s (%s)", id, describeIDSource(source, manifestFile))
 
-	client := rt.client()
 	if err := object.Upload(ctx, client, plan, sceneID, versionNumber, rt.log, uploadProgress(rt, plan.TotalBytes)); err != nil {
 		return err
 	}
 	result := objectResult{ObjectID: id, Mesh: mesh, SceneID: sceneID, VersionNumber: versionNumber, ManifestPath: manifestFile}
-	current, err := saveObjectEntry(manifestFile, id, mesh)
+	current, err := saveObjectEntry(manifestFile, id, mesh, seed)
 	if err != nil {
 		if printErr := printObjectResult(rt, result); printErr != nil {
 			return printErr
 		}
 		return fmt.Errorf("object %s was uploaded as id %s, but the manifest could not be saved: %w", mesh, id, err)
 	}
-	rt.log.Info("Saved object %s to %s", id, manifestFile)
-
-	if !uploadManifest {
-		command := fmt.Sprintf("%s object manifest upload --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
-		if manifestFile != manifest.DefaultPath(sceneID) {
-			command += fmt.Sprintf(" --%s %s", manifestFlag, quoteArgument(manifestFile))
+	entry, ok := current.EntryByID(id)
+	if !ok {
+		if printErr := printObjectResult(rt, result); printErr != nil {
+			return printErr
 		}
-		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload, or pass --%s", command, uploadManifestFlag)
+		return fmt.Errorf("object %s was uploaded as id %s, but %s has no entry for it", mesh, id, manifestFile)
 	}
-	if uploadManifest {
-		if err := object.UploadManifest(ctx, client, current, sceneID, versionNumber); err != nil {
-			if printErr := printObjectResult(rt, result); printErr != nil {
-				return printErr
-			}
-			return err
+	result.ObjectID = entry.ID
+	rt.log.Info("Saved object %s to %s", entry.ID, manifestFile)
+
+	switch {
+	case !uploadManifest:
+		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload", manifestUploadCommand(sceneID, versionNumber, manifestFile))
+		return printObjectResult(rt, result)
+	case remote == nil:
+		return printObjectResult(rt, result)
+	}
+	row, listed := remote.EntryByID(id)
+	if listed && row.Mesh == mesh {
+		result.ManifestEntryExisting = true
+		rt.log.Info("Version %d already lists object %s with mesh %s, so no manifest entry is sent; its scale and position are in %s (run %s to push edits)", versionNumber, entry.ID, mesh, manifestFile, manifestUploadCommand(sceneID, versionNumber, manifestFile))
+		return printObjectResult(rt, result)
+	}
+	if listed {
+		// A re-export under a new mesh name changes only the mesh: the row
+		// keeps the scale and position the dashboard holds.
+		entry = *seed
+	}
+	single := &manifest.Manifest{Objects: []manifest.Entry{entry}}
+	if err := object.UploadManifest(ctx, client, single, sceneID, versionNumber); err != nil {
+		if printErr := printObjectResult(rt, result); printErr != nil {
+			return printErr
 		}
-		result.ManifestUploaded = true
-		rt.log.Info("Uploaded the manifest to scene %s version %d", sceneID, versionNumber)
+		return err
+	}
+	result.ManifestUploaded = true
+	if listed {
+		rt.log.Info("Updated object %s in scene %s version %d from mesh %s to %s; its scale and position there are kept (run %s to push edits from %s)", entry.ID, sceneID, versionNumber, row.Mesh, mesh, manifestUploadCommand(sceneID, versionNumber, manifestFile), manifestFile)
+	} else {
+		rt.log.Info("Uploaded the manifest entry for object %s to scene %s version %d", entry.ID, sceneID, versionNumber)
 	}
 	return printObjectResult(rt, result)
 }
 
+// reuseRefusal says why a listed object's id is not reused for a new entry.
+func reuseRefusal(taken bool, manifestFile string) string {
+	if taken {
+		return manifestFile + " uses it for another mesh"
+	}
+	return "it is not a valid manifest id"
+}
+
+// checkMerge validates the manifest as saveObjectEntry would save it.
+func checkMerge(m *manifest.Manifest, id, mesh string, seed *manifest.Entry) error {
+	merged := &manifest.Manifest{Objects: slices.Clone(m.Objects)}
+	adoptEntry(merged, id, mesh, seed)
+	return merged.Validate()
+}
+
+func adoptEntry(m *manifest.Manifest, id, mesh string, seed *manifest.Entry) {
+	if seed != nil {
+		m.Adopt(*seed)
+		return
+	}
+	m.Upsert(id, mesh)
+}
+
+func objectListCommand(sceneID string, versionNumber int) string {
+	return fmt.Sprintf("%s object list --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
+}
+
+// manifestUploadCommand is the command that pushes the whole local manifest
+// to the version this upload used.
+func manifestUploadCommand(sceneID string, versionNumber int, manifestFile string) string {
+	command := fmt.Sprintf("%s object manifest upload --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
+	if manifestFile != manifest.DefaultPath(sceneID) {
+		command += fmt.Sprintf(" --%s %s", manifestFlag, quoteArgument(manifestFile))
+	}
+	return command
+}
+
 // saveObjectEntry re-reads the manifest file, so entries written while the
-// upload ran are kept, then upserts id and mesh, validates and saves it.
-func saveObjectEntry(file, id, mesh string) (*manifest.Manifest, error) {
+// upload ran are kept, then upserts id and mesh (seed, when given, is the
+// entry appended if none has the id), validates and saves it.
+func saveObjectEntry(file, id, mesh string, seed *manifest.Entry) (*manifest.Manifest, error) {
 	m, err := manifest.LoadOrEmpty(file)
 	if err != nil {
 		return nil, err
 	}
-	m.Upsert(id, mesh)
+	adoptEntry(m, id, mesh, seed)
 	if err := m.Validate(); err != nil {
 		return nil, fmt.Errorf("%s is not a valid manifest: %w", file, err)
 	}
@@ -201,8 +320,8 @@ func latestVersionNumber(ctx context.Context, rt *runtime, sceneID string) (int,
 
 // quoteArgument double-quotes a value holding anything outside the characters
 // cmd.exe, PowerShell and sh all pass through bare, or starting with a
-// character sh expands. Quotes do not protect `$`, backquotes, `%`, `!` or a
-// `"` in every shell; those paths stay the user's problem.
+// character sh expands. Quotes do not protect `$`, backquotes, `%`, `!`, a
+// `"` or a doubled `\` in every shell; those paths stay the user's problem.
 func quoteArgument(value string) string {
 	if strings.HasPrefix(value, "~") || strings.HasPrefix(value, "=") {
 		return `"` + value + `"`
@@ -229,6 +348,8 @@ func idSourceCode(source object.IDSource) string {
 		return "flag"
 	case object.ReusedFromManifest:
 		return "manifest"
+	case object.ReusedFromVersion:
+		return "version"
 	default:
 		return "generated"
 	}
@@ -247,19 +368,26 @@ type objectDryRun struct {
 	ObjectID     string `json:"objectId"`
 	IDSource     string `json:"idSource"`
 	ManifestPath string `json:"manifestPath"`
+	// ManifestPost is the path the object's manifest entry is POSTed to after
+	// the files, empty with --upload-manifest=false.
+	ManifestPost string `json:"manifestPost,omitempty"`
 }
 
-func printObjectDryRun(rt *runtime, plan *object.UploadPlan, sceneID, id string, source object.IDSource, manifestFile, version string) error {
+func printObjectDryRun(rt *runtime, plan *object.UploadPlan, sceneID, id string, source object.IDSource, manifestFile, version, manifestPost string) error {
 	request := objectDryRun{
 		dryRunRequest: newDryRunRequest(rt, http.MethodPost, object.UploadPath(sceneID, plan.Mesh)+"?version="+version, plan.Parts),
 		ObjectID:      id,
 		IDSource:      idSourceCode(source),
 		ManifestPath:  manifestFile,
+		ManifestPost:  manifestPost,
 	}
 	origin := describeIDSource(source, manifestFile)
 	if source == object.Generated {
 		origin = "illustrative; a new id is generated at upload"
 	}
 	extra := fmt.Sprintf("Object ID: %s (%s)\nManifest: %s\n", id, origin, manifestFile)
+	if manifestPost != "" {
+		extra += fmt.Sprintf("Then: POST %s with this object's manifest entry, unless the version already lists it\n", manifestPost)
+	}
 	return printDryRun(rt, request.dryRunRequest, request, extra)
 }

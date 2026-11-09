@@ -72,8 +72,8 @@ func TestObjectUploadSendsPartsToTheLatestVersionAndSavesTheManifest(t *testing.
 		t.Errorf("verify %d, scene lookups %d, want 1 and 1", verify, sceneGET)
 	}
 	sent := postsTo(fake)
-	if len(sent) != 1 {
-		t.Fatalf("POSTs = %+v", sent)
+	if len(sent) != 2 || sent[1].Path != "/v0/objects/"+objectSceneID || sent[1].Query.Get("version") != "2" {
+		t.Fatalf("POSTs = %+v, want the files then the manifest entry", sent)
 	}
 	if sent[0].Path != "/v0/objects/"+objectSceneID+"/cube" || sent[0].Query.Get("version") != "2" || !sent[0].Complete {
 		t.Errorf("POST = %s ?%v complete=%v", sent[0].Path, sent[0].Query, sent[0].Complete)
@@ -94,11 +94,11 @@ func TestObjectUploadSendsPartsToTheLatestVersionAndSavesTheManifest(t *testing.
 	}
 }
 
-func TestObjectUploadDoesNotUploadTheManifestUnlessAsked(t *testing.T) {
+func TestObjectUploadWithoutManifestUploadPrintsTheCommandToRun(t *testing.T) {
 	fake := startFake(t)
 	objectScene(fake)
 	dir := sceneDir(t, "object-gltf")
-	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID)
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--upload-manifest=false", "--format", "json")
 	if got.code != 0 {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
@@ -108,8 +108,11 @@ func TestObjectUploadDoesNotUploadTheManifestUnlessAsked(t *testing.T) {
 		}
 	}
 	hint := "object manifest upload --scene-id " + objectSceneID + " --version 2"
-	if !strings.Contains(got.stderr, hint) || !strings.Contains(got.stderr, "--upload-manifest") || strings.Contains(got.stderr, "--manifest ") {
+	if !strings.Contains(got.stderr, hint) || strings.Contains(got.stderr, "--manifest ") {
 		t.Errorf("stderr should name the manifest upload command for the version, without --manifest for the default file: %q", got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["manifestUploaded"] != false {
+		t.Errorf("result = %v", result)
 	}
 }
 
@@ -139,7 +142,7 @@ func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
 	objectScene(fake)
 	dir := sceneDir(t, "object-gltf")
 	custom := filepath.Join(t.TempDir(), "custom.json")
-	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", custom)
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", custom, "--upload-manifest=false")
 	if got.code != 0 {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
@@ -149,7 +152,7 @@ func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
 	}
 
 	spaced := filepath.Join(t.TempDir(), "my manifest.json")
-	got = runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", spaced)
+	got = runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", spaced, "--upload-manifest=false")
 	if got.code != 0 {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
@@ -158,12 +161,19 @@ func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
 	}
 }
 
-func TestObjectUploadWithUploadManifestPostsTheSavedManifestAfterTheObject(t *testing.T) {
+// The manifest POST after the files carries only this object's entry, with the
+// transforms the local file holds for it; other entries in the file stay local.
+func TestObjectUploadPostsOnlyThisObjectsManifestEntryAfterTheFiles(t *testing.T) {
 	fake := startFake(t)
 	objectScene(fake)
 	dir := sceneDir(t, "object-gltf")
-	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID,
-		"--object-id", "cube-1", "--upload-manifest", "--format", "json")
+	cube := manifest.DefaultEntry("cube-1", "cube")
+	cube.ScaleCustom = []float64{2, 2, 2}
+	existing := &manifest.Manifest{Objects: []manifest.Entry{manifest.DefaultEntry("other", "mesh-other"), cube}}
+	if err := existing.Save(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--format", "json")
 	if got.code != 0 {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
@@ -178,12 +188,356 @@ func TestObjectUploadWithUploadManifestPostsTheSavedManifestAfterTheObject(t *te
 	if err := json.Unmarshal(sent[1].Body, &body); err != nil {
 		t.Fatalf("manifest body = %s (%v)", sent[1].Body, err)
 	}
-	if saved := loadManifest(t, objectManifestPath()); !reflect.DeepEqual(&body, saved) || len(body.Objects) != 1 || body.Objects[0].ID != "cube-1" {
-		t.Errorf("POSTed %+v, saved %+v", body.Objects, saved.Objects)
+	if len(body.Objects) != 1 || !reflect.DeepEqual(body.Objects[0], cube) {
+		t.Errorf("POSTed %+v, want only the cube entry with its scale", body.Objects)
+	}
+	if saved := loadManifest(t, objectManifestPath()); len(saved.Objects) != 2 {
+		t.Errorf("saved manifest = %+v, want both entries kept locally", saved.Objects)
 	}
 	result := decodeObject(t, got.stdout)
-	if result["manifestUploaded"] != true {
+	if result["manifestUploaded"] != true || result["objectId"] != "cube-1" {
 		t.Errorf("result = %v", result)
+	}
+}
+
+// A second upload of the same mesh from a clean checkout (no local manifest)
+// must not create a second dashboard object: the id comes back from the
+// version's objects and the existing row is left alone.
+func TestObjectUploadReusesTheVersionsObjectForTheMeshAndPostsNoEntry(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	first := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--format", "json")
+	if first.code != 0 {
+		t.Fatalf("first: exit %d, stderr %q", first.code, first.stderr)
+	}
+	firstID, _ := decodeObject(t, first.stdout)["objectId"].(string)
+	if err := os.Remove(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	before := len(postsTo(fake))
+
+	second := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--format", "json")
+	if second.code != 0 {
+		t.Fatalf("second: exit %d, stderr %q", second.code, second.stderr)
+	}
+	result := decodeObject(t, second.stdout)
+	if result["objectId"] != firstID || result["manifestUploaded"] != false || result["manifestEntryExisting"] != true {
+		t.Errorf("second result = %v, want the first id reused and no entry sent", result)
+	}
+	if !strings.Contains(second.stderr, "reused from the version's objects") || !strings.Contains(second.stderr, "already lists object "+firstID) {
+		t.Errorf("stderr should explain the reuse: %q", second.stderr)
+	}
+	sent := postsTo(fake)[before:]
+	if len(sent) != 1 || sent[0].Path != "/v0/objects/"+objectSceneID+"/cube" {
+		t.Errorf("second run POSTs = %+v, want only the files", sent)
+	}
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || m.Objects[0].ID != firstID {
+		t.Errorf("manifest = %+v, want the version's id saved locally", m.Objects)
+	}
+
+	list := runCommand(t, "object", "list", "--scene-id", objectSceneID, "--format", "json")
+	if list.code != 0 {
+		t.Fatalf("list: exit %d, stderr %q", list.code, list.stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(list.stdout), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Errorf("version lists %d objects after two uploads, want 1", len(rows))
+	}
+}
+
+// An explicit --object-id that the version already lists keeps the row the
+// dashboard holds, edited transforms included.
+func TestObjectUploadExistingObjectIDKeepsTheVersionsRow(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	seeded := &manifest.Manifest{Objects: []manifest.Entry{manifest.DefaultEntry("cube-1", "cube")}}
+	seeded.Objects[0].ScaleCustom = []float64{3, 3, 3}
+	if err := seeded.Save(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	if got := runCommand(t, "object", "manifest", "upload", "--scene-id", objectSceneID); got.code != 0 {
+		t.Fatalf("seed: exit %d, stderr %q", got.code, got.stderr)
+	}
+	if err := os.Remove(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	before := len(postsTo(fake))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "cube-1", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["manifestEntryExisting"] != true || result["manifestUploaded"] != false {
+		t.Errorf("result = %v", result)
+	}
+	if sent := postsTo(fake)[before:]; len(sent) != 1 {
+		t.Errorf("POSTs = %+v, want only the files", sent)
+	}
+	if rows := listRows(t); len(rows) != 1 || rows[0]["scaleCustomX"] != 3.0 {
+		t.Errorf("the version's row should be untouched: %v", rows)
+	}
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || !reflect.DeepEqual(m.Objects[0].ScaleCustom, []float64{3, 3, 3}) {
+		t.Errorf("manifest = %+v, want the local entry seeded from the version's row", m.Objects)
+	}
+	if push := runCommand(t, "object", "manifest", "upload", "--scene-id", objectSceneID, "--version", "2"); push.code != 0 {
+		t.Fatalf("push: exit %d, stderr %q", push.code, push.stderr)
+	}
+	if rows := listRows(t); len(rows) != 1 || rows[0]["scaleCustomX"] != 3.0 {
+		t.Errorf("pushing the local manifest afterwards should keep the row's scale: %v", rows)
+	}
+}
+
+func listRows(t *testing.T) []map[string]any {
+	t.Helper()
+	list := runCommand(t, "object", "list", "--scene-id", objectSceneID, "--format", "json")
+	if list.code != 0 {
+		t.Fatalf("object list: exit %d, stderr %q", list.code, list.stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(list.stdout), &rows); err != nil {
+		t.Fatalf("object list: %v: %s", err, list.stdout)
+	}
+	return rows
+}
+
+// seedRows gives the fake scene's latest version the entries as dashboard
+// rows, through object manifest upload, and leaves no local manifest behind.
+func seedRows(t *testing.T, entries ...manifest.Entry) {
+	t.Helper()
+	seeded := &manifest.Manifest{Objects: entries}
+	if err := seeded.Save(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	if got := runCommand(t, "object", "manifest", "upload", "--scene-id", objectSceneID); got.code != 0 {
+		t.Fatalf("seed: exit %d, stderr %q", got.code, got.stderr)
+	}
+	if err := os.Remove(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A re-export under a new mesh name for an id the version already lists must
+// reach the dashboard: the row's mesh changes and its transforms stay.
+func TestObjectUploadMeshChangeForAnExistingIDUpdatesTheRow(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	old := manifest.DefaultEntry("x-1", "oldcube")
+	old.ScaleCustom = []float64{3, 3, 3}
+	seedRows(t, old)
+	before := len(postsTo(fake))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "x-1", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["manifestUploaded"] != true || result["manifestEntryExisting"] != false {
+		t.Errorf("result = %v", result)
+	}
+	if sent := postsTo(fake)[before:]; len(sent) != 2 || sent[1].Path != "/v0/objects/"+objectSceneID {
+		t.Errorf("POSTs = %+v, want the files and the manifest entry", sent)
+	}
+	if !strings.Contains(got.stderr, "from mesh oldcube to cube") {
+		t.Errorf("stderr should name the mesh change: %q", got.stderr)
+	}
+	rows := listRows(t)
+	if len(rows) != 1 || rows[0]["meshName"] != "cube" || rows[0]["name"] != "cube" || rows[0]["scaleCustomX"] != 3.0 {
+		t.Errorf("rows = %v, want x-1 on mesh cube, named after it, with its scale kept", rows)
+	}
+}
+
+// With a local entry for the id, a mesh change still sends only the mesh:
+// the local transforms are not pushed over the dashboard's, and a name
+// that was not the old mesh name is kept.
+func TestObjectUploadMeshChangeKeepsTheDashboardTransformsOverALocalEntry(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	old := manifest.DefaultEntry("x-1", "oldcube")
+	old.Name = "Old Cube"
+	old.ScaleCustom = []float64{3, 3, 3}
+	seedRows(t, old)
+	local := &manifest.Manifest{Objects: []manifest.Entry{manifest.DefaultEntry("x-1", "oldcube")}}
+	if err := local.Save(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	before := len(postsTo(fake))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "x-1", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	sent := postsTo(fake)[before:]
+	if len(sent) != 2 {
+		t.Fatalf("POSTs = %+v, want the files and the manifest entry", sent)
+	}
+	var body manifest.Manifest
+	if err := json.Unmarshal(sent[1].Body, &body); err != nil {
+		t.Fatalf("manifest body = %s (%v)", sent[1].Body, err)
+	}
+	if len(body.Objects) != 1 || body.Objects[0].Mesh != "cube" || body.Objects[0].Name != "Old Cube" || !reflect.DeepEqual(body.Objects[0].ScaleCustom, []float64{3, 3, 3}) {
+		t.Errorf("POSTed %+v, want the version's entry with only the mesh changed", body.Objects)
+	}
+	if rows := listRows(t); len(rows) != 1 || rows[0]["meshName"] != "cube" || rows[0]["scaleCustomX"] != 3.0 {
+		t.Errorf("rows = %v, want the mesh changed and the scale kept", rows)
+	}
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || m.Objects[0].Mesh != "cube" || m.Objects[0].Name != "cube" || m.Objects[0].ScaleCustom[0] != 1 {
+		t.Errorf("manifest = %+v, want the local entry re-meshed, renamed with it, and its own scale kept", m.Objects)
+	}
+}
+
+// Several objects may share a mesh; uploading the files of one of them is
+// not a second object and gets no warning.
+func TestObjectUploadDoesNotWarnWhenTheIDIsOneOfSeveralForTheMesh(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	seedRows(t, manifest.DefaultEntry("c1", "cube"), manifest.DefaultEntry("c2", "cube"))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "c2", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if strings.Contains(got.stderr, "show both") {
+		t.Errorf("no warning expected for an id the version lists: %q", got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["manifestEntryExisting"] != true {
+		t.Errorf("result = %v", result)
+	}
+	if rows := listRows(t); len(rows) != 2 {
+		t.Errorf("rows = %v, want the two objects unchanged", rows)
+	}
+}
+
+// An id given in another case than the version's is stored and reported in
+// the version's spelling.
+func TestObjectUploadReportsAListedIDInTheVersionsSpelling(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	seedRows(t, manifest.DefaultEntry("ABC", "cube"))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--object-id", "abc", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["objectId"] != "ABC" {
+		t.Errorf("result = %v, want the version's spelling", result)
+	}
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 || m.Objects[0].ID != "ABC" {
+		t.Errorf("manifest = %+v", m.Objects)
+	}
+}
+
+// An id the version lists for this mesh is not reused when the local manifest
+// already uses it for another mesh: that entry must not be re-meshed silently.
+func TestObjectUploadDoesNotReuseAnIDTheManifestUsesForAnotherMesh(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	seedRows(t, manifest.DefaultEntry("x-1", "cube"))
+	sphere := manifest.DefaultEntry("x-1", "sphere")
+	sphere.ScaleCustom = []float64{5, 5, 5}
+	if err := (&manifest.Manifest{Objects: []manifest.Entry{sphere}}).Save(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+	before := len(postsTo(fake))
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	result := decodeObject(t, got.stdout)
+	if result["objectId"] == "x-1" || result["manifestUploaded"] != true {
+		t.Errorf("result = %v, want a generated id and its entry sent", result)
+	}
+	if !strings.Contains(got.stderr, "cannot be reused here") || !strings.Contains(got.stderr, "uses it for another mesh") {
+		t.Errorf("stderr should explain the refusal: %q", got.stderr)
+	}
+	if sent := postsTo(fake)[before:]; len(sent) != 2 {
+		t.Errorf("POSTs = %+v, want the files and the manifest entry", sent)
+	}
+	m := loadManifest(t, objectManifestPath())
+	if len(m.Objects) != 2 || m.Objects[0].ID != "x-1" || m.Objects[0].Mesh != "sphere" || !reflect.DeepEqual(m.Objects[0].ScaleCustom, []float64{5, 5, 5}) {
+		t.Errorf("manifest = %+v, want the sphere entry untouched and a second entry for cube", m.Objects)
+	}
+	if rows := listRows(t); len(rows) != 2 {
+		t.Errorf("rows = %v, want the old cube row and the new one", rows)
+	}
+}
+
+// The local entry wins over the version's object for the same mesh, but the
+// user is told the dashboard will show both.
+func TestObjectUploadWarnsWhenTheVersionListsTheMeshUnderAnotherID(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	seedRows(t, manifest.DefaultEntry("a-1", "cube"))
+	if err := (&manifest.Manifest{Objects: []manifest.Entry{manifest.DefaultEntry("b-1", "cube")}}).Save(objectManifestPath()); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["objectId"] != "b-1" || result["manifestUploaded"] != true {
+		t.Errorf("result = %v", result)
+	}
+	if !strings.Contains(got.stderr, "already lists mesh cube as object a-1") || !strings.Contains(got.stderr, "uses id b-1") {
+		t.Errorf("stderr should warn about both ids: %q", got.stderr)
+	}
+	if rows := listRows(t); len(rows) != 2 {
+		t.Errorf("rows = %v, want both objects", rows)
+	}
+}
+
+func TestObjectUploadListFailureUploadsTheFilesAndSkipsTheEntry(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	fake.FailRoute("GET /v0/versions/{versionId}/objects", http.StatusInternalServerError, "<html>down</html>", nil)
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stderr, `"level":"warn"`) || !strings.Contains(got.stderr, "Could not list the objects of version 2") || !strings.Contains(got.stderr, "generated without checking") ||
+		!strings.Contains(got.stderr, "object list --scene-id "+objectSceneID+" --version 2") || !strings.Contains(got.stderr, "object manifest upload --scene-id "+objectSceneID+" --version 2") {
+		t.Errorf("stderr should warn and name the command to run: %q", got.stderr)
+	}
+	if sent := postsTo(fake); len(sent) != 1 || sent[0].Path != "/v0/objects/"+objectSceneID+"/cube" {
+		t.Errorf("POSTs = %+v, want only the files", sent)
+	}
+	result := decodeObject(t, got.stdout)
+	if result["manifestUploaded"] != false || result["manifestEntryExisting"] != false {
+		t.Errorf("result = %v", result)
+	}
+	if m := loadManifest(t, objectManifestPath()); len(m.Objects) != 1 {
+		t.Errorf("manifest = %+v, want the entry saved locally", m.Objects)
+	}
+}
+
+func TestObjectUploadDryRunNamesTheManifestPost(t *testing.T) {
+	startFake(t)
+	dir := sceneDir(t, "object-gltf")
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--version", "3", "--dry-run", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["manifestPost"] != "/objects/"+objectSceneID+"?version=3" {
+		t.Errorf("dry run = %v, want manifestPost", result)
+	}
+	got = runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--dry-run", "--upload-manifest=false", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if result := decodeObject(t, got.stdout); result["manifestPost"] != nil {
+		t.Errorf("dry run = %v, want no manifestPost when disabled", result)
 	}
 }
 
@@ -196,7 +550,7 @@ func TestObjectUploadJSONResult(t *testing.T) {
 	if got.code != 0 {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
-	want := fmt.Sprintf(`{"objectId":"cube-1","mesh":"cube","sceneId":%q,"versionNumber":2,"manifestPath":%q,"manifestUploaded":false}`+"\n",
+	want := fmt.Sprintf(`{"objectId":"cube-1","mesh":"cube","sceneId":%q,"versionNumber":2,"manifestPath":%q,"manifestUploaded":true,"manifestEntryExisting":false}`+"\n",
 		objectSceneID, objectManifestPath())
 	if got.stdout != want {
 		t.Errorf("stdout = %q, want %q", got.stdout, want)
@@ -215,7 +569,7 @@ func TestObjectUploadEscapesTheMeshNameButNotThePartFilenames(t *testing.T) {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
 	sent := postsTo(fake)
-	if len(sent) != 1 || sent[0].RawPath != "/v0/objects/"+objectSceneID+"/My%20Object%20%28v2%29" {
+	if len(sent) != 2 || sent[0].RawPath != "/v0/objects/"+objectSceneID+"/My%20Object%20%28v2%29" {
 		t.Fatalf("POSTs = %+v", sent)
 	}
 	if sent[0].Parts[0].Filename != "My Object (v2).glb" || sent[0].Parts[1].Filename != "cvr_object_thumbnail.png" {
@@ -381,7 +735,7 @@ func TestObjectUploadVersionFlagSkipsTheSceneLookup(t *testing.T) {
 	fake := startFake(t)
 	objectScene(fake)
 	dir := sceneDir(t, "object-gltf")
-	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--version", "3")
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--version", "3", "--upload-manifest=false")
 	if got.code != 0 {
 		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
 	}
@@ -393,7 +747,30 @@ func TestObjectUploadVersionFlagSkipsTheSceneLookup(t *testing.T) {
 		t.Errorf("first request = %s, want the preflight", reqs[0].Path)
 	}
 	if sent := postsTo(fake); len(sent) != 1 || sent[0].Query.Get("version") != "3" {
-		t.Errorf("POSTs = %+v", sent)
+		t.Errorf("POSTs = %+v, want only the files on version 3", sent)
+	}
+}
+
+// With the manifest entry upload on, --version needs the version's id for
+// the object listing, so the scene is described once and the number is
+// checked against it.
+func TestObjectUploadVersionFlagWithManifestEntryDescribesTheSceneOnce(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--version", "1")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if n := getsTo(fake, "/v0/scenes/"); n != 1 {
+		t.Errorf("%d scene lookups, want 1", n)
+	}
+	if sent := postsTo(fake); len(sent) != 2 || sent[0].Query.Get("version") != "1" || sent[1].Query.Get("version") != "1" {
+		t.Errorf("POSTs = %+v, want the files and the manifest entry both on version 1", sent)
+	}
+	got = runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--version", "9")
+	if got.code != 3 || !strings.Contains(got.stderr, "9") {
+		t.Errorf("unknown version: exit %d, stderr %q, want exit 3 naming it", got.code, got.stderr)
 	}
 }
 
@@ -515,7 +892,9 @@ func TestObjectUploadUnknownSceneExitsThreeAndSavesNoManifest(t *testing.T) {
 
 func TestObjectUploadFailedPostKeepsTheManifestUntouched(t *testing.T) {
 	fake := startFake(t)
+	objectScene(fake)
 	dir := sceneDir(t, "object-gltf")
+	fake.FailRoute("POST /v0/objects/{sceneId}/{meshName}", http.StatusNotFound, "", nil)
 	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--version", "1")
 	if got.code != 3 || got.stdout != "" {
 		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
@@ -559,12 +938,11 @@ func TestObjectUploadAcceptsLegacyUnderscoreFlags(t *testing.T) {
 
 func TestObjectUploadManifestUploadFailureStillSavesAndReportsTheObject(t *testing.T) {
 	fake := startFake(t)
+	objectScene(fake)
 	dir := sceneDir(t, "object-gltf")
-	fake.FailWith(http.StatusOK, "") // preflight
-	fake.FailWith(http.StatusOK, "") // object POST
-	fake.FailWith(http.StatusBadRequest, "Invalid json.")
+	fake.FailRoute("POST /v0/objects/{sceneId}", http.StatusBadRequest, "Invalid json.", nil)
 	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID,
-		"--version", "1", "--object-id", "c1", "--upload-manifest", "--format", "json")
+		"--version", "1", "--object-id", "c1", "--format", "json")
 	if got.code == 0 || !strings.Contains(got.stderr, "Invalid json.") {
 		t.Errorf("exit %d, stderr %q", got.code, got.stderr)
 	}

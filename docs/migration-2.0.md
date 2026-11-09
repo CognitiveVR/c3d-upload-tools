@@ -20,7 +20,7 @@ Version 2.0 replaces the bash scripts and the PowerShell module with the `cognit
 | `Upload-C3DObjectManifest [-SceneId ID]` | `cognitive3d-cli-upload object manifest upload [--scene-id ID]` |
 | `Get-C3DObjects [-SceneId ID]` | `cognitive3d-cli-upload object list [--scene-id ID]` |
 | `Get-C3DObjects -OutputFile F` | `cognitive3d-cli-upload object list --write-list`, which writes the fixed name `<scene id>_object_list.json`; to choose a path, redirect stdout with `--format json > F` |
-| `Upload-C3DObject -AutoUploadManifest` (on by default in 1.x) | `cognitive3d-cli-upload object upload --upload-manifest` (off by default in 2.0) |
+| `Upload-C3DObject -AutoUploadManifest` (on by default in 1.x) | `cognitive3d-cli-upload object upload` (on by default in 2.0 too; `--upload-manifest=false` turns it off) |
 | `Get-C3DObjects -FormatAsManifest` | `cognitive3d-cli-upload object list --write-manifest` |
 | any module function with `-Environment E` or `-DryRun` | `--env E` or `--dry-run` |
 
@@ -34,7 +34,7 @@ Legacy flag spellings such as `--scene_id`, `--scene_dir` and `--dry_run` are ac
 
 - Logs move to stderr. stdout carries only the result, so output can be piped or parsed.
 - `object list` no longer writes files unless asked, with `--write-manifest` (`<scene id>_object_manifest.json`) or `--write-list` (`<scene id>_object_list.json`). The manifest it writes keeps each object's scale, position and rotation.
-- `object upload` no longer auto-uploads the manifest (the PowerShell behavior); run `object manifest upload`, or pass `--upload-manifest`. It keeps the transforms of an existing manifest entry for the same mesh.
+- `object upload` uploads the object's own manifest entry after its files, as the PowerShell module did, but only that entry, never the whole local file, and only when the version does not list the object with this mesh yet; `--upload-manifest=false` skips it. Run `object manifest upload` to push the whole file, for example after editing transforms. Without `--object-id`, the id comes from the local manifest entry for the same mesh, else from the version's existing object for that mesh, else it is generated; the local entry's transforms are kept when its id is reused, and a local entry created for an id the version already lists starts from the version's transforms.
 - Object textures include jpg, jpeg and webp on every platform, in addition to png.
 - The screenshot is sent inside the scene upload. `scene screenshot` remains for replacing it later.
 - A Unity SDK export folder uploads as it is: `screenshot.png` is also found in its `screenshot` subdirectory. The scripts needed it beside the model.
