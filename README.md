@@ -65,7 +65,7 @@ Check the key and see which project it belongs to:
 cognitive3d-cli-upload auth verify
 ```
 
-Upload a scene. The directory holds one `.glb` (or `scene.gltf` plus `scene.bin`), its textures and `screenshot.png`. A new scene needs a name; pass `--scene-id` to add a new version to an existing scene instead:
+Upload a scene. The directory holds one `.glb` (or `scene.gltf` plus `scene.bin`), its textures and `screenshot.png`, either beside the model or in a `screenshot` subdirectory as the Unity SDK exports it. A new scene needs a name; pass `--scene-id` to add a new version to an existing scene instead:
 
 ```bash
 cognitive3d-cli-upload scene upload --scene-dir ./my-scene --scene-name "My Scene"
@@ -123,7 +123,7 @@ Other commands: `scene list`, `scene show`, `ego list`, `version` and `completio
 
 | Command | Required files | Optional files |
 | --- | --- | --- |
-| `scene upload` | One `.glb` of any name, or `scene.gltf` plus `scene.bin`, named exactly so in lower case; `screenshot.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`), `settings.json` |
+| `scene upload` | One `.glb` of any name, or `scene.gltf` plus `scene.bin`, named exactly so in lower case; `screenshot.png` (beside the model, else in `screenshot/`) | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`), `settings.json` |
 | `object upload` | `<name>.glb`, or `<name>.gltf` plus `<name>.bin`; `cvr_object_thumbnail.png` | Textures (`.png`, `.jpg`, `.jpeg`, `.webp`) |
 | `ego upload` | The model and its `.bin` files | `.png`, `.jpg` and `.webp` images, one `ego.json` |
 

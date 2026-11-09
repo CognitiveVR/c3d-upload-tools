@@ -21,6 +21,8 @@ All notable changes to this project are documented in this file. The format foll
 - `scene upload` checks that the scene directory is writable before it sends anything (exit 4);
   on Windows a read-only `settings.json` also blocks it.
 - After a new scene version appears, one confirming poll catches a concurrent upload.
+- `scene upload` also finds `screenshot.png` in the `screenshot` subdirectory the Unity SDK exports to.
+- The missing-key and rejected-key messages name `--api-key` as well as `C3D_DEVELOPER_API_KEY`.
 
 ### Changed
 

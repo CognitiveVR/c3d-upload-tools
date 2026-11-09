@@ -107,6 +107,10 @@ func TestObjectUploadDoesNotUploadTheManifestUnlessAsked(t *testing.T) {
 			t.Errorf("manifest POSTed: %+v", r)
 		}
 	}
+	hint := "object manifest upload --scene-id " + objectSceneID
+	if !strings.Contains(got.stderr, hint) || !strings.Contains(got.stderr, "--upload-manifest") {
+		t.Errorf("stderr should say how to publish the manifest: %q", got.stderr)
+	}
 }
 
 func TestObjectUploadWithUploadManifestPostsTheSavedManifestAfterTheObject(t *testing.T) {

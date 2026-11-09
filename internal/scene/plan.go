@@ -15,6 +15,7 @@ import (
 
 const (
 	screenshotFileName = "screenshot.png"
+	screenshotDirName  = "screenshot"
 	modelBaseName      = "scene"
 )
 
@@ -143,27 +144,46 @@ func (p *LocalPlan) files() []localfile.File {
 	return out
 }
 
-// findScreenshot matches screenshot.png exactly, so that a differently cased
-// file is reported the same way on every file system. Like every other part,
-// it must be a regular file, not a link.
+// findScreenshot takes screenshot.png from dir, else from the screenshot
+// subdirectory the Unity SDK exports to. The name must match exactly, so that
+// a differently cased file is reported the same way on every file system.
+// Like every other part, it must be a regular file, not a link.
 func findScreenshot(dir string) (localfile.File, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return localfile.File{}, err
 	}
 	var near []string
+	hasSubdir := false
 	for _, e := range entries {
 		switch {
 		case e.Name() == screenshotFileName:
 			return localfile.Stat(dir, screenshotFileName)
 		case strings.EqualFold(e.Name(), screenshotFileName):
 			near = append(near, e.Name())
+		case e.Name() == screenshotDirName && e.Type().IsDir():
+			hasSubdir = true
+		}
+	}
+	if hasSubdir {
+		subdir := filepath.Join(dir, screenshotDirName)
+		subEntries, err := os.ReadDir(subdir)
+		if err != nil {
+			return localfile.File{}, err
+		}
+		for _, e := range subEntries {
+			switch {
+			case e.Name() == screenshotFileName:
+				return localfile.Stat(subdir, screenshotFileName)
+			case strings.EqualFold(e.Name(), screenshotFileName):
+				near = append(near, filepath.Join(screenshotDirName, e.Name()))
+			}
 		}
 	}
 	if len(near) > 0 {
 		return localfile.File{}, fmt.Errorf("%s is missing from %s: found %s, but the name must be exactly %s", screenshotFileName, dir, strings.Join(near, ", "), screenshotFileName)
 	}
-	return localfile.File{}, fmt.Errorf("%s is missing from %s: a scene upload needs it as the scene's screenshot", screenshotFileName, dir)
+	return localfile.File{}, fmt.Errorf("%s is missing from %s: a scene upload needs it as the scene's screenshot, in that directory or in its %s subdirectory", screenshotFileName, dir, screenshotDirName)
 }
 
 // checkSizes applies the size thresholds of model.CheckSizes to the plan.

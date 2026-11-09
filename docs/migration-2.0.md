@@ -37,6 +37,7 @@ Legacy flag spellings such as `--scene_id`, `--scene_dir` and `--dry_run` are ac
 - `object upload` no longer auto-uploads the manifest (the PowerShell behavior); run `object manifest upload`, or pass `--upload-manifest`. It keeps the transforms of an existing manifest entry for the same mesh.
 - Object textures include jpg, jpeg and webp on every platform, in addition to png.
 - The screenshot is sent inside the scene upload. `scene screenshot` remains for replacing it later.
+- A Unity SDK export folder uploads as it is: `screenshot.png` is also found in its `screenshot` subdirectory. The scripts needed it beside the model.
 - Dry run is offline and keyless: it makes no network calls and needs no API key.
 - `sdkVersion` in `settings.json` becomes `cli-go-v<version>`.
 - A model that references a texture the CLI would not upload is rejected instead of uploaded broken.

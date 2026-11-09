@@ -141,6 +141,78 @@ func TestPlanRequiresScreenshotWithExactName(t *testing.T) {
 	}
 }
 
+// The Unity SDK exports the screenshot to a screenshot subdirectory.
+func TestPlanTakesTheScreenshotFromTheUnityExportSubdirectory(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	sub := filepath.Join(dir, "screenshot")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(dir, "screenshot.png"), filepath.Join(sub, "screenshot.png")); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := Plan(dir)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if plan.Screenshot != filepath.Join(sub, "screenshot.png") {
+		t.Errorf("screenshot = %q, want the one in the subdirectory", plan.Screenshot)
+	}
+	if len(plan.Warnings) != 0 {
+		t.Errorf("warnings = %q, want none for the subdirectory", plan.Warnings)
+	}
+	up, err := Finalize(plan, "name", "cli-go-vtest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := up.Parts[len(up.Parts)-1]
+	if last.Field != "screenshot" || last.Filename != "screenshot.png" {
+		t.Errorf("last part = %s %q, want screenshot screenshot.png", last.Field, last.Filename)
+	}
+
+	writeFile(t, dir, "screenshot.png", "root")
+	plan, err = Plan(dir)
+	if err != nil {
+		t.Fatalf("Plan with both: %v", err)
+	}
+	if plan.Screenshot != filepath.Join(dir, "screenshot.png") {
+		t.Errorf("screenshot = %q, want the one in the scene directory to win", plan.Screenshot)
+	}
+}
+
+func TestPlanNamesTheSubdirectoryWhenTheScreenshotIsMissingOrMiscased(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	if err := os.Remove(filepath.Join(dir, "screenshot.png")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Plan(dir)
+	if err == nil || !strings.Contains(err.Error(), "screenshot subdirectory") {
+		t.Errorf("err = %v, want it to mention the screenshot subdirectory", err)
+	}
+
+	sub := filepath.Join(dir, "screenshot")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, sub, "Screenshot.PNG", "png")
+	_, err = Plan(dir)
+	if err == nil || !strings.Contains(err.Error(), filepath.Join("screenshot", "Screenshot.PNG")) {
+		t.Errorf("err = %v, want it to name screenshot/Screenshot.PNG", err)
+	}
+}
+
+func TestPlanIgnoresAScreenshotFileWhereTheSubdirectoryWouldBe(t *testing.T) {
+	dir := copyFixture(t, "scene-glb")
+	if err := os.Remove(filepath.Join(dir, "screenshot.png")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "screenshot", "not a directory")
+	_, err := Plan(dir)
+	if err == nil || !strings.Contains(err.Error(), "screenshot.png is missing") {
+		t.Errorf("err = %v, want the missing-screenshot error", err)
+	}
+}
+
 func TestPlanRejectsASymlinkedScreenshot(t *testing.T) {
 	dir := copyFixture(t, "scene-glb")
 	target := filepath.Join(dir, "real.png")

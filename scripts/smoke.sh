@@ -150,8 +150,12 @@ check_dry_run() {
   done_step "(dry run: $request_path)"
 }
 
-# The textured glTF scene as a new version: a copy, so a settings.json written by
-# the upload never lands in testdata.
+# Scene uploads write settings.json into the scene directory, so both scenes
+# are copies and testdata stays untouched.
+new_scene="$work/new-scene"
+mkdir "$new_scene"
+cp "$assets"/testdata/scene-glb/* "$new_scene"/
+rm -f "$new_scene/settings.json"
 textured="$work/textured"
 mkdir "$textured"
 cp "$assets"/testdata/scene-gltf/* "$textured"/
@@ -160,7 +164,7 @@ rm -f "$textured/settings.json"
 scene_name="cli-smoke $(date -u +%Y%m%dT%H%M%SZ)"
 
 if [ "$dry_run_only" -eq 1 ]; then
-  run_cli scene upload --scene-dir "$assets/testdata/scene-glb" --scene-name "$scene_name" --dry-run
+  run_cli scene upload --scene-dir "$new_scene" --scene-name "$scene_name" --dry-run
   check_dry_run
   run_cli scene upload --scene-dir "$textured" --scene-id "$scene_id" --dry-run
   check_dry_run
@@ -179,7 +183,7 @@ fi
 run_cli auth verify
 done_step "project=$(printf '%s' "$OUT" | jq -r '.projectName // "?"') environment=$(printf '%s' "$OUT" | jq -r '.environment // "?"')"
 
-run_cli scene upload --scene-dir "$assets/testdata/scene-glb" --scene-name "$scene_name"
+run_cli scene upload --scene-dir "$new_scene" --scene-name "$scene_name"
 scene_id=$(field .sceneId)
 [ "$(printf '%s' "$OUT" | jq -r '.created')" = "true" ] || fail "expected a new scene, got: $OUT"
 version=$(field .versionNumber)

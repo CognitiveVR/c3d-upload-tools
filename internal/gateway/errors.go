@@ -49,12 +49,12 @@ const keyRotationSteps = `To fix this issue:
   1. Log into the Cognitive3D dashboard
   2. Go to Settings (gear icon) → 'Manage developer key'
   3. Generate a new developer API key
-  4. Update your environment variable: export C3D_DEVELOPER_API_KEY="your_new_key"`
+  4. Update your key: export C3D_DEVELOPER_API_KEY="your_new_key" (or pass --api-key)`
 
 const keyVerificationSteps = `Verify your API key is correct:
   1. Check the Cognitive3D dashboard: Settings → 'Manage developer key'
   2. Ensure you're using the correct environment (--env prod or --env dev)
-  3. Update your key: export C3D_DEVELOPER_API_KEY="your_correct_key"`
+  3. Update your key: export C3D_DEVELOPER_API_KEY="your_correct_key" (or pass --api-key)`
 
 // Error is a failed gateway call. StatusCode is zero for Network,
 // Interrupted and LocalFile. Error() never contains the API key or the
