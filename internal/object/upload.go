@@ -20,6 +20,7 @@ type IDSource int
 const (
 	Flag IDSource = iota + 1
 	ReusedFromManifest
+	ReusedFromVersion
 	Generated
 )
 
@@ -29,6 +30,8 @@ func (s IDSource) String() string {
 		return "from --object-id"
 	case ReusedFromManifest:
 		return "reused from the manifest"
+	case ReusedFromVersion:
+		return "reused from the version's objects"
 	case Generated:
 		return "generated"
 	default:

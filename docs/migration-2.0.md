@@ -34,7 +34,7 @@ Legacy flag spellings such as `--scene_id`, `--scene_dir` and `--dry_run` are ac
 
 - Logs move to stderr. stdout carries only the result, so output can be piped or parsed.
 - `object list` no longer writes files unless asked, with `--write-manifest` (`<scene id>_object_manifest.json`) or `--write-list` (`<scene id>_object_list.json`). The manifest it writes keeps each object's scale, position and rotation.
-- `object upload` uploads the object's own manifest entry after its files, as the PowerShell module did, but only that entry, never the whole local file; `--upload-manifest=false` skips it. Run `object manifest upload` to push the whole file, for example after editing transforms. It keeps the transforms of an existing manifest entry for the same mesh.
+- `object upload` uploads the object's own manifest entry after its files, as the PowerShell module did, but only that entry, never the whole local file, and only when the version does not list the object yet; `--upload-manifest=false` skips it. Run `object manifest upload` to push the whole file, for example after editing transforms. Without `--object-id`, the id comes from the local manifest entry for the same mesh, else from the version's existing object for that mesh, else it is generated; the local entry's transforms are kept when its id is reused.
 - Object textures include jpg, jpeg and webp on every platform, in addition to png.
 - The screenshot is sent inside the scene upload. `scene screenshot` remains for replacing it later.
 - A Unity SDK export folder uploads as it is: `screenshot.png` is also found in its `screenshot` subdirectory. The scripts needed it beside the model.

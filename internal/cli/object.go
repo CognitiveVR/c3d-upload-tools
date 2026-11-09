@@ -64,6 +64,9 @@ type objectResult struct {
 	VersionNumber    int    `json:"versionNumber"`
 	ManifestPath     string `json:"manifestPath"`
 	ManifestUploaded bool   `json:"manifestUploaded"`
+	// ManifestEntryExisting is true when the version already listed the
+	// object, so no manifest entry was sent.
+	ManifestEntryExisting bool `json:"manifestEntryExisting"`
 }
 
 func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
@@ -116,27 +119,51 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	if err := merged.Validate(); err != nil {
 		return usageErrorf("cannot add the object to %s: %v", manifestFile, err)
 	}
-	rt.log.Info("Object id %s (%s)", id, describeIDSource(source, manifestFile))
-
 	if dryRun {
+		rt.log.Info("Object id %s (%s)", id, describeIDSource(source, manifestFile))
+		manifestPost := ""
 		if uploadManifest {
-			rt.log.Info("The object's manifest entry would then be POSTed to %s?version=%s (--%s=false skips that)", object.ManifestPath(sceneID), versionText(wanted, versionGiven), uploadManifestFlag)
+			manifestPost = object.ManifestPath(sceneID) + "?version=" + versionText(wanted, versionGiven)
+			rt.log.Info("The object's manifest entry is then POSTed to %s unless the version already lists the object (--%s=false skips that)", manifestPost, uploadManifestFlag)
 		}
-		return printObjectDryRun(rt, plan, sceneID, id, source, manifestFile, versionText(wanted, versionGiven))
+		return printObjectDryRun(rt, plan, sceneID, id, source, manifestFile, versionText(wanted, versionGiven), manifestPost)
 	}
 
 	ctx := cmd.Context()
 	if err := preflight(ctx, rt); err != nil {
 		return err
 	}
+	client := rt.client()
 	versionNumber := wanted
-	if !versionGiven {
+	var listed []object.Listed
+	listedOK := false
+	if uploadManifest {
+		// The version's current objects decide whether the entry is new, and
+		// give a fresh checkout its id back instead of a second generated one.
+		version, err := chooseVersion(ctx, rt, sceneID, wanted, versionGiven)
+		if err != nil {
+			return err
+		}
+		versionNumber = version.Number
+		raw, err := object.List(ctx, client, version.ID)
+		if err == nil {
+			listed, err = object.All(raw)
+		}
+		if err != nil {
+			rt.log.Warn("Could not list the objects of version %d (%s); the manifest entry is not uploaded, run %s afterwards", versionNumber, userMessage(err), manifestUploadCommand(sceneID, versionNumber, manifestFile))
+		} else {
+			listedOK = true
+			if existing, ok := object.FindMesh(listed, mesh); ok && source == object.Generated {
+				id, source = existing.SDKID, object.ReusedFromVersion
+			}
+		}
+	} else if !versionGiven {
 		if versionNumber, err = latestVersionNumber(ctx, rt, sceneID); err != nil {
 			return err
 		}
 	}
+	rt.log.Info("Object id %s (%s)", id, describeIDSource(source, manifestFile))
 
-	client := rt.client()
 	if err := object.Upload(ctx, client, plan, sceneID, versionNumber, rt.log, uploadProgress(rt, plan.TotalBytes)); err != nil {
 		return err
 	}
@@ -150,12 +177,16 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	}
 	rt.log.Info("Saved object %s to %s", id, manifestFile)
 
-	if !uploadManifest {
-		command := fmt.Sprintf("%s object manifest upload --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
-		if manifestFile != manifest.DefaultPath(sceneID) {
-			command += fmt.Sprintf(" --%s %s", manifestFlag, quoteArgument(manifestFile))
-		}
-		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload", command)
+	switch {
+	case !uploadManifest:
+		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload", manifestUploadCommand(sceneID, versionNumber, manifestFile))
+		return printObjectResult(rt, result)
+	case !listedOK:
+		return printObjectResult(rt, result)
+	}
+	if _, ok := object.FindID(listed, id); ok {
+		result.ManifestEntryExisting = true
+		rt.log.Info("Version %d already lists object %s; its scale and position there are kept (run %s to push edits from %s)", versionNumber, id, manifestUploadCommand(sceneID, versionNumber, manifestFile), manifestFile)
 		return printObjectResult(rt, result)
 	}
 	entry, ok := current.EntryByID(id)
@@ -165,6 +196,7 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 		}
 		return fmt.Errorf("object %s was uploaded as id %s, but %s has no entry for it to upload", mesh, id, manifestFile)
 	}
+	result.ObjectID = entry.ID
 	single := &manifest.Manifest{Objects: []manifest.Entry{entry}}
 	if err := object.UploadManifest(ctx, client, single, sceneID, versionNumber); err != nil {
 		if printErr := printObjectResult(rt, result); printErr != nil {
@@ -173,8 +205,18 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 		return err
 	}
 	result.ManifestUploaded = true
-	rt.log.Info("Uploaded the manifest entry for object %s to scene %s version %d", id, sceneID, versionNumber)
+	rt.log.Info("Uploaded the manifest entry for object %s to scene %s version %d", entry.ID, sceneID, versionNumber)
 	return printObjectResult(rt, result)
+}
+
+// manifestUploadCommand is the command that pushes the whole local manifest
+// to the version this upload used.
+func manifestUploadCommand(sceneID string, versionNumber int, manifestFile string) string {
+	command := fmt.Sprintf("%s object manifest upload --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
+	if manifestFile != manifest.DefaultPath(sceneID) {
+		command += fmt.Sprintf(" --%s %s", manifestFlag, quoteArgument(manifestFile))
+	}
+	return command
 }
 
 // saveObjectEntry re-reads the manifest file, so entries written while the
@@ -236,6 +278,8 @@ func idSourceCode(source object.IDSource) string {
 		return "flag"
 	case object.ReusedFromManifest:
 		return "manifest"
+	case object.ReusedFromVersion:
+		return "version"
 	default:
 		return "generated"
 	}
@@ -254,19 +298,26 @@ type objectDryRun struct {
 	ObjectID     string `json:"objectId"`
 	IDSource     string `json:"idSource"`
 	ManifestPath string `json:"manifestPath"`
+	// ManifestPost is the path the object's manifest entry is POSTed to after
+	// the files, empty with --upload-manifest=false.
+	ManifestPost string `json:"manifestPost,omitempty"`
 }
 
-func printObjectDryRun(rt *runtime, plan *object.UploadPlan, sceneID, id string, source object.IDSource, manifestFile, version string) error {
+func printObjectDryRun(rt *runtime, plan *object.UploadPlan, sceneID, id string, source object.IDSource, manifestFile, version, manifestPost string) error {
 	request := objectDryRun{
 		dryRunRequest: newDryRunRequest(rt, http.MethodPost, object.UploadPath(sceneID, plan.Mesh)+"?version="+version, plan.Parts),
 		ObjectID:      id,
 		IDSource:      idSourceCode(source),
 		ManifestPath:  manifestFile,
+		ManifestPost:  manifestPost,
 	}
 	origin := describeIDSource(source, manifestFile)
 	if source == object.Generated {
 		origin = "illustrative; a new id is generated at upload"
 	}
 	extra := fmt.Sprintf("Object ID: %s (%s)\nManifest: %s\n", id, origin, manifestFile)
+	if manifestPost != "" {
+		extra += fmt.Sprintf("Then: POST %s with this object's manifest entry, unless the version already lists it\n", manifestPost)
+	}
 	return printDryRun(rt, request.dryRunRequest, request, extra)
 }
