@@ -192,7 +192,7 @@ func checkGatewayURL(raw string) ([]string, error) {
 // immediately before their first network call so dry runs work without one.
 func RequireAPIKey(s Settings) error {
 	if s.APIKey == "" {
-		return errors.New("C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key")
+		return errors.New("no developer API key: set C3D_DEVELOPER_API_KEY with: export C3D_DEVELOPER_API_KEY=your_api_key (or pass --api-key your_api_key)")
 	}
 	return nil
 }

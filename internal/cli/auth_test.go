@@ -124,7 +124,7 @@ func TestAuthVerifyWithoutKeyExitsFourWithRequireAPIKeyText(t *testing.T) {
 	if got.stdout != "" {
 		t.Errorf("stdout = %q, want empty", got.stdout)
 	}
-	if want := "C3D_DEVELOPER_API_KEY is not set. Please set it with: export C3D_DEVELOPER_API_KEY=your_api_key"; !strings.Contains(got.stderr, want) {
+	if want := "no developer API key: set C3D_DEVELOPER_API_KEY with: export C3D_DEVELOPER_API_KEY=your_api_key (or pass --api-key your_api_key)"; !strings.Contains(got.stderr, want) {
 		t.Errorf("stderr = %q, want it to contain %q", got.stderr, want)
 	}
 }

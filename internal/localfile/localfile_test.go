@@ -87,6 +87,101 @@ func TestPartRefusesAFileSwappedForALinkAfterStat(t *testing.T) {
 	}
 }
 
+func TestPartInReadsAFileInASubdirectory(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "a.bin"), []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Stat(sub, "a.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	part := PartIn("file", root, f)
+	if part.Filename != "a.bin" || part.Size != 3 {
+		t.Fatalf("part = %+v", part)
+	}
+	rc, err := part.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil || string(data) != "abc" {
+		t.Fatalf("read %q, %v", data, err)
+	}
+}
+
+func TestPartInRefusesADirectorySwappedForALinkLeavingRoot(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "a.bin"), []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Stat(sub, "a.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "a.bin"), []byte("xyz"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(sub, sub+"-real"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, sub); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+	rc, err := PartIn("file", root, f).Open()
+	if err == nil {
+		_ = rc.Close()
+		t.Fatal("opened a file through a directory that became a link out of root")
+	}
+	if !strings.Contains(err.Error(), f.Path) || !strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("error %q, want the replaced-file message naming the path", err)
+	}
+	rc, err = Part("file", f).Open()
+	if err == nil {
+		_ = rc.Close()
+		t.Log("Part follows the directory link; PartIn is the guard for subdirectories")
+	}
+}
+
+func TestOpenRegularInReportsAMissingFilePlainlyWhateverThePathSays(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "escapes from parent")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := OpenRegularIn(root, filepath.Join("escapes from parent", "missing.png"))
+	if !errors.Is(err, fs.ErrNotExist) || strings.Contains(err.Error(), "replaced or is a link") {
+		t.Fatalf("err = %v, want a plain not-found error", err)
+	}
+}
+
+func TestPartInFallsBackToPartOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	elsewhere := t.TempDir()
+	if err := os.WriteFile(filepath.Join(elsewhere, "a.bin"), []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Stat(elsewhere, "a.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc, err := PartIn("file", root, f).Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = rc.Close()
+}
+
 func TestOpenRegular(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.png")

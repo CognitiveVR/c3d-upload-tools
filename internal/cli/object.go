@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -149,6 +150,13 @@ func runObjectUpload(cmd *cobra.Command, rt *runtime) error {
 	}
 	rt.log.Info("Saved object %s to %s", id, manifestFile)
 
+	if !uploadManifest {
+		command := fmt.Sprintf("%s object manifest upload --%s %s --%s %d", binaryName, sceneIDFlag, sceneID, versionFlag, versionNumber)
+		if manifestFile != manifest.DefaultPath(sceneID) {
+			command += fmt.Sprintf(" --%s %s", manifestFlag, quoteArgument(manifestFile))
+		}
+		rt.log.Info("The object appears in the dashboard once the manifest is uploaded: run %s after your last object upload, or pass --%s", command, uploadManifestFlag)
+	}
 	if uploadManifest {
 		if err := object.UploadManifest(ctx, client, current, sceneID, versionNumber); err != nil {
 			if printErr := printObjectResult(rt, result); printErr != nil {
@@ -189,6 +197,23 @@ func latestVersionNumber(ctx context.Context, rt *runtime, sceneID string) (int,
 		return 0, &codedError{code: exitNotFound, kind: "no_versions", message: fmt.Sprintf("scene %s has no versions", sceneID)}
 	}
 	return latest.Number, nil
+}
+
+// quoteArgument double-quotes a value holding anything outside the characters
+// cmd.exe, PowerShell and sh all pass through bare, or starting with a
+// character sh expands. Quotes do not protect `$`, backquotes, `%`, `!` or a
+// `"` in every shell; those paths stay the user's problem.
+func quoteArgument(value string) string {
+	if strings.HasPrefix(value, "~") || strings.HasPrefix(value, "=") {
+		return `"` + value + `"`
+	}
+	for _, r := range value {
+		plain := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune(`/.-_:~+=`, r)
+		if !plain {
+			return `"` + value + `"`
+		}
+	}
+	return value
 }
 
 func describeIDSource(source object.IDSource, manifestFile string) string {

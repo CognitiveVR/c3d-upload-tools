@@ -177,7 +177,7 @@ func newRootCmd(streams IO, rt *runtime) *cobra.Command {
 	flags := root.PersistentFlags()
 	flags.String("env", "", "environment: prod or dev")
 	flags.String("gateway-url", "", "gateway base URL, including the API version path, for example https://data.c3ddev.com/v0")
-	flags.String("api-key", "", "developer API key")
+	flags.String("api-key", "", "developer API key (or set C3D_DEVELOPER_API_KEY)")
 	flags.String(formatFlag, formatText, "output format: text or json")
 	flags.Duration("timeout", 0, "request timeout")
 	flags.Bool("verbose", false, "verbose logging")

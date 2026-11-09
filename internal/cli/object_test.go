@@ -107,6 +107,55 @@ func TestObjectUploadDoesNotUploadTheManifestUnlessAsked(t *testing.T) {
 			t.Errorf("manifest POSTed: %+v", r)
 		}
 	}
+	hint := "object manifest upload --scene-id " + objectSceneID + " --version 2"
+	if !strings.Contains(got.stderr, hint) || !strings.Contains(got.stderr, "--upload-manifest") || strings.Contains(got.stderr, "--manifest ") {
+		t.Errorf("stderr should name the manifest upload command for the version, without --manifest for the default file: %q", got.stderr)
+	}
+}
+
+func TestQuoteArgument(t *testing.T) {
+	cases := map[string]string{
+		"obj-scene_object_manifest.json": "obj-scene_object_manifest.json",
+		`C:\Users\me\m.json`:             `"C:\Users\me\m.json"`,
+		"/tmp/x/manifest.json":           "/tmp/x/manifest.json",
+		"~/m.json":                       `"~/m.json"`,
+		"=m.json":                        `"=m.json"`,
+		"a=b/m.json":                     "a=b/m.json",
+		"/tmp/my manifest.json":          `"/tmp/my manifest.json"`,
+		"/work/R&D/m.json":               `"/work/R&D/m.json"`,
+		`C:\Users\me\{Game}\m.json`:      `"C:\Users\me\{Game}\m.json"`,
+		"/tmp/proj(1)/m.json":            `"/tmp/proj(1)/m.json"`,
+		"/tmp/o'brien/m.json":            `"/tmp/o'brien/m.json"`,
+	}
+	for in, want := range cases {
+		if got := quoteArgument(in); got != want {
+			t.Errorf("quoteArgument(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestObjectUploadHintNamesACustomManifestFile(t *testing.T) {
+	fake := startFake(t)
+	objectScene(fake)
+	dir := sceneDir(t, "object-gltf")
+	custom := filepath.Join(t.TempDir(), "custom.json")
+	got := runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", custom)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	hint := "object manifest upload --scene-id " + objectSceneID + " --version 2 --manifest " + quoteArgument(custom)
+	if !strings.Contains(got.stderr, hint) {
+		t.Errorf("stderr should name the custom manifest file: %q", got.stderr)
+	}
+
+	spaced := filepath.Join(t.TempDir(), "my manifest.json")
+	got = runCommand(t, "object", "upload", "--object-dir", dir, "--object-filename", "cube", "--scene-id", objectSceneID, "--manifest", spaced)
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stderr, `--manifest "`+spaced+`"`) {
+		t.Errorf("a manifest path with a space must be quoted in the hint: %q", got.stderr)
+	}
 }
 
 func TestObjectUploadWithUploadManifestPostsTheSavedManifestAfterTheObject(t *testing.T) {
