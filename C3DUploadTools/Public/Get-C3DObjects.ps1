@@ -142,7 +142,7 @@ function Get-C3DObjects {
     
     try {
         # Validate prerequisites
-        Test-C3DApiKey
+        $null = Test-C3DApiKey -Throw
         
         # Get scene details to find latest version
         $sceneUrl = Get-C3DApiUrl -Environment $Environment -Endpoint "scenes/$SceneId"
