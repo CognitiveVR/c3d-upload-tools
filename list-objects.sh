@@ -8,6 +8,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/upload-utils.sh"
 
+log_warn "This script is deprecated and will be removed in c3d-upload-tools 3.0. Use the cognitive3d-cli-upload binary; see docs/migration-2.0.md." >&2
+
 # Load environment variables from .env file (if present)
 load_env_file
 

@@ -35,6 +35,7 @@ load_env_file
 
 # Main function
 main() {
+  log_warn "This script is deprecated and will be removed in c3d-upload-tools 3.0. Use the cognitive3d-cli-upload binary; see docs/migration-2.0.md."
   # Default values
   ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
   OBJECT_ID=""
@@ -91,8 +92,9 @@ Optional:
   --dry_run                  Preview operations without executing
 
 Required Files in Object Directory:
-  - <filename>.gltf          GLTF scene definition
-  - <filename>.bin           Binary scene data
+  - <filename>.glb           The object model as glTF Binary, OR
+  - <filename>.gltf          glTF object definition
+    <filename>.bin           Binary data (with the .gltf)
   - cvr_object_thumbnail.png Object thumbnail (required)
   - *.png, *.jpg, *.jpeg, *.webp  Additional textures (optional)
 
@@ -223,24 +225,32 @@ EOF
   fi
   echo ""
 
-  # Construct file paths
-  local GLTF_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.gltf"
-  local BIN_FILE="$OBJECT_DIRECTORY/${OBJECT_FILENAME}.bin"
+  # Pick the object model (<filename>.glb, or <filename>.gltf + <filename>.bin)
+  resolve_model_files "$OBJECT_DIRECTORY" "$OBJECT_FILENAME" named || exit 1
+  log_info "Object model ($MODEL_FORMAT): $MODEL_SUMMARY"
   local THUMBNAIL_FILE="$OBJECT_DIRECTORY/cvr_object_thumbnail.png"
 
   # Verify required files exist
-  validate_file "$GLTF_FILE"
-  validate_file "$BIN_FILE"
+  for file in "${MODEL_FILES[@]}"; do
+    validate_file "$file"
+  done
   validate_file "$THUMBNAIL_FILE"
 
   # Collect texture files (png, jpg, jpeg, webp - excluding thumbnail)
   local TEXTURE_FORMS=()
+  local RESERVED_BASE
+  RESERVED_BASE=$(glb_object_base_name "$OBJECT_ID")
   for TEXTURE_FILE in "$OBJECT_DIRECTORY"/*.png "$OBJECT_DIRECTORY"/*.jpg "$OBJECT_DIRECTORY"/*.jpeg "$OBJECT_DIRECTORY"/*.webp; do
     # Skip if no matching files (bash glob expands literally if no match)
     [[ -f "$TEXTURE_FILE" ]] || continue
 
     if [[ "$TEXTURE_FILE" != "$THUMBNAIL_FILE" ]]; then
       local TEXTURE_NAME=$(basename "$TEXTURE_FILE")
+      # Beside a .glb, <base>_<n>.<ext> is the name of an image the gateway extracts from it
+      if [[ "$MODEL_FORMAT" == "glb" ]] && is_reserved_converter_name "$TEXTURE_NAME" "$RESERVED_BASE"; then
+        log_error "Found $TEXTURE_NAME beside $MODEL_SUMMARY: that name is reserved for an image extracted from the .glb (${RESERVED_BASE}_<n>.<ext>). Rename or remove it."
+        exit 1
+      fi
       TEXTURE_FORMS+=(--form "$TEXTURE_NAME=@$TEXTURE_FILE")
       log_debug "Adding texture: $TEXTURE_NAME"
     fi
@@ -265,8 +275,7 @@ EOF
   local CURL_CMD=(curl --silent --write-out "\n%{http_code}" --location --globoff "$UPLOAD_URL" \
     --header "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" \
     --form "cvr_object_thumbnail.png=@$THUMBNAIL_FILE" \
-    --form "${OBJECT_FILENAME}.bin=@$BIN_FILE" \
-    --form "${OBJECT_FILENAME}.gltf=@$GLTF_FILE")
+    "${MODEL_FORMS[@]}")
 
   # Add texture .png files to curl command
   if [[ ${#TEXTURE_FORMS[@]} -gt 0 ]]; then
@@ -277,7 +286,15 @@ EOF
   if [[ "$DRY_RUN" = true ]]; then
     log_info "DRY RUN - Would execute this curl command:"
     # Print command with redacted API key for security
-    printf '%q ' "${CURL_CMD[@]}"
+    local DISPLAY_CMD=() arg
+    for arg in "${CURL_CMD[@]}"; do
+      if [[ "$arg" == "Authorization: APIKEY:DEVELOPER $C3D_DEVELOPER_API_KEY" ]]; then
+        DISPLAY_CMD+=("Authorization: APIKEY:DEVELOPER [REDACTED]")
+      else
+        DISPLAY_CMD+=("$arg")
+      fi
+    done
+    printf '%q ' "${DISPLAY_CMD[@]}"
     echo
     log_info "DRY RUN completed"  
     log_info "Re-run without --dry_run to perform actual upload"
@@ -286,7 +303,7 @@ EOF
 
   log_info "Uploading object files to API..."
   log_debug "Upload URL: $UPLOAD_URL"
-  log_debug "Files to upload: ${OBJECT_FILENAME}.bin, ${OBJECT_FILENAME}.gltf, cvr_object_thumbnail.png, textures (png/jpg/jpeg/webp)"
+  log_debug "Files to upload: $MODEL_SUMMARY, cvr_object_thumbnail.png, textures (png/jpg/jpeg/webp)"
 
   local upload_start_time=$(date +%s)
   local RESPONSE

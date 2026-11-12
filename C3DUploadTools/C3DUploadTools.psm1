@@ -9,6 +9,8 @@ Set-StrictMode -Version 3.0
 # Enable stopping on errors
 $ErrorActionPreference = 'Stop'
 
+Write-Warning 'This script is deprecated and will be removed in c3d-upload-tools 3.0. Use the cognitive3d-cli-upload binary; see docs/migration-2.0.md.'
+
 # Get the module root path
 $ModuleRoot = $PSScriptRoot
 
