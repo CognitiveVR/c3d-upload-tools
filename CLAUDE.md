@@ -73,3 +73,4 @@ The bash scripts (`upload-scene.sh`, `upload-object.sh`, `upload-object-manifest
 - `bash test-scripts/test-all.sh <scene_id> <env>`: end-to-end script tests against a real gateway; needs the ignored sample model directories present locally
 - `pwsh -File C3DUploadTools/Tests/test-module-structure.ps1`: PowerShell module structure check
 - `pwsh -File C3DUploadTools/Tests/test-model-files.ps1`: PowerShell model-file rule tests
+- `pwsh -File C3DUploadTools/Tests/test-cmdlet-output.ps1`: offline check that each public PowerShell cmdlet returns exactly one result object

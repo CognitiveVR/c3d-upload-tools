@@ -51,3 +51,8 @@ All notable changes to this project are documented in this file. The format foll
   regular file.
 - Releases fail on a missing signing secret, a notarization that is not accepted, or a tag that is
   not on `main`; prereleases skip the Homebrew cask.
+
+### Fixed
+
+- The deprecated PowerShell cmdlets return one result object (`SceneId`, `ObjectId`) instead of a
+  list of booleans, and stop at validation when the API key is missing.

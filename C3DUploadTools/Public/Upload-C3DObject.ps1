@@ -94,7 +94,8 @@ function Upload-C3DObject {
         Advanced workflow with manual manifest control and error handling.
 
     .OUTPUTS
-        Object upload results with manifest generation and next steps guidance
+        PSCustomObject with Success, DryRun, SceneId, ObjectId, ObjectFilename, Environment,
+        ManifestFile, ManifestUploaded and DurationSeconds.
 
     .NOTES
         Prerequisites:
@@ -216,15 +217,17 @@ function Upload-C3DObject {
         $script:VerboseMode = $true
     }
     
+    $manifestUploaded = $false
+
     try {
         # Validate prerequisites
         Write-C3DLog -Message "Validating prerequisites..." -Level Info
         
         # Test API key
-        Test-C3DApiKey -Throw
+        $null = Test-C3DApiKey -Throw
         
         # Test environment
-        Test-C3DEnvironment -Environment $Environment -Throw
+        $null = Test-C3DEnvironment -Environment $Environment -Throw
         Write-C3DLog -Message "Using environment: $Environment" -Level Info
         
         # Validate and convert scene ID
@@ -260,9 +263,9 @@ function Upload-C3DObject {
         Write-C3DLog -Message "Validating object files..." -Level Info
         
         foreach ($modelName in $model.Files.Keys) {
-            Test-C3DFile -Path $model.Files[$modelName] -Name $modelName -MaxSizeBytes 100MB -Throw
+            $null = Test-C3DFile -Path $model.Files[$modelName] -Name $modelName -MaxSizeBytes 100MB -Throw
         }
-        Test-C3DFile -Path $thumbnailFile -Name "cvr_object_thumbnail.png" -RequiredExtensions @('.png') -MaxSizeBytes 100MB -Throw
+        $null = Test-C3DFile -Path $thumbnailFile -Name "cvr_object_thumbnail.png" -RequiredExtensions @('.png') -MaxSizeBytes 100MB -Throw
         
         # Log file sizes in debug mode
         foreach ($filePath in @($model.Files.Values) + @($thumbnailFile)) {
@@ -401,7 +404,8 @@ function Upload-C3DObject {
                     Write-C3DLog -Message "Automatically uploading object manifest..." -Level Info
                     
                     try {
-                        Upload-C3DObjectManifest -SceneId $SceneId -Environment $Environment
+                        $null = Upload-C3DObjectManifest -SceneId $SceneId -Environment $Environment
+                        $manifestUploaded = $true
                         Write-C3DLog -Message "Object manifest uploaded successfully" -Level Info
                     } catch {
                         Write-C3DLog -Message "Failed to upload manifest: $($_.Exception.Message)" -Level Warn
@@ -422,7 +426,7 @@ function Upload-C3DObject {
             Write-C3DLog -Message "Object upload process completed in $([math]::Round($totalDuration, 2)) seconds" -Level Info
             Write-C3DLog -Message "Upload complete. Object ID: $ObjectId" -Level Info
             Write-C3DLog -Message "Next Steps:" -Level Info
-            if ($AutoUploadManifest) {
+            if ($manifestUploaded) {
                 Write-C3DLog -Message "✅ Object manifest has been automatically uploaded" -Level Info
             } else {
                 Write-C3DLog -Message "1. Upload object manifest: Upload-C3DObjectManifest -SceneId $SceneId" -Level Info
@@ -430,7 +434,19 @@ function Upload-C3DObject {
             Write-C3DLog -Message "2. Check object in Cognitive3D dashboard" -Level Info
             Write-C3DLog -Message "3. Upload additional objects with same SceneId if needed" -Level Info
         }
-        
+
+        [PSCustomObject]@{
+            Success          = $true
+            DryRun           = [bool]$DryRun
+            SceneId          = $SceneId
+            ObjectId         = $ObjectId
+            ObjectFilename   = $ObjectFilename
+            Environment      = $Environment
+            ManifestFile     = "${SceneId}_object_manifest.json"
+            ManifestUploaded = $manifestUploaded
+            DurationSeconds  = [math]::Round($totalDuration, 2)
+        }
+
     } catch {
         Write-C3DLog -Message "Object upload failed: $($_.Exception.Message)" -Level Error
         throw
