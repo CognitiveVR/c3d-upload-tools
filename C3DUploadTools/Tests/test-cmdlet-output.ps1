@@ -55,7 +55,7 @@ try {
     $uuidPattern = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 
     Test-Function "Upload-C3DScene -DryRun (new .glb scene) returns one result object" {
-        $out = Upload-C3DScene -SceneDirectory ./scene-test-glb -SceneName 'offline-test' -Environment dev -DryRun 6>$null
+        $out = Upload-C3DScene -SceneDirectory ./testdata/scene-glb -SceneName 'offline-test' -Environment dev -DryRun 6>$null
         $r = Assert-SingleResult $out 'Upload-C3DScene'
         if (-not $r.Success) { throw "Success should be true" }
         if (-not $r.DryRun) { throw "DryRun should be true" }
@@ -65,23 +65,23 @@ try {
     }
 
     Test-Function "Upload-C3DScene -DryRun -SceneId returns the lowercased scene ID" {
-        $out = Upload-C3DScene -SceneDirectory ./scene-test -SceneId $sceneId -Environment dev -DryRun 6>$null
+        $out = Upload-C3DScene -SceneDirectory ./testdata/scene-gltf -SceneId $sceneId -Environment dev -DryRun 6>$null
         $r = Assert-SingleResult $out 'Upload-C3DScene'
         if ($r.SceneId -ne $sceneId.ToLower()) { throw "SceneId should be '$($sceneId.ToLower())', got '$($r.SceneId)'" }
         if ($r.Created) { throw "Created should be false when updating a scene" }
     }
 
     Test-Function "Upload-C3DObject -DryRun (.glb) returns one result object with an ObjectId" {
-        $out = Upload-C3DObject -SceneId $sceneId -ObjectFilename lantern -ObjectDirectory ./object-test-glb -Environment dev -DryRun 6>$null
+        $out = Upload-C3DObject -SceneId $sceneId -ObjectFilename box -ObjectDirectory ./testdata/object-glb -Environment dev -DryRun 6>$null
         $r = Assert-SingleResult $out 'Upload-C3DObject'
         if (-not $r.Success) { throw "Success should be true" }
         if ($r.ObjectId -notmatch $uuidPattern) { throw "ObjectId should be a lowercase UUID, got '$($r.ObjectId)'" }
         if ($r.SceneId -ne $sceneId.ToLower()) { throw "SceneId should be lowercased, got '$($r.SceneId)'" }
-        if ($r.ObjectFilename -ne 'lantern') { throw "ObjectFilename should be 'lantern', got '$($r.ObjectFilename)'" }
+        if ($r.ObjectFilename -ne 'box') { throw "ObjectFilename should be 'box', got '$($r.ObjectFilename)'" }
     }
 
     Test-Function "Upload-C3DObject -DryRun (.gltf + .bin) returns one result object" {
-        $out = Upload-C3DObject -SceneId $sceneId -ObjectFilename cube -ObjectDirectory ./object-test -Environment dev -DryRun 6>$null
+        $out = Upload-C3DObject -SceneId $sceneId -ObjectFilename cube -ObjectDirectory ./testdata/object-gltf -Environment dev -DryRun 6>$null
         $null = Assert-SingleResult $out 'Upload-C3DObject'
     }
 
@@ -148,8 +148,8 @@ try {
     $module = Get-Module C3DUploadTools
     $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("c3d-cmdlet-mock-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $workDir | Out-Null
-    $objectDir = (Resolve-Path ./object-test-glb).Path
-    $sceneDir = (Resolve-Path ./scene-test-glb).Path
+    $objectDir = (Resolve-Path ./testdata/object-glb).Path
+    $sceneDir = (Resolve-Path ./testdata/scene-glb).Path
 
     try {
         Push-Location $workDir
@@ -165,7 +165,7 @@ try {
                     }
                 }
             }
-            $all = Upload-C3DObject -SceneId $sceneId -ObjectFilename lantern -ObjectDirectory $objectDir -Environment dev 6>&1
+            $all = Upload-C3DObject -SceneId $sceneId -ObjectFilename box -ObjectDirectory $objectDir -Environment dev 6>&1
             $hostText = ($all | Where-Object { $_ -is [System.Management.Automation.InformationRecord] }) -join "`n"
             $r = Assert-SingleResult @($all | Where-Object { $_ -isnot [System.Management.Automation.InformationRecord] }) 'Upload-C3DObject'
             if ($r.ManifestUploaded) { throw "ManifestUploaded should be false when the manifest upload fails" }

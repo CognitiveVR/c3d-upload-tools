@@ -1,2 +1,15 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+*.gltf text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.go text eol=lf
+*.sh text eol=lf
+
+*.glb binary
+*.bin binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary

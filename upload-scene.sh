@@ -51,6 +51,7 @@ SCRIPT_NAME="$(basename "$0")"
 
 # Main function
 main() {
+  log_warn "This script is deprecated and will be removed in c3d-upload-tools 3.0. Use the cognitive3d-cli-upload binary; see docs/migration-2.0.md."
   # Default values
   SCENE_DIRECTORY=""
   ENVIRONMENT="${C3D_DEFAULT_ENVIRONMENT:-prod}"
