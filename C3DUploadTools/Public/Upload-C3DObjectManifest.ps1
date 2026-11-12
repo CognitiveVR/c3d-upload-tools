@@ -69,6 +69,9 @@ function Upload-C3DObjectManifest {
         Upload-C3DObjectManifest -SceneId $sceneId
 
         Efficient workflow: upload all objects first, then manifest once.
+
+    .OUTPUTS
+        PSCustomObject with Success, DryRun, SceneId, Environment, ManifestFile and DurationSeconds.
     #>
     
     [CmdletBinding(SupportsShouldProcess)]
@@ -115,7 +118,7 @@ function Upload-C3DObjectManifest {
     try {
         # Validate prerequisites
         Write-C3DLog -Message "Validating prerequisites..." -Level Info
-        Test-C3DApiKey
+        $null = Test-C3DApiKey -Throw
         
         # Look for manifest file
         $manifestFile = "${SceneId}_object_manifest.json"
@@ -133,7 +136,14 @@ function Upload-C3DObjectManifest {
             Write-C3DLog -Message "DRY RUN - Would upload manifest to: $apiUrl" -Level Info
             Write-C3DLog -Message "File that would be uploaded: $manifestFile" -Level Info
             Write-C3DLog -Message "DRY RUN completed" -Level Info
-            return
+            return [PSCustomObject]@{
+                Success         = $true
+                DryRun          = $true
+                SceneId         = $SceneId
+                Environment     = $Environment
+                ManifestFile    = $manifestFile
+                DurationSeconds = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 2)
+            }
         }
         
         # Upload manifest
@@ -164,7 +174,16 @@ function Upload-C3DObjectManifest {
         $endTime = Get-Date
         $totalDuration = ($endTime - $startTime).TotalSeconds
         Write-C3DLog -Message "Object manifest upload process completed in $($totalDuration) seconds" -Level Info
-        
+
+        [PSCustomObject]@{
+            Success         = $true
+            DryRun          = $false
+            SceneId         = $SceneId
+            Environment     = $Environment
+            ManifestFile    = $manifestFile
+            DurationSeconds = [math]::Round($totalDuration, 2)
+        }
+
     } catch {
         Write-C3DLog -Message "Object manifest upload failed: $($_.Exception.Message)" -Level Error
         throw
