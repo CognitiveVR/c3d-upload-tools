@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# Pre-commit hook: formatting, vet, tests, build and lint.
+# Bypass with: git commit --no-verify
+
+set -u
+
+FAILED=0
+
+check() {
+    name=$1
+    shift
+    output=$("$@" 2>&1)
+    if [ $? -eq 0 ]; then
+        printf "  %-8s PASS\n" "$name"
+    else
+        printf "  %-8s FAIL\n" "$name"
+        printf "%s\n" "$output" | sed 's/^/    /'
+        FAILED=1
+    fi
+}
+
+printf "Running pre-commit checks...\n\n"
+
+UNFORMATTED=$(gofmt -l . 2>&1)
+if [ -z "$UNFORMATTED" ]; then
+    printf "  %-8s PASS\n" "format"
+else
+    printf "  %-8s FAIL\n" "format"
+    printf "%s\n" "$UNFORMATTED" | sed 's/^/    /'
+    printf "    Run: go fmt ./...\n"
+    FAILED=1
+fi
+
+check vet go vet ./...
+check test go test ./...
+check build go build ./...
+
+if command -v golangci-lint > /dev/null 2>&1; then
+    check lint golangci-lint run ./...
+else
+    printf "  %-8s SKIP (golangci-lint not installed)\n" "lint"
+fi
+
+printf "\n"
+
+if [ $FAILED -ne 0 ]; then
+    printf "Commit blocked. Fix the issues above or use git commit --no-verify to bypass.\n"
+    exit 1
+fi
+
+printf "All checks passed.\n"

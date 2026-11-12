@@ -4,16 +4,17 @@ function Upload-C3DScene {
         Uploads a Cognitive3D scene to the API with comprehensive validation and progress tracking.
 
     .DESCRIPTION
-        PowerShell equivalent of upload-scene.sh that uploads scene files (scene.bin, scene.gltf,
-        screenshot.png) and auto-generates settings.json for the Cognitive3D API. Also discovers
+        PowerShell equivalent of upload-scene.sh that uploads scene files (the model as one .glb
+        or scene.bin + scene.gltf, plus screenshot.png) and auto-generates settings.json for the
+        Cognitive3D API. Also discovers
         and uploads any additional image files (PNG, JPG, JPEG, WEBP) in the scene directory as
         textures. Provides enhanced error handling, progress indicators, and native JSON
         processing without external dependencies.
 
     .PARAMETER SceneDirectory
         Path to directory containing the required scene files:
-        - scene.bin (scene binary data)
-        - scene.gltf (scene geometry/materials)
+        - the scene model, in one form: a single .glb (any filename), or
+          scene.bin (scene binary data) + scene.gltf (scene geometry/materials)
         - screenshot.png (scene preview image)
         Note: settings.json is generated automatically.
 
@@ -80,8 +81,7 @@ function Upload-C3DScene {
         Prerequisites:
         - C3D_DEVELOPER_API_KEY environment variable must be set
         - Scene directory must contain required files:
-          * scene.bin (Unity scene binary data)
-          * scene.gltf (3D scene geometry and materials)
+          * the scene model: one .glb, or scene.bin + scene.gltf
           * screenshot.png (scene preview image for dashboard)
         - Note: settings.json is generated automatically with scene name and SDK version
         - Files must be under 100MB each
@@ -121,13 +121,14 @@ function Upload-C3DScene {
     
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory, Position = 0, HelpMessage = "Path to scene directory containing scene.bin, scene.gltf, screenshot.png")]
+        [Parameter(Mandatory, Position = 0, HelpMessage = "Path to scene directory containing the model (one .glb, or scene.bin + scene.gltf) and screenshot.png")]
         [ValidateScript({
             if (-not (Test-Path $_ -PathType Container)) {
                 throw "Scene directory does not exist: $_"
             }
-            # Validate required files exist in directory (settings.json is generated automatically)
-            $requiredFiles = @('scene.bin', 'scene.gltf', 'screenshot.png')
+            # Validate required files exist in directory (the model is resolved in the body;
+            # settings.json is generated automatically)
+            $requiredFiles = @('screenshot.png')
             $missingFiles = @()
             foreach ($file in $requiredFiles) {
                 $filePath = Join-Path $_ $file
@@ -209,8 +210,10 @@ function Upload-C3DScene {
             throw "SceneName is required when creating a new scene (no SceneId provided)"
         }
 
-        # Define required files (settings.json is generated automatically)
-        $requiredFiles = @('scene.bin', 'scene.gltf', 'screenshot.png')
+        # Pick the scene model (one .glb, or scene.bin + scene.gltf); settings.json is generated automatically
+        $model = Resolve-C3DModelFiles -Directory $SceneDirectory -BaseName 'scene' -AnyGlb
+        Write-C3DLog -Message "Scene model ($($model.Format)): $($model.Files.Keys -join ', ')" -Level Info
+        $requiredFiles = @($model.Files.Keys) + @('screenshot.png')
         $filePaths = @{}
         
         # Validate scene directory and required files
@@ -245,6 +248,10 @@ function Upload-C3DScene {
                     $sizeMB = [math]::Round($imageFile.Length / 1MB, 2)
                     Write-C3DLog -Message "Warning: Skipping '$($imageFile.Name)' - too large: $sizeMB MB (maximum: 100 MB)" -Level Warn
                     continue
+                }
+                # Beside a .glb, scene_<n>.<ext> is the name of an image the gateway extracts from it
+                if ($model.Format -eq 'glb' -and (Test-C3DReservedConverterName -FileName $imageFile.Name -BaseName 'scene')) {
+                    throw "Found $($imageFile.Name) beside $($model.Files.Keys -join ', '): that name is reserved for an image extracted from the .glb (scene_<n>.<ext>). Rename or remove it."
                 }
                 $additionalImages += $imageFile
                 $filePaths[$imageFile.Name] = $imageFile.FullName
