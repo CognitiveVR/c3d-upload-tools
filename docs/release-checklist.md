@@ -53,3 +53,4 @@ Running the Release workflow by hand (Actions, Release, Run workflow) takes a `d
 
 - A `release` GitHub environment exists with required reviewers.
 - A tag protection rule covers `v*`.
+- `HOMEBREW_TAP_TOKEN` is the fine-grained PAT `homebrew-tap`, shared with `c3d-cli-tool` and `c3d-upload-webapp`. GoReleaser uses it to push the cask, so it needs Contents read/write on `cognitivevr/homebrew-tap`. It **expires 2027-11-18**: regenerate it before then and set the new value in all three repos.
