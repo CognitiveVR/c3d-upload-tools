@@ -51,27 +51,8 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
-changelog:
-  sort: asc
-  use: git
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
-      - '^ci:'
-      - Merge pull request
-      - Merge remote-tracking branch
-      - Merge branch
-  groups:
-    - title: 'New Features'
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
-      order: 0
-    - title: 'Bug Fixes'
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
-      order: 1
-    - title: 'Other Changes'
-      order: 999
+# The Release workflow passes the changelog section for the tag with --release-notes.
+# Do not set changelog.disable: it skips that file as well.
 
 release:
   github:
@@ -79,6 +60,22 @@ release:
     name: c3d-upload-tools
   draft: false
   prerelease: auto
+  header: |
+    ## Install
+    {{ if not .Prerelease }}
+    **macOS**
+
+    ```bash
+    brew tap cognitivevr/tap && brew install --cask cognitive3d-cli-upload
+    ```
+    {{ end }}
+    **Windows and Linux:** download the archive for your platform and `cognitive3d-cli-upload_{{ .Version }}_checksums.txt` from the assets below, check the sha256, and extract. The [README](https://github.com/CognitiveVR/c3d-upload-tools/blob/{{ .Tag }}/README.md#installation) has the exact commands.
+
+    The macOS binaries are signed and notarized. The Windows binary is unsigned, so the first launch shows a SmartScreen "unknown publisher" prompt: choose "More info", then "Run anyway".
+
+    ## What's new
+  footer: |-
+    **Full changelog:** [CHANGELOG.md](https://github.com/CognitiveVR/c3d-upload-tools/blob/{{ .Tag }}/CHANGELOG.md)
 
 homebrew_casks:
   - name: cognitive3d-cli-upload
