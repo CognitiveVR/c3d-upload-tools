@@ -132,6 +132,11 @@ func TestReleaseNotesReflowKeepsMarkdownStructure(t *testing.T) {
 			in:   "~~~text\nplain\n  indented\n~~~\n",
 		},
 		{
+			name: "fence that holds the other marker and an opening-style line",
+			in:   fence + "markdown\n~~~\n" + fence + "bash\n  not a closer\n~~~\n" + fence + "\n\n- after\n  wrapped\n",
+			want: fence + "markdown\n~~~\n" + fence + "bash\n  not a closer\n~~~\n" + fence + "\n\n- after wrapped\n",
+		},
+		{
 			name: "text after a closing fence",
 			in:   "- item\n  " + fence + "\n  code\n  " + fence + "\n  trailing text\n",
 		},
@@ -286,6 +291,22 @@ func TestReleaseNotesUnreleasedByName(t *testing.T) {
 	empty := "## [Unreleased]\n\n### Added\n\n## [2.0.0] - 2026-11-27\n\n- An entry.\n"
 	if stdout, _, code := runReleaseNotes(t, empty, "Unreleased"); code == 0 {
 		t.Errorf("nothing under Unreleased: exit code 0, stdout %q", stdout)
+	}
+}
+
+// An unclosed fence would hide the next version heading and pull older
+// sections into the notes.
+func TestReleaseNotesFailsOnAnUnclosedFence(t *testing.T) {
+	changelog := "## [1.0.0] - 2027-01-01\n\n- entry\n\n```bash\ncommand\n\n## [0.9.0] - 2026-01-01\n\n- old\n"
+	stdout, stderr, code := runReleaseNotes(t, changelog, "1.0.0")
+	if code == 0 {
+		t.Fatalf("exit code 0, stdout %q", stdout)
+	}
+	if stdout != "" {
+		t.Errorf("stdout should be empty, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "never closed") {
+		t.Errorf("stderr %q does not explain the failure", stderr)
 	}
 }
 

@@ -24,7 +24,7 @@ fi
 # the text line above it is joined to that line. Fenced code, nested list
 # items, block quotes and table rows keep their own lines.
 section() {
-  awk -v heading="## [$1]" '
+  awk -v heading="## [$1]" -v file="$changelog" '
     function emit(line) {
       if (line == "") { blanks++; return }
       if (printed) while (blanks-- > 0) print ""
@@ -34,12 +34,11 @@ section() {
     }
     function flush() { if (held) emit(previous); held = 0 }
     function hold(line, text) { flush(); previous = line; held = 1; joinable = text }
-    { sub(/\r$/, "") }
-    /^[ \t]*(```|~~~)/ {
-      fenced = !fenced
-      if (wanted) hold($0, 0)
-      next
-    }
+    { sub(/\r$/, ""); fence_line = 0 }
+    !fenced && /^[ \t]*```/ { fenced = 1; fence_line = 1; closing = "^[ \t]*```+[ \t]*$" }
+    !fenced && /^[ \t]*~~~/ { fenced = 1; fence_line = 1; closing = "^[ \t]*~~~+[ \t]*$" }
+    fenced && !fence_line && $0 ~ closing { fenced = 0; fence_line = 1 }
+    fence_line { if (wanted) hold($0, 0); next }
     !fenced && /^## \[/ {
       flush()
       wanted = (index($0, heading) == 1)
@@ -53,7 +52,13 @@ section() {
       next
     }
     { hold($0, $0 != "" && $0 !~ /^#/) }
-    END { if (wanted) flush() }
+    END {
+      if (fenced) {
+        print "release-notes: " file " has a code fence that is never closed" > "/dev/stderr"
+        exit 1
+      }
+      if (wanted) flush()
+    }
   ' "$changelog"
 }
 
