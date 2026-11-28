@@ -137,6 +137,10 @@ func TestReleaseNotesReflowKeepsMarkdownStructure(t *testing.T) {
 			want: fence + "markdown\n~~~\n" + fence + "bash\n  not a closer\n~~~\n" + fence + "\n\n- after wrapped\n",
 		},
 		{
+			name: "longer fence around a shorter one",
+			in:   "- The manifest example:\n\n  " + fence + "`markdown\n  " + fence + "json\n  {}\n  " + fence + "\n  " + fence + "`\n\n- after\n",
+		},
+		{
 			name: "text after a closing fence",
 			in:   "- item\n  " + fence + "\n  code\n  " + fence + "\n  trailing text\n",
 		},
@@ -258,6 +262,12 @@ func TestReleaseNotesFailsWithoutEntries(t *testing.T) {
 			[]string{"## [2.2.0]"},
 		},
 		{
+			"section with only a placeholder comment",
+			"## [2.2.0] - 2027-02-01\n\n### Added\n\n<!-- Add entries here -->\n\n## [2.1.0] - 2027-01-15\n\n- An entry.\n",
+			"2.2.0",
+			[]string{"## [2.2.0]"},
+		},
+		{
 			"prerelease with no entries anywhere it looks",
 			"# Changelog\n\n## [Unreleased]\n\n### Added\n\n## [2.0.0] - 2026-11-27\n\n- An entry.\n",
 			"2.1.0-rc.1",
@@ -307,6 +317,32 @@ func TestReleaseNotesFailsOnAnUnclosedFence(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "never closed") {
 		t.Errorf("stderr %q does not explain the failure", stderr)
+	}
+}
+
+// A shorter fence line inside a longer fence must not close it, or the next
+// version heading is hidden and older sections join the notes.
+func TestReleaseNotesStopsAtTheNextVersionAfterNestedFences(t *testing.T) {
+	const fence = "```"
+	changelog := "## [1.0.0] - 2027-01-01\n\n- example:\n\n  " + fence + "`markdown\n  " + fence + "json\n  {}\n  " + fence + "\n  " + fence + "`\n\n" +
+		"## [0.9.0] - 2026-01-01\n\n- old\n\n" + fence + "bash\nx\n" + fence + "\n"
+	stdout, stderr, code := runReleaseNotes(t, changelog, "1.0.0")
+	if code != 0 {
+		t.Fatalf("exit code %d, stderr %q", code, stderr)
+	}
+	if strings.Contains(stdout, "0.9.0") || strings.Contains(stdout, "- old") {
+		t.Errorf("the notes include the older section:\n%s", stdout)
+	}
+}
+
+func TestReleaseNotesLatestIgnoresAVersionHeadingInsideAFence(t *testing.T) {
+	changelog := "## [Unreleased]\n\n```text\n## [0.5.0] example\n```\n\n## [2.0.0] - 2026-11-27\n\n- real\n"
+	stdout, stderr, code := runReleaseNotes(t, changelog, "latest")
+	if code != 0 {
+		t.Fatalf("exit code %d, stderr %q", code, stderr)
+	}
+	if stdout != "- real\n" {
+		t.Errorf("got %q", stdout)
 	}
 }
 

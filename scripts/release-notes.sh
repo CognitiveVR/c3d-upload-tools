@@ -15,8 +15,38 @@ repository_url=https://github.com/CognitiveVR/c3d-upload-tools
 
 [ -f "$changelog" ] || { echo "release-notes: $changelog not found" >&2; exit 1; }
 
+# Shared awk rules: strip a trailing CR, then track fenced code. They set
+# fenced while inside a block and fence_line on its opening and closing lines.
+# A block closes on a line of only its own fence character, at least as long
+# as the line that opened it.
+# shellcheck disable=SC2016
+fences='
+  function fence_run(line, pattern) {
+    sub(/^[ \t]+/, "", line)
+    return match(line, pattern) ? RLENGTH : 0
+  }
+  function closes(line, pattern, minimum) {
+    sub(/^[ \t]+/, "", line)
+    sub(/[ \t]+$/, "", line)
+    return match(line, pattern) && RLENGTH == length(line) && RLENGTH >= minimum
+  }
+  { sub(/\r$/, ""); fence_line = 0 }
+  !fenced {
+    fence_pattern = "^`+"
+    fence_length = fence_run($0, fence_pattern)
+    if (fence_length < 3) {
+      fence_pattern = "^~+"
+      fence_length = fence_run($0, fence_pattern)
+    }
+    if (fence_length >= 3) { fenced = 1; fence_line = 1 }
+  }
+  fenced && !fence_line && closes($0, fence_pattern, fence_length) { fenced = 0; fence_line = 1 }
+'
+
 if [ "$version" = latest ]; then
-  version=$(awk '/^## \[[0-9]/ { sub(/^## \[/, ""); sub(/\].*/, ""); print; exit }' "$changelog")
+  version=$(awk "$fences"'
+    !fenced && !fence_line && /^## \[[0-9]/ { sub(/^## \[/, ""); sub(/\].*/, ""); print; exit }
+  ' "$changelog")
   [ -n "$version" ] || { echo "release-notes: $changelog has no versioned section" >&2; exit 1; }
 fi
 
@@ -24,7 +54,7 @@ fi
 # the text line above it is joined to that line. Fenced code, nested list
 # items, block quotes and table rows keep their own lines.
 section() {
-  awk -v heading="## [$1]" -v file="$changelog" '
+  awk -v heading="## [$1]" -v file="$changelog" "$fences"'
     function emit(line) {
       if (line == "") { blanks++; return }
       if (printed) while (blanks-- > 0) print ""
@@ -34,10 +64,6 @@ section() {
     }
     function flush() { if (held) emit(previous); held = 0 }
     function hold(line, text) { flush(); previous = line; held = 1; joinable = text }
-    { sub(/\r$/, ""); fence_line = 0 }
-    !fenced && /^[ \t]*```/ { fenced = 1; fence_line = 1; closing = "^[ \t]*```+[ \t]*$" }
-    !fenced && /^[ \t]*~~~/ { fenced = 1; fence_line = 1; closing = "^[ \t]*~~~+[ \t]*$" }
-    fenced && !fence_line && $0 ~ closing { fenced = 0; fence_line = 1 }
     fence_line { if (wanted) hold($0, 0); next }
     !fenced && /^## \[/ {
       flush()
@@ -62,8 +88,9 @@ section() {
   ' "$changelog"
 }
 
-# A section holding only blank lines and headings has no entries.
-has_entries() { grep -qvE '^(#.*|[[:space:]]*)$' <<<"$1"; }
+# A section holding only blank lines, headings and one-line HTML comments has
+# no entries.
+has_entries() { grep -qvE '^(#.*|[[:space:]]*|[[:space:]]*<!--.*-->[[:space:]]*)$' <<<"$1"; }
 
 candidates=("$version")
 case "$version" in
