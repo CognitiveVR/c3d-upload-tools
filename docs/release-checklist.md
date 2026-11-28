@@ -13,6 +13,7 @@
    Take the key from a command substitution like this, or from a variable already exported in the shell, never as a literal on the command line, so it stays out of shell history. On Windows run it from Git Bash with the Windows binary: `COGNITIVE3D_CLI=./cognitive3d-cli-upload.exe`. It leaves the scene it creates in that environment for inspection; the prod key must belong to a test project.
 3. Open the `develop` to `main` pull request with both smoke outputs attached. CI must be green.
 4. Merge the pull request.
+5. Run the Release workflow from `main` as a dry run. Its "Write the release notes from the changelog" step prints the notes and names the section they came from. Check that it is the new version's section and that the run shows no warning about Unreleased entries: a stable tag whose section is missing fails only after the tag is pushed.
 
 ## Tag and publish
 
@@ -47,8 +48,8 @@ Running the Release workflow by hand (Actions, Release, Run workflow) takes a `d
 - A run that signs fails before building if any of `APPLE_TEAM_ID`, `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_DEVELOPER_ID_P12_BASE64`, `APPLE_DEVELOPER_ID_P12_PASSWORD` or `HOMEBREW_TAP_TOKEN` is empty, and names the empty ones.
 - A real release (a tag, or `dry_run` false) fails unless its commit is on `main`, and sets `REQUIRE_SIGNING=1`, so `scripts/sign-macos.sh` fails instead of skipping when `APPLE_TEAM_ID` is unset.
 - `sign-macos.sh` fails unless notarization reports `Accepted`. It prints the submission id and status; on failure, run the `xcrun notarytool log <id>` command it prints to see why.
-- Every run writes the release notes with `scripts/release-notes.sh`, and a real release publishes them between the install lines and the changelog link from `.goreleaser.yml`. A tag uses its own `CHANGELOG.md` section; a dispatch uses the newest versioned section, to exercise the script. A tag whose section is missing or empty fails before anything is built.
-- A prerelease tag such as `v2.1.0-rc.1` publishes the GitHub prerelease but skips the Homebrew cask. Without a section of its own it uses the Unreleased section, and its page leaves out the Homebrew line.
+- Every run writes the release notes with `scripts/release-notes.sh`, and a real release publishes them between the install lines and the changelog link from `.goreleaser.yml`. A tag uses its own `CHANGELOG.md` section; a dispatch uses the newest versioned section, to exercise the script, and warns when Unreleased has entries. A tag whose section is missing, or holds only headings, fails before anything is built.
+- A prerelease tag such as `v2.1.0-rc.1` publishes the GitHub prerelease but skips the Homebrew cask, and its page leaves out the Homebrew line. Its notes are the first of these that has entries: its own section, the `2.1.0` section, the Unreleased section.
 - `dry_run` false on a ref that is not a tag fails at GoReleaser, because it cannot publish without a tag.
 
 ## One-time repository setup

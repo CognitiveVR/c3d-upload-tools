@@ -52,6 +52,9 @@ jobs:
             version="$GITHUB_REF_NAME"
           else
             version=latest
+            if scripts/release-notes.sh Unreleased > /dev/null 2>&1; then
+              echo "::warning::CHANGELOG.md has entries under Unreleased. A stable tag publishes only its own section, so move them to the new version's section before tagging."
+            fi
           fi
           scripts/release-notes.sh "$version" > "$RUNNER_TEMP/release-notes.md"
           cat "$RUNNER_TEMP/release-notes.md"
