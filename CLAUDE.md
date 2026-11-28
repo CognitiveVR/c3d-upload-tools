@@ -38,7 +38,7 @@ internal/ui/          stderr logger (text and JSON), progress, terminal detectio
 internal/version/     build info and the sdkVersion string
 internal/fakegateway/ in-process httptest gateway for tests
 testdata/             small fixtures: scene-glb, scene-gltf, object-gltf, object-glb, ego-head, ego-controller-glb; the smoke test uses only these
-scripts/              sign-macos.sh, smoke.sh (live smoke test against dev or prod, needs a key for that environment)
+scripts/              sign-macos.sh, release-notes.sh (changelog section for the release page), smoke.sh (live smoke test against dev or prod, needs a key for that environment)
 docs/                 migration-2.0.md, release-checklist.md
 ```
 

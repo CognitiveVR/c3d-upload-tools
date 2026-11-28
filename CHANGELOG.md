@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- The GitHub release page shows the install lines and the changelog section for the tag instead of
+  a generated commit list, and a tag without changelog entries fails the release.
+
 ## [2.0.0] - 2026-11-27
 
 ### Added

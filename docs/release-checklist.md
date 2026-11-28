@@ -2,7 +2,7 @@
 
 ## Before tagging
 
-1. Move the `CHANGELOG.md` entries from Unreleased to a new `X.Y.Z` section with today's date.
+1. Move the `CHANGELOG.md` entries from Unreleased to a new `X.Y.Z` section with today's date. This section becomes the text of the release page, so write it for users.
 2. Run the live smoke test against dev on macOS and on Windows, and once against prod on macOS, and keep the outputs:
 
    ```bash
@@ -26,16 +26,17 @@
 
 2. Watch the Release workflow. The `release` environment asks its required reviewers to approve before the job runs.
 3. Confirm the GitHub release has seven assets: six archives (macOS, Linux and Windows, each for amd64 and arm64) and the checksums file.
-4. On a clean macOS machine:
+4. Read the release page: it shows the install lines, then the changelog section for the tag, and no commit list.
+5. On a clean macOS machine:
 
    ```bash
    brew tap cognitivevr/tap && brew install --cask cognitive3d-cli-upload
    cognitive3d-cli-upload version
    ```
 
-5. On Windows, unzip the Windows archive and run `cognitive3d-cli-upload version`.
-6. Confirm the cask commit exists in the `cognitivevr/homebrew-tap` repository.
-7. Announce in the team Slack channel with the install lines from the README.
+6. On Windows, unzip the Windows archive and run `cognitive3d-cli-upload version`.
+7. Confirm the cask commit exists in the `cognitivevr/homebrew-tap` repository.
+8. Announce in the team Slack channel with the install lines from the README.
 
 ## Release workflow dispatch
 
@@ -46,7 +47,8 @@ Running the Release workflow by hand (Actions, Release, Run workflow) takes a `d
 - A run that signs fails before building if any of `APPLE_TEAM_ID`, `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_DEVELOPER_ID_P12_BASE64`, `APPLE_DEVELOPER_ID_P12_PASSWORD` or `HOMEBREW_TAP_TOKEN` is empty, and names the empty ones.
 - A real release (a tag, or `dry_run` false) fails unless its commit is on `main`, and sets `REQUIRE_SIGNING=1`, so `scripts/sign-macos.sh` fails instead of skipping when `APPLE_TEAM_ID` is unset.
 - `sign-macos.sh` fails unless notarization reports `Accepted`. It prints the submission id and status; on failure, run the `xcrun notarytool log <id>` command it prints to see why.
-- A prerelease tag such as `v2.1.0-rc.1` publishes the GitHub prerelease but skips the Homebrew cask.
+- Every run writes the release notes with `scripts/release-notes.sh`, and a real release publishes them between the install lines and the changelog link from `.goreleaser.yml`. A tag uses its own `CHANGELOG.md` section; a dispatch uses the newest versioned section, to exercise the script. A tag whose section is missing or empty fails before anything is built.
+- A prerelease tag such as `v2.1.0-rc.1` publishes the GitHub prerelease but skips the Homebrew cask. Without a section of its own it uses the Unreleased section, and its page leaves out the Homebrew line.
 - `dry_run` false on a ref that is not a tag fails at GoReleaser, because it cannot publish without a tag.
 
 ## One-time repository setup

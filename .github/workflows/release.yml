@@ -1,7 +1,7 @@
 # Signing secrets are used only for v* tags and for dispatches from main; any other
 # dispatch builds an unsigned snapshot because sign-macos.sh skips when APPLE_TEAM_ID is unset.
-# A run that would publish without signing, with a signing secret missing, or from a commit
-# that is not on main fails before anything is built.
+# A run that would publish without signing, with a signing secret missing, from a commit
+# that is not on main, or without changelog entries for its tag fails before anything is built.
 name: Release
 
 on:
@@ -45,6 +45,16 @@ jobs:
             echo "::error::Releases are cut from main, and $GITHUB_SHA is not on origin/main."
             exit 1
           fi
+
+      - name: Write the release notes from the changelog
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version=latest
+          fi
+          scripts/release-notes.sh "$version" > "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md"
 
       - name: Require every signing secret
         if: env.SIGN == 'true'
@@ -107,7 +117,7 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: '~> v2'
-          args: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'release --snapshot --clean' || 'release --clean' }}
+          args: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'release --snapshot --clean' || format('release --clean --release-notes {0}/release-notes.md', runner.temp) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ env.SIGN == 'true' && secrets.HOMEBREW_TAP_TOKEN || '' }}
